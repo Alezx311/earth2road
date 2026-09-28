@@ -72,3 +72,22 @@ $env:AKADEM_MAP = 'akadem'  # a built and installed real map
 
 These map acceptance checks have real-network expectations; they are not interchangeable
 with the tiny fixture. Generated reports live in ignored `logs/`.
+
+## Build-up timelapse (presentation video)
+
+`--timelapse` records how a map is assembled: terrain, land cover, the SUMO lane network,
+road surfaces, markings, sidewalks, buildings, dressing, signals and traffic appear as a wave
+from the centre, then the camera drops to a junction, flies down a street and climbs out.
+Frames go to `logs/timelapse/` (15 fps). Start the traffic bridge first:
+
+```powershell
+$env:AKADEM_MAP = 'manhattan'
+.\.venv\Scripts\python.exe tools\traffic.py            # separate window
+.\.tools\Godot_v4.6-stable_win64_console.exe --path game --resolution 1280x720 -- --timelapse --density=2500 `
+    --timelapse-near=-100,-250 --timelapse-fly=-306,-31,-19,-557
+ffmpeg -framerate 15 -i logs/timelapse/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 20 timelapse.mp4
+```
+
+Options (local map metres): `--timelapse-near=X,Z` centre, `--timelapse-fly=X1,Z1,X2,Z2`
+street-level flight (keep it on a street axis in dense cities), `--timelapse-title=TEXT`,
+`--timelapse-outro=TEXT`. The game itself is unchanged without `--timelapse`.

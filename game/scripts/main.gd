@@ -134,6 +134,10 @@ func _ready() -> void:
 	if "--shots" in OS.get_cmdline_user_args():
 		run_shots()
 		return
+	if "--timelapse" in OS.get_cmdline_user_args():
+		var timelapse := preload("res://scripts/timelapse.gd").new()
+		timelapse.main = self
+		add_child(timelapse)
 	# First attempt half a second into _process, i.e. after the first rendered frames.
 	bridge_wanted = true
 	reconnect_clock = RECONNECT_SECONDS - 0.5
