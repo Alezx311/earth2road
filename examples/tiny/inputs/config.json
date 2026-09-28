@@ -1,0 +1,20 @@
+{
+  "bbox": [
+    30.348,
+    50.448,
+    30.364,
+    50.46
+  ],
+  "center": [
+    30.356,
+    50.454
+  ],
+  "demand_pool": 5,
+  "id": "tiny",
+  "input_provenance": "Synthetic OSM-format streets and flat DEM authored by Akadem Drive contributors, MIT; no measured geography.",
+  "name": "Synthetic offline example",
+  "region_profile": "experimental",
+  "seed": 311,
+  "source_kind": "synthetic",
+  "terrain_zoom": 12
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "name": "Kyiv everyday / daytime",
+  "seed": 311,
+  "season": "summer",
+  "detail_distance": 180,
+  "prop_distance": 320,
+  "tree_distance": 1600,
+  "sign_distance": 260,
+  "families": ["panel", "brick", "insulated", "modern", "public", "retail"],
+  "provenance": "All unobserved facade details and street furniture are synthetic, not surveyed Kyiv data. Road signs are derived from the SUMO network and OSM tags; see data/build/<id>/audit.json.",
+  "sources": [
+    {"id": "ambientcg", "url": "https://docs.ambientcg.com/license/", "license": "CC0-1.0", "use": "existing six PBR texture sets"},
+    {"id": "polyhaven_pine", "url": "https://polyhaven.com/a/pine_tree_01", "license": "CC0-1.0", "use": "candidate only; not shipped"},
+    {"id": "polyhaven_seating", "url": "https://polyhaven.com/a/modular_street_seating", "license": "CC0-1.0", "use": "candidate only; not shipped"}
+  ],
+  "overrides": {},
+  "generation": {"model": "Chroma1-Flash Q4_K_M", "width": 1024, "height": 1024, "steps": 8, "cfg": 1, "sampler": "heun", "scheduler": "simple", "seed": 311},
+  "prompts": {
+    "plaster": "Orthographic material scan of pale warm grey exterior apartment plaster, fine mineral grain, subtle uneven repairs, diffuse flat illumination, seamless texture, no shadows, no perspective, no windows, no letters",
+    "concrete": "Orthographic material scan of cast concrete facade panels, subtle pores and weathering, neutral grey, diffuse flat illumination, seamless texture, no perspective, no directional shadows, no text",
+    "patch": "Top down material scan of a worn asphalt repair patch, subtle aggregate and bitumen edges, flat diffuse illumination, no road markings, no perspective, no objects, no shadows",
+    "shop_graphic": "Flat graphic poster of fresh bread and coffee, contemporary Ukrainian neighborhood bakery visual identity, restrained cream and dark green palette, no letters, no text, no logo"
+  }
+}

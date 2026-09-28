@@ -1,0 +1,16 @@
+{
+  "id": "smoke",
+  "name": "Коротка перевірка: обмеження швидкості, ремонт, світлофор",
+  "map": "akadem",
+  "density": 300,
+  "speed": 2,
+  "provenance": "synthetic: перевірочний сценарій",
+  "timeline": [
+    {"at": 5,  "do": "incident", "kind": "speed_limit", "lonlat": [30.353328, 50.464904], "value_kmh": 20, "duration": 20},
+    {"at": 30, "do": "incident", "kind": "roadworks",   "lonlat": [30.353328, 50.464904], "value_kmh": 20, "duration": 20},
+    {"at": 60, "do": "tls",      "action": "amber",     "lonlat": [30.355413, 50.465708]},
+    {"at": 75, "do": "tls",      "action": "restore",   "lonlat": [30.355413, 50.465708]},
+    {"at": 90, "do": "incident_clear"},
+    {"at": 95, "do": "stop"}
+  ]
+}

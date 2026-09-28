@@ -1,0 +1,69 @@
+name: Validate TerraDrive
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  source:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install build and runtime dependencies
+        run: python -m pip install -c requirements.lock ".[generator,traffic]" build
+      - name: Download pinned Godot version
+        shell: python
+        run: |
+          import pathlib, urllib.request, zipfile
+          from akadem_maps.runtime import godot_url, godot_names
+          folder = pathlib.Path('.tools')
+          folder.mkdir(exist_ok=True)
+          urllib.request.urlretrieve(godot_url(), folder/'godot.zip')
+          with zipfile.ZipFile(folder/'godot.zip') as archive:
+              archive.extractall(folder)
+          for name in godot_names():
+              path = folder/name
+              if path.exists():
+                  path.chmod(0o755)
+      - name: Import Godot scripts
+        shell: python
+        run: |
+          import subprocess
+          from akadem_maps.runtime import godot_binary
+          result = subprocess.run([str(godot_binary()), '--headless', '--editor', '--path', 'game', '--quit'], capture_output=True, text=True, timeout=180)
+          print(result.stdout, result.stderr)
+          assert result.returncode == 0 and 'SCRIPT ERROR' not in result.stdout + result.stderr
+      - name: Full unittest discovery
+        run: python -m unittest discover -s tests -v
+      - name: SUMO priority integration
+        run: python tools/validate_priority.py
+      - name: Build wheel and source distribution
+        run: python -m build
+      - name: Install the built wheel
+        shell: python
+        run: |
+          import pathlib, subprocess, sys
+          wheel = next(pathlib.Path('dist').glob('terra_drive-*.whl'))
+          subprocess.run([sys.executable, '-m', 'pip', 'install', '--force-reinstall', '--no-deps', str(wheel)], check=True)
+      - name: Installed wheel offline build, both exports and installation
+        run: python tools/ci_offline.py
+      - name: Dependency consistency
+        run: python -m pip check
+      - name: Publication file audit
+        run: python tools/check_publication.py
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install pip-audit
+      - run: python -m pip_audit -r requirements.lock --no-deps --disable-pip --cache-dir .cache/advisories --timeout 15

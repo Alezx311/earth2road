@@ -1,0 +1,1318 @@
+{
+  "provenance": "2026-09-26 legacy overlap survey, greedy 40 m radius around worst-first samples; exact 95 clusters / 12 >=60cm; modeled geometry, not measured road heights",
+  "maps": {
+    "ring_beresteiskyi": [
+      {
+        "id": "ring_001",
+        "beamng_xy": [
+          1932,
+          1921
+        ],
+        "baseline_legacy_step_m": 2.38,
+        "lanes": [
+          "290139599_1",
+          "677716233#3_1",
+          "677716233#3_3",
+          "677716233#3_2",
+          "290139599_2",
+          "677716233#3_4",
+          "290139599_3",
+          "290139599_4",
+          "5169564#0_1",
+          "170922497#0_0",
+          "-170922497#3_0",
+          "5169564#0_2"
+        ],
+        "samples": 114
+      },
+      {
+        "id": "ring_002",
+        "beamng_xy": [
+          539,
+          2063
+        ],
+        "baseline_legacy_step_m": 2.3,
+        "lanes": [
+          "37555820#0_2",
+          "37555815_3",
+          "37555815_2",
+          "37555820#0_1",
+          "37555817_2",
+          "37555815_1",
+          "37555817_1",
+          "350989164#0_1",
+          "350989164#0_2"
+        ],
+        "samples": 75
+      },
+      {
+        "id": "ring_003",
+        "beamng_xy": [
+          3948,
+          -7958
+        ],
+        "baseline_legacy_step_m": 1.22,
+        "lanes": [
+          "121273089#0_1",
+          "121273097_1",
+          "121273089#0_0",
+          "121273097_2",
+          "121273097_3"
+        ],
+        "samples": 34
+      },
+      {
+        "id": "ring_004",
+        "beamng_xy": [
+          1996,
+          1906
+        ],
+        "baseline_legacy_step_m": 1.19,
+        "lanes": [
+          "677716233#3_2",
+          "677716233#3_1",
+          "170922497#0_0",
+          "-170922497#3_0"
+        ],
+        "samples": 56
+      },
+      {
+        "id": "ring_005",
+        "beamng_xy": [
+          -1276,
+          -2969
+        ],
+        "baseline_legacy_step_m": 0.99,
+        "lanes": [
+          "1249576879#2_1",
+          "23491629_0",
+          "1249576879#2_2",
+          "1249576879#2_3",
+          "1249576879#2_4"
+        ],
+        "samples": 54
+      },
+      {
+        "id": "ring_006",
+        "beamng_xy": [
+          44,
+          -3570
+        ],
+        "baseline_legacy_step_m": 0.97,
+        "lanes": [
+          "-328459898#9_0",
+          "426859107#0_0"
+        ],
+        "samples": 9
+      },
+      {
+        "id": "ring_007",
+        "beamng_xy": [
+          5751,
+          831
+        ],
+        "baseline_legacy_step_m": 0.92,
+        "lanes": [
+          "128351535#1_0",
+          "-123501135#6_0",
+          "691757199#1_1",
+          "1546483691_0"
+        ],
+        "samples": 35
+      },
+      {
+        "id": "ring_008",
+        "beamng_xy": [
+          5135,
+          1052
+        ],
+        "baseline_legacy_step_m": 0.88,
+        "lanes": [
+          "366539731#0_0",
+          "-366280140#1_0"
+        ],
+        "samples": 9
+      },
+      {
+        "id": "ring_009",
+        "beamng_xy": [
+          6880,
+          340
+        ],
+        "baseline_legacy_step_m": 0.73,
+        "lanes": [
+          "-860104313_0",
+          "860104330#0_0"
+        ],
+        "samples": 21
+      },
+      {
+        "id": "ring_010",
+        "beamng_xy": [
+          410,
+          2049
+        ],
+        "baseline_legacy_step_m": 0.72,
+        "lanes": [
+          "37555817_2",
+          "1525706197_1",
+          "1525706197_2",
+          "37555817_1",
+          "37555815_3",
+          "37555815_2",
+          "1454897979_2",
+          "1454897979_1",
+          "37555815_1",
+          "1525706196_2"
+        ],
+        "samples": 71
+      },
+      {
+        "id": "ring_011",
+        "beamng_xy": [
+          3747,
+          1621
+        ],
+        "baseline_legacy_step_m": 0.65,
+        "lanes": [
+          "-357271742#4_0"
+        ],
+        "samples": 12
+      },
+      {
+        "id": "ring_012",
+        "beamng_xy": [
+          -2988,
+          2143
+        ],
+        "baseline_legacy_step_m": 0.61,
+        "lanes": [
+          "31841129#1_0",
+          "451793967#2_1",
+          "31841129#0_2",
+          "31841129#0_1",
+          "451793967#2_2"
+        ],
+        "samples": 17
+      },
+      {
+        "id": "ring_013",
+        "beamng_xy": [
+          1360,
+          -4843
+        ],
+        "baseline_legacy_step_m": 0.58,
+        "lanes": [
+          "5211949#1_1",
+          "1182748319#0_1",
+          "5211949#1_0",
+          "1182748319#0_2"
+        ],
+        "samples": 34
+      },
+      {
+        "id": "ring_014",
+        "beamng_xy": [
+          537,
+          2132
+        ],
+        "baseline_legacy_step_m": 0.54,
+        "lanes": [
+          "842641904#0_0",
+          "370939164#1_0"
+        ],
+        "samples": 10
+      },
+      {
+        "id": "ring_015",
+        "beamng_xy": [
+          700,
+          1968
+        ],
+        "baseline_legacy_step_m": 0.53,
+        "lanes": [
+          "1181073405#0_0",
+          "403338743#2_0",
+          "403338743#0_0"
+        ],
+        "samples": 28
+      },
+      {
+        "id": "ring_016",
+        "beamng_xy": [
+          -1952,
+          6122
+        ],
+        "baseline_legacy_step_m": 0.51,
+        "lanes": [
+          "1023033376_0",
+          "-1022430178_0"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_017",
+        "beamng_xy": [
+          146,
+          -4146
+        ],
+        "baseline_legacy_step_m": 0.5,
+        "lanes": [
+          "965955003_4",
+          "1328794589_1",
+          "265847962#0_4",
+          "965955003_3"
+        ],
+        "samples": 24
+      },
+      {
+        "id": "ring_018",
+        "beamng_xy": [
+          -3038,
+          2732
+        ],
+        "baseline_legacy_step_m": 0.5,
+        "lanes": [
+          "31841129#13_1",
+          "23491760#1_1"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_019",
+        "beamng_xy": [
+          5811,
+          490
+        ],
+        "baseline_legacy_step_m": 0.47,
+        "lanes": [
+          "8143174_3",
+          "182891930#2_3",
+          "24926634#1_3"
+        ],
+        "samples": 44
+      },
+      {
+        "id": "ring_020",
+        "beamng_xy": [
+          -2884,
+          3877
+        ],
+        "baseline_legacy_step_m": 0.47,
+        "lanes": [
+          "1511695375#0_1",
+          "75723215#0_1",
+          "1511695376_2",
+          "37387331#1_0"
+        ],
+        "samples": 13
+      },
+      {
+        "id": "ring_021",
+        "beamng_xy": [
+          596,
+          1814
+        ],
+        "baseline_legacy_step_m": 0.44,
+        "lanes": [
+          "236689117#0_1"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_022",
+        "beamng_xy": [
+          6645,
+          393
+        ],
+        "baseline_legacy_step_m": 0.44,
+        "lanes": [
+          "1350012441_1",
+          "1350012445_5",
+          "483234358_0",
+          "1350012445_4",
+          "1350012445_3",
+          "1350012445_1",
+          "1350012445_2",
+          "1350012438#0_0",
+          "24926514#0_0"
+        ],
+        "samples": 10
+      },
+      {
+        "id": "ring_023",
+        "beamng_xy": [
+          3338,
+          1569
+        ],
+        "baseline_legacy_step_m": 0.44,
+        "lanes": [
+          "114003355_1",
+          "32534313_1",
+          "310875937_4",
+          "32551722#0_3",
+          "1495842000_3",
+          "114003355_2"
+        ],
+        "samples": 28
+      },
+      {
+        "id": "ring_024",
+        "beamng_xy": [
+          3594,
+          1375
+        ],
+        "baseline_legacy_step_m": 0.43,
+        "lanes": [
+          "-484112492#0_0",
+          "26729416#0_0",
+          "23691598#3_0"
+        ],
+        "samples": 12
+      },
+      {
+        "id": "ring_025",
+        "beamng_xy": [
+          3359,
+          1245
+        ],
+        "baseline_legacy_step_m": 0.41,
+        "lanes": [
+          "484112495#0_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_026",
+        "beamng_xy": [
+          6488,
+          774
+        ],
+        "baseline_legacy_step_m": 0.39,
+        "lanes": [
+          "318353220#3_0",
+          "323966522#6_0"
+        ],
+        "samples": 5
+      },
+      {
+        "id": "ring_027",
+        "beamng_xy": [
+          1923,
+          2166
+        ],
+        "baseline_legacy_step_m": 0.38,
+        "lanes": [
+          "133194514#1_1",
+          "1205126091#0_2",
+          "1205126091#0_1",
+          "133194514#2_2",
+          "133194514#2_1"
+        ],
+        "samples": 25
+      },
+      {
+        "id": "ring_028",
+        "beamng_xy": [
+          882,
+          -4462
+        ],
+        "baseline_legacy_step_m": 0.38,
+        "lanes": [
+          "1301299162#0_0",
+          "1301299160#0_1"
+        ],
+        "samples": 17
+      },
+      {
+        "id": "ring_029",
+        "beamng_xy": [
+          1014,
+          2594
+        ],
+        "baseline_legacy_step_m": 0.37,
+        "lanes": [
+          "485944040#0_0",
+          "150755965#0_0"
+        ],
+        "samples": 22
+      },
+      {
+        "id": "ring_030",
+        "beamng_xy": [
+          1384,
+          -4742
+        ],
+        "baseline_legacy_step_m": 0.37,
+        "lanes": [
+          "1273073293_1",
+          "5211949#0_1"
+        ],
+        "samples": 8
+      },
+      {
+        "id": "ring_031",
+        "beamng_xy": [
+          6752,
+          935
+        ],
+        "baseline_legacy_step_m": 0.35,
+        "lanes": [
+          "-816128277#2_0",
+          "-920242505_0"
+        ],
+        "samples": 12
+      },
+      {
+        "id": "ring_032",
+        "beamng_xy": [
+          5252,
+          946
+        ],
+        "baseline_legacy_step_m": 0.34,
+        "lanes": [
+          "691757198#2_1"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_033",
+        "beamng_xy": [
+          3006,
+          -6867
+        ],
+        "baseline_legacy_step_m": 0.33,
+        "lanes": [
+          "31728270#0_1",
+          "26570138#2_1"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_034",
+        "beamng_xy": [
+          291,
+          1768
+        ],
+        "baseline_legacy_step_m": 0.32,
+        "lanes": [
+          "1028717139_0",
+          "112453179#7_1"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_035",
+        "beamng_xy": [
+          -1070,
+          -3825
+        ],
+        "baseline_legacy_step_m": 0.3,
+        "lanes": [
+          "828104255#1_0",
+          "828104256#1_0",
+          "-828104227_0",
+          "-828104255#0_0"
+        ],
+        "samples": 5
+      },
+      {
+        "id": "ring_036",
+        "beamng_xy": [
+          3312,
+          1513
+        ],
+        "baseline_legacy_step_m": 0.3,
+        "lanes": [
+          "32551722#0_3",
+          "310875937_4"
+        ],
+        "samples": 62
+      },
+      {
+        "id": "ring_037",
+        "beamng_xy": [
+          -1512,
+          -2815
+        ],
+        "baseline_legacy_step_m": 0.3,
+        "lanes": [
+          "23491630_0",
+          "1124460480_1",
+          "1124460480_2",
+          "1124460480_3",
+          "1124460480_4"
+        ],
+        "samples": 55
+      },
+      {
+        "id": "ring_038",
+        "beamng_xy": [
+          1260,
+          -4635
+        ],
+        "baseline_legacy_step_m": 0.29,
+        "lanes": [
+          "5169683#0_2",
+          "23591356#0_2"
+        ],
+        "samples": 22
+      },
+      {
+        "id": "ring_039",
+        "beamng_xy": [
+          5642,
+          955
+        ],
+        "baseline_legacy_step_m": 0.29,
+        "lanes": [
+          "313187261_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_040",
+        "beamng_xy": [
+          -2287,
+          -1748
+        ],
+        "baseline_legacy_step_m": 0.29,
+        "lanes": [
+          "1286484344_2",
+          "1334518426_2"
+        ],
+        "samples": 3
+      },
+      {
+        "id": "ring_041",
+        "beamng_xy": [
+          -2741,
+          3872
+        ],
+        "baseline_legacy_step_m": 0.29,
+        "lanes": [
+          "1200327578#0_2",
+          "1200327578#5_2",
+          "1200327578#1_1"
+        ],
+        "samples": 3
+      },
+      {
+        "id": "ring_042",
+        "beamng_xy": [
+          -2565,
+          1876
+        ],
+        "baseline_legacy_step_m": 0.28,
+        "lanes": [
+          "993483437#0_0",
+          "1225372630#0_0",
+          "-1225372630#0_0"
+        ],
+        "samples": 3
+      },
+      {
+        "id": "ring_043",
+        "beamng_xy": [
+          5828,
+          775
+        ],
+        "baseline_legacy_step_m": 0.28,
+        "lanes": [
+          "214303346_1"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_044",
+        "beamng_xy": [
+          6688,
+          421
+        ],
+        "baseline_legacy_step_m": 0.27,
+        "lanes": [
+          "32951820#0_1"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_045",
+        "beamng_xy": [
+          840,
+          -4527
+        ],
+        "baseline_legacy_step_m": 0.27,
+        "lanes": [
+          "1301299160#0_1",
+          "965955009#1_1",
+          "965955009#1_2",
+          "1301299160#0_0"
+        ],
+        "samples": 14
+      },
+      {
+        "id": "ring_046",
+        "beamng_xy": [
+          3170,
+          2024
+        ],
+        "baseline_legacy_step_m": 0.27,
+        "lanes": [
+          "-1336513803#0_1"
+        ],
+        "samples": 9
+      },
+      {
+        "id": "ring_047",
+        "beamng_xy": [
+          5840,
+          1023
+        ],
+        "baseline_legacy_step_m": 0.26,
+        "lanes": [
+          "-1334317141#0_0",
+          "-1334317137_0",
+          "1334317141#0_0",
+          "-1334317140_0",
+          "1334317138_0"
+        ],
+        "samples": 15
+      },
+      {
+        "id": "ring_048",
+        "beamng_xy": [
+          5191,
+          1092
+        ],
+        "baseline_legacy_step_m": 0.26,
+        "lanes": [
+          "-1187846895#1_0"
+        ],
+        "samples": 3
+      },
+      {
+        "id": "ring_049",
+        "beamng_xy": [
+          5729,
+          255
+        ],
+        "baseline_legacy_step_m": 0.22,
+        "lanes": [
+          "51113972#0_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_050",
+        "beamng_xy": [
+          -817,
+          1844
+        ],
+        "baseline_legacy_step_m": 0.22,
+        "lanes": [
+          "37616629#2_1",
+          "452332615#0_1"
+        ],
+        "samples": 6
+      },
+      {
+        "id": "ring_051",
+        "beamng_xy": [
+          -3148,
+          2878
+        ],
+        "baseline_legacy_step_m": 0.21,
+        "lanes": [
+          "48625829_0"
+        ],
+        "samples": 3
+      },
+      {
+        "id": "ring_052",
+        "beamng_xy": [
+          4111,
+          1512
+        ],
+        "baseline_legacy_step_m": 0.2,
+        "lanes": [
+          "359088627#1_0",
+          "-31572411#0_0"
+        ],
+        "samples": 6
+      },
+      {
+        "id": "ring_053",
+        "beamng_xy": [
+          2825,
+          -6635
+        ],
+        "baseline_legacy_step_m": 0.2,
+        "lanes": [
+          "31728268#0_2",
+          "1124463518_1",
+          "31728268#0_1"
+        ],
+        "samples": 11
+      },
+      {
+        "id": "ring_054",
+        "beamng_xy": [
+          -1084,
+          -3878
+        ],
+        "baseline_legacy_step_m": 0.18,
+        "lanes": [
+          "828104247_0",
+          "828104245#1_0",
+          "403144437#7_1",
+          "-403144437#7_1"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_055",
+        "beamng_xy": [
+          844,
+          1751
+        ],
+        "baseline_legacy_step_m": 0.18,
+        "lanes": [
+          "-867023812#1_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_056",
+        "beamng_xy": [
+          -637,
+          -3497
+        ],
+        "baseline_legacy_step_m": 0.17,
+        "lanes": [
+          "828126289#4_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_057",
+        "beamng_xy": [
+          3302,
+          1474
+        ],
+        "baseline_legacy_step_m": 0.17,
+        "lanes": [
+          "310875937_4",
+          "32551722#0_3"
+        ],
+        "samples": 17
+      },
+      {
+        "id": "ring_058",
+        "beamng_xy": [
+          5823,
+          858
+        ],
+        "baseline_legacy_step_m": 0.17,
+        "lanes": [
+          "-309348757_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_059",
+        "beamng_xy": [
+          -1043,
+          -3606
+        ],
+        "baseline_legacy_step_m": 0.15,
+        "lanes": [
+          "828104195_0",
+          "-828104196_0",
+          "828104277_0",
+          "828104278_0",
+          "403144437#38_1",
+          "-828104277_0",
+          "-403144437#38_1"
+        ],
+        "samples": 7
+      },
+      {
+        "id": "ring_060",
+        "beamng_xy": [
+          5535,
+          1106
+        ],
+        "baseline_legacy_step_m": 0.15,
+        "lanes": [
+          "70116871#10_1",
+          "70116871#10_2",
+          "-70116871#10_2"
+        ],
+        "samples": 3
+      },
+      {
+        "id": "ring_061",
+        "beamng_xy": [
+          2,
+          -4055
+        ],
+        "baseline_legacy_step_m": 0.15,
+        "lanes": [
+          "23491644#0_1",
+          "1328794594_0"
+        ],
+        "samples": 10
+      },
+      {
+        "id": "ring_062",
+        "beamng_xy": [
+          -1477,
+          -2835
+        ],
+        "baseline_legacy_step_m": 0.15,
+        "lanes": [
+          "23491630_0",
+          "1124460480_5",
+          "1124460480_4",
+          "1124460479#0_4"
+        ],
+        "samples": 8
+      },
+      {
+        "id": "ring_063",
+        "beamng_xy": [
+          -3720,
+          1786
+        ],
+        "baseline_legacy_step_m": 0.15,
+        "lanes": [
+          "1334859072_1",
+          "1334859072_3",
+          "1334859072_2"
+        ],
+        "samples": 7
+      },
+      {
+        "id": "ring_064",
+        "beamng_xy": [
+          3144,
+          -6247
+        ],
+        "baseline_legacy_step_m": 0.15,
+        "lanes": [
+          "-51194962#1_0"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_065",
+        "beamng_xy": [
+          -1768,
+          2207
+        ],
+        "baseline_legacy_step_m": 0.15,
+        "lanes": [
+          "-389436681#2_0",
+          "-1080536015#1_0"
+        ],
+        "samples": 6
+      },
+      {
+        "id": "ring_066",
+        "beamng_xy": [
+          -1279,
+          -3401
+        ],
+        "baseline_legacy_step_m": 0.14,
+        "lanes": [
+          "828104415_0",
+          "-99494933#28_1"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_067",
+        "beamng_xy": [
+          6952,
+          700
+        ],
+        "baseline_legacy_step_m": 0.14,
+        "lanes": [
+          "815071879#0_0",
+          "-369089172_0"
+        ],
+        "samples": 5
+      },
+      {
+        "id": "ring_068",
+        "beamng_xy": [
+          3594,
+          -7506
+        ],
+        "baseline_legacy_step_m": 0.14,
+        "lanes": [
+          "31727701_0",
+          "1182748322#0_1"
+        ],
+        "samples": 5
+      },
+      {
+        "id": "ring_069",
+        "beamng_xy": [
+          -2877,
+          2263
+        ],
+        "baseline_legacy_step_m": 0.14,
+        "lanes": [
+          "305516002_0",
+          "-305516001_0"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_070",
+        "beamng_xy": [
+          4775,
+          865
+        ],
+        "baseline_legacy_step_m": 0.14,
+        "lanes": [
+          "296777278#1_0",
+          "296777278#0_0"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_071",
+        "beamng_xy": [
+          5607,
+          813
+        ],
+        "baseline_legacy_step_m": 0.14,
+        "lanes": [
+          "285818313#0_0",
+          "439994898#1_1"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_072",
+        "beamng_xy": [
+          3803,
+          825
+        ],
+        "baseline_legacy_step_m": 0.14,
+        "lanes": [
+          "-23693078#11_1"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_073",
+        "beamng_xy": [
+          -1166,
+          -3346
+        ],
+        "baseline_legacy_step_m": 0.13,
+        "lanes": [
+          "828104343_0",
+          "-828104342_0"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_074",
+        "beamng_xy": [
+          -35,
+          -4008
+        ],
+        "baseline_legacy_step_m": 0.13,
+        "lanes": [
+          "487836658#2_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_075",
+        "beamng_xy": [
+          -2942,
+          583
+        ],
+        "baseline_legacy_step_m": 0.13,
+        "lanes": [
+          "485214932_0",
+          "51551885#3_3"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_076",
+        "beamng_xy": [
+          6545,
+          851
+        ],
+        "baseline_legacy_step_m": 0.13,
+        "lanes": [
+          "-258561572#2_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_077",
+        "beamng_xy": [
+          -1235,
+          -3224
+        ],
+        "baseline_legacy_step_m": 0.13,
+        "lanes": [
+          "-1010503918_0",
+          "-1010503918_1"
+        ],
+        "samples": 4
+      },
+      {
+        "id": "ring_078",
+        "beamng_xy": [
+          -1356,
+          -3545
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "828104385_0",
+          "828104382_0",
+          "828104377_0",
+          "-828104377_0",
+          "-828104376_0"
+        ],
+        "samples": 5
+      },
+      {
+        "id": "ring_079",
+        "beamng_xy": [
+          2471,
+          -5363
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "370870075#0_1",
+          "1498872127#3_0",
+          "-370870075#0_1",
+          "-1498872127#3_0"
+        ],
+        "samples": 41
+      },
+      {
+        "id": "ring_080",
+        "beamng_xy": [
+          5625,
+          886
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "32492047#3_1"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_081",
+        "beamng_xy": [
+          5124,
+          1162
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "27862602#4_1"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_082",
+        "beamng_xy": [
+          -2864,
+          551
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "174815918#0_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_083",
+        "beamng_xy": [
+          2783,
+          -6501
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "1396608581#7_0",
+          "952334949#4_1"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_084",
+        "beamng_xy": [
+          3358,
+          1636
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "1103196865_2"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_085",
+        "beamng_xy": [
+          5505,
+          1028
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "-70116871#8_2"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_086",
+        "beamng_xy": [
+          -2889,
+          2357
+        ],
+        "baseline_legacy_step_m": 0.12,
+        "lanes": [
+          "-160531900#1_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_087",
+        "beamng_xy": [
+          -1889,
+          6381
+        ],
+        "baseline_legacy_step_m": 0.11,
+        "lanes": [
+          "624217007#1_3"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_088",
+        "beamng_xy": [
+          -2131,
+          4911
+        ],
+        "baseline_legacy_step_m": 0.11,
+        "lanes": [
+          "150767215#4_1",
+          "-1171299322_0",
+          "-150767215#3_1"
+        ],
+        "samples": 9
+      },
+      {
+        "id": "ring_089",
+        "beamng_xy": [
+          -2271,
+          -1590
+        ],
+        "baseline_legacy_step_m": 0.11,
+        "lanes": [
+          "1391307430_1"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_090",
+        "beamng_xy": [
+          -783,
+          -3976
+        ],
+        "baseline_legacy_step_m": 0.11,
+        "lanes": [
+          "-820355403_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_091",
+        "beamng_xy": [
+          5437,
+          814
+        ],
+        "baseline_legacy_step_m": 0.11,
+        "lanes": [
+          "-483541182#2_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_092",
+        "beamng_xy": [
+          -916,
+          1833
+        ],
+        "baseline_legacy_step_m": 0.11,
+        "lanes": [
+          "-473591052_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_093",
+        "beamng_xy": [
+          3824,
+          1439
+        ],
+        "baseline_legacy_step_m": 0.1,
+        "lanes": [
+          "357228465#0_0"
+        ],
+        "samples": 1
+      },
+      {
+        "id": "ring_094",
+        "beamng_xy": [
+          -1346,
+          1929
+        ],
+        "baseline_legacy_step_m": 0.1,
+        "lanes": [
+          "23240104#7_4",
+          "1008320345_5"
+        ],
+        "samples": 2
+      },
+      {
+        "id": "ring_095",
+        "beamng_xy": [
+          4908,
+          792
+        ],
+        "baseline_legacy_step_m": 0.1,
+        "lanes": [
+          "-296777231#0_0"
+        ],
+        "samples": 1
+      }
+    ],
+    "akadem": [
+      {
+        "id": "akadem_041",
+        "beamng_xy": [
+          212.132,
+          984.431
+        ]
+      },
+      {
+        "id": "akadem_042",
+        "beamng_xy": [
+          -557.657,
+          -1106.246
+        ]
+      }
+    ]
+  }
+}

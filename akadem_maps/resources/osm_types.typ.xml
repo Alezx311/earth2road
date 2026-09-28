@@ -1,0 +1,7 @@
+<!-- Loaded after SUMO's osmNetconvert.typ.xml; same ids override the defaults.
+     Service roads (yards, driveways, parking aisles) are opened to passenger cars so the
+     player and NPC traffic share one geometry. Speeds are assumed, not measured. -->
+<types>
+    <type id="highway.service" numLanes="1" speed="5.56" priority="1" oneway="false" width="3.5"
+          disallow="rail rail_urban rail_electric rail_fast tram drone aircraft scooter container wheelchair subway cable_car ship"/>
+</types>

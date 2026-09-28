@@ -1,0 +1,16 @@
+{
+  "files": {
+    "config.json": "4cd08bb0ad7016c332c06a57ea6a0fdbfb8bfedfbbecfd879bf751bd809323bf",
+    "raw/terrain/12/2393/1380.png": "3651cd888242f5a7983e3a46508781ebdbfe712869a138ad33464f171fc833c2",
+    "raw/terrain/12/2393/1381.png": "3651cd888242f5a7983e3a46508781ebdbfe712869a138ad33464f171fc833c2",
+    "raw/tiny.osm": "c21d9d8f0d7902b7ac475a41048ecaade28be1aec791703c29584664ce856ed3",
+    "resources/building_sources.json": "c1999d7be152e5dd377519fcb528f65e34969d3ad919ccd052da164a183443d0",
+    "resources/corrections.json": "0f35a000f2fa74caf14dab30aa4251c6c4f8da18214e1f428d2d4511fa9149bd",
+    "resources/landmarks.json": "d04511eeb35b73204ea14c139247a4996e953d4e3f0f5d060a6ae05c9c90304b",
+    "resources/osm_types.typ.xml": "211c5135414a68b94029a1f1ececee20364b20cf2757f35ae4b6fb5e564d421f",
+    "resources/shots.json": "4c1787fb7bae2f1f847a15ad78673aacac8aebc14eea9b7ade26ce850de02965",
+    "resources/style.json": "dc7f57cf0bf15384b461d92eb411f4167590169a75f21bb8331541f143b4bbd2"
+  },
+  "license": "MIT",
+  "provenance": "Synthetic OSM-format streets and flat DEM authored by Akadem Drive contributors, MIT; no measured geography."
+}

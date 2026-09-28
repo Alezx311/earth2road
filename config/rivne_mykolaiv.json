@@ -1,0 +1,52 @@
+{
+  "id": "rivne_mykolaiv",
+  "name": "Рівне · село та околиці",
+  "center": [
+    31.5787,
+    46.7665
+  ],
+  "boundary": {
+    "geojson": "config/areas/rivne_mykolaiv.geojson",
+    "buffer_m": 1000
+  },
+  "chunk_size": 250,
+  "seed": 311,
+  "traffic_count": 20,
+  "demand_pool": 300,
+  "start_time": "12:00",
+  "terrain_zoom": 12,
+  "visual_profile": "rural",
+  "activate_on_build": false,
+  "spawn": {
+    "lon": 31.5787,
+    "lat": 46.7665,
+    "heading": 90
+  },
+  "shots_config": "config/rivne_shots.json",
+  "overpass": "https://overpass.kumi.systems/api/interpreter",
+  "geofabrik": {
+    "url": "https://download.geofabrik.de/europe/ukraine-260918.osm.pbf",
+    "md5": "8357c720d91f72db3aa5feb6dea04bf3"
+  },
+  "building_enrichment": {
+    "enabled": true,
+    "offline": true,
+    "strict": true,
+    "default_height": 4.8,
+    "unknown_height_policy": "assume",
+    "road_margin": 0.5,
+    "water_margin": 0.5,
+    "sources_config": "config/building_sources.json",
+    "cache_dir": ".cache/buildings",
+    "sources": {
+      "microsoft": {}
+    }
+  },
+  "note": "Whole village development + 1000 m outward buffer. Rural appearance and traffic are synthetic where untagged. Godot only.",
+  "bbox": [
+    31.5569,
+    46.7484,
+    31.6126,
+    46.7837
+  ]
+}

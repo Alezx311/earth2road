@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "comment": "Pinned building-enrichment source metadata (DATA package). Pins are verified at fetch time (SHA-256). Overture releases are kept for only ~2 months by Overture; update 'overture.release' and re-pin when a fetch reports 404/410.",
+  "cache": {
+    "dir": ".cache/buildings",
+    "geo_q": 0.002,
+    "comment": "geo_q is the outward grid step used to expand the requested bbox into the per-geography cache key (~220 m at Kyiv latitude)."
+  },
+  "sources": {
+    "microsoft": {
+      "release": "2026-08-13",
+      "license": "CDLA-Permissive-2.0",
+      "license_url": "https://cdla.dev/permissive-2-0/",
+      "docs_url": "https://github.com/microsoft/GlobalMLBuildingFootprints",
+      "index_url": "https://bfppub.blob.core.windows.net/$web/2026-08-13/dataset-links.csv",
+      "index_sha256": "de61b569b0c23c364d61173632d8c5487ea30bf20912c55b9fa1ab4a89d01148",
+      "index_bytes": 6382044,
+      "url_hosts": [
+        "bfppub.blob.core.windows.net",
+        "bfppub.z5.web.core.windows.net"
+      ],
+      "data_path_prefix": "/2026-08-13/global-buildings.geojsonl/",
+      "location_filter": null,
+      "index_caps": {
+        "max_bytes": 67108864,
+        "max_time": 120
+      },
+      "file_caps": {
+        "max_bytes": 262144000,
+        "max_time": 300
+      },
+      "height_unknown": -1,
+      "height_provenance": "ml_estimated",
+      "height_note": "Every height in GlobalMLBuildingFootprints is a machine-learning estimate for points/centroids; -1 marks unknown. None is emitted for unknown/non-finite/non-positive heights. Do NOT treat these heights as measured.",
+      "geometry_note": "Footprints are worldwide ML extractions; validation keeps only valid finite Polygon/MultiPolygon features intersecting the bbox."
+    },
+    "overture": {
+      "release": "2026-08-19.0",
+      "license": "ODbL-1.0",
+      "license_url": "https://docs.overturemaps.org/attribution/",
+      "docs_url": "https://docs.overturemaps.org/guides/buildings/",
+      "retention_note": "Overture keeps only the two most recent monthly releases; this pin was verified reachable on 2026-09-20 (STAC latest). Re-pin on expiry.",
+      "parquet_s3_template": "s3://overturemaps-us-west-2/release/{release}/theme=buildings/type=building/*.parquet",
+      "parquet_https_mirror": "https://overturemapswestus2.blob.core.windows.net/release/{release}/theme=buildings/type=building/part-*.zstd.parquet",
+      "height_provenance": "overture_assumed",
+      "height_note": "Overture 'height' mixes OSM tags and modeled estimates; treated as assumed, never claimed measured. Unknown/non-positive heights become None.",
+      "duckdb_note": "Optional bounded query via the duckdb CLI (isolated subprocess). Row-group predicate push-down on the bbox columns limits transferred DATA ROWS to intersecting row groups, but duckdb still reads parquet metadata (file/row-group/column stats) across world files, and its network byte volume is internal and NOT measured: audits report downloaded_bytes=None for this engine and extracted_bytes=size of the produced GeoJSON output. Timeout/thread/memory caps: duckdb_timeout=1800, SET threads=2, PRAGMA memory_limit='2GB'. Requires a duckdb binary (config 'duckdb_cli', env DUCKDB_CLI, PATH, or the repo-local default below) and runtime network for extensions. Prefer a genuine local GeoJSON export ('local_geojson') when the CLI is unavailable.",
+      "duckdb_bootstrap": {
+        "url": "https://github.com/duckdb/duckdb/releases/download/v1.5.5/duckdb_cli-linux-amd64.zip",
+        "zip_sha256": "08c0ca117111fcede14239d0093792352befdc174218c344d232c13279643d05",
+        "binary_sha256": "3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788",
+        "version": "1.5.5",
+        "local_default": ".cache/building-deps/duckdb-cli",
+        "command": "curl -fL <url> -o /tmp/duckdb.zip && unzip -o /tmp/duckdb.zip -d /tmp/duckdb-cli && mkdir -p .cache/building-deps && cp /tmp/duckdb-cli/duckdb .cache/building-deps/duckdb-cli && chmod +x .cache/building-deps/duckdb-cli && sha256sum .cache/building-deps/duckdb-cli  # must equal binary_sha256",
+        "note": "The binary is a tool, never committed; re-pin the SHA-256s above whenever the pinned version changes."
+      },
+      "duckdb_timeout": 1800,
+      "local_max_bytes": 2147483648
+    }
+  }
+}

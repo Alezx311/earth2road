@@ -1,0 +1,10 @@
+* text=auto
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.glb binary
+# Vendored upstream addon: keep bytes identical to upstream
+game/addons/gevp/** -whitespace
+# Offline inputs are pinned by SHA-256 in manifest.json: keep bytes exact on every OS
+examples/tiny/inputs/** -text

@@ -1,0 +1,19 @@
+{
+  "id": "morning_accident",
+  "name": "Ранковий пік: ДТП на Берестейському, потім перекриття смуги",
+  "map": "akadem",
+  "start_time": "08:00",
+  "density": 1500,
+  "speed": 4,
+  "provenance": "synthetic: вигадана послідовність подій, не зафіксований випадок у Києві",
+  "timeline": [
+    {"at": 60,   "do": "incident", "kind": "accident",    "lonlat": [30.353328, 50.464904], "duration": 600, "id": "crash"},
+    {"at": 120,  "do": "tls",      "action": "allred",    "lonlat": [30.355413, 50.465708]},
+    {"at": 420,  "do": "tls",      "action": "restore",   "lonlat": [30.355413, 50.465708]},
+    {"at": 660,  "do": "incident_remove", "id": "crash"},
+    {"at": 700,  "do": "incident", "kind": "lane_closed", "lonlat": [30.353328, 50.464904], "duration": 600},
+    {"at": 900,  "do": "density",  "value": 3000},
+    {"at": 1500, "do": "incident_clear"},
+    {"at": 1560, "do": "stop"}
+  ]
+}

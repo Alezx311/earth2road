@@ -1,0 +1,12 @@
+{
+  "note": "CC0 PBR textures from ambientCG (https://ambientcg.com, CC0 1.0). Downloaded by tools/fetch_textures.py into game/assets/textures/ (not committed). The game falls back to flat colours when a set is missing.",
+  "resolution": "1K-JPG",
+  "sets": {
+    "asphalt":  "Asphalt025C",
+    "paving":   "PavingStones130",
+    "grass":    "Grass004",
+    "concrete": "Concrete034",
+    "ground":   "Ground054",
+    "gravel":   "Gravel023"
+  }
+}

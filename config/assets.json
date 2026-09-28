@@ -1,0 +1,17 @@
+{
+  "note": "Third-party runtime assets fetched by tools/fetch_assets.py into game/assets/ (not committed). Licences in docs/SOURCES.md.",
+  "packs": {
+    "cars": {
+      "name": "Kenney Car Kit 3.1",
+      "url": "https://kenney.nl/media/pages/assets/car-kit/1a312ec241-1775131960/kenney_car-kit.zip",
+      "sha256": "fac7dacac5c7874348cf19729af3ef205f3d366493edaf0a827d93f4fdf3d0c4",
+      "license": "CC0-1.0 (Kenney, www.kenney.nl)",
+      "extract_prefix": "Models/GLB format/",
+      "files": ["sedan.glb", "sedan-sports.glb", "hatchback-sports.glb", "suv.glb", "suv-luxury.glb", "taxi.glb",
+                "van.glb", "delivery.glb", "truck.glb", "garbage-truck.glb", "police.glb", "ambulance.glb",
+                "Textures/colormap.png"],
+      "dest": "game/assets/cars",
+      "keep": ["License.txt"]
+    }
+  }
+}

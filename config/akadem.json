@@ -1,0 +1,47 @@
+{
+  "name": "Академмістечко",
+  "id": "akadem",
+  "region_profile": "ukraine",
+  "bbox": [
+    30.342,
+    50.449,
+    30.397,
+    50.481
+  ],
+  "center": [
+    30.355,
+    50.465
+  ],
+  "chunk_size": 250,
+  "seed": 311,
+  "traffic_count": 100,
+  "overpass": "https://overpass.kumi.systems/api/interpreter",
+  "terrain_zoom": 12,
+  "note": "Робочий прямокутник охоплює район і прилеглі перехрестя. Це не адміністративна межа.",
+  "start_time": "07:30",
+  "demand_pool": 600,
+  "building_enrichment": {
+    "enabled": false,
+    "offline": true,
+    "strict": true,
+    "default_height": 10.0,
+    "unknown_height_policy": "skip",
+    "road_margin": 0.5,
+    "water_margin": 0.5,
+    "sources_config": "config/building_sources.json",
+    "cache_dir": ".cache/buildings",
+    "sources": {
+      "overture": {"duckdb": true},
+      "microsoft": {}
+    },
+    "note": "Same reusable block as focus_metro_mcd; disabled until candidates are acquired for this bbox via tools/fetch_buildings.py --map akadem --enable."
+  },
+  "roadworks": {
+    "url": "https://gisserver.kyivcity.gov.ua/mayno/rest/services/KYIV_API/%D0%9F%D0%B5%D1%80%D0%B5%D0%BA%D1%80%D0%B8%D1%82%D1%82%D1%8F/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson",
+    "active_statuses": [
+      "Часткове обмеження руху"
+    ],
+    "speed": 5.56,
+    "note": "Kyiv open data: road closures and repairs (data.kyivcity.gov.ua). Active partial restrictions slow the edge to 20 km/h (assumed); planned works are ignored."
+  }
+}

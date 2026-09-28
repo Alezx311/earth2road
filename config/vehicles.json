@@ -1,0 +1,26 @@
+{
+  "note": "Vehicle catalogue. Models are built procedurally to the listed real-world size (metres) by game/visuals/vehicles.gd; the fetched Kenney Car Kit GLB (tools/fetch_assets.py) is only a fallback and availability follows this catalogue. share = synthetic traffic mix (not measured). SUMO vType params are generic assumptions.",
+  "player_models": ["sedan", "hatchback-sports", "suv", "taxi", "van"],
+  "models": {
+    "sedan":            {"size": [1.80, 1.45, 4.50], "tire_radius": 0.32, "share": 0.26, "class": "passenger"},
+    "hatchback-sports": {"size": [1.76, 1.42, 4.10], "tire_radius": 0.31, "share": 0.18, "class": "passenger"},
+    "sedan-sports":     {"size": [1.82, 1.32, 4.45], "tire_radius": 0.33, "share": 0.06, "class": "passenger"},
+    "suv":              {"size": [1.88, 1.70, 4.60], "tire_radius": 0.36, "share": 0.16, "class": "passenger"},
+    "suv-luxury":       {"size": [1.95, 1.75, 4.90], "tire_radius": 0.37, "share": 0.06, "class": "passenger"},
+    "taxi":             {"size": [1.80, 1.52, 4.50], "tire_radius": 0.32, "share": 0.08, "class": "taxi"},
+    "van":              {"size": [1.92, 1.95, 4.95], "tire_radius": 0.34, "share": 0.08, "class": "delivery"},
+    "delivery":         {"size": [2.05, 2.60, 5.90], "tire_radius": 0.37, "share": 0.05, "class": "delivery"},
+    "truck":            {"size": [1.95, 1.85, 5.30], "tire_radius": 0.38, "share": 0.03, "class": "delivery"},
+    "garbage-truck":    {"size": [2.50, 3.30, 8.00], "tire_radius": 0.50, "share": 0.02, "class": "truck"},
+    "police":           {"size": [1.85, 1.55, 4.70], "tire_radius": 0.33, "share": 0.01, "class": "authority"},
+    "ambulance":        {"size": [2.05, 2.60, 5.90], "tire_radius": 0.37, "share": 0.01, "class": "emergency"}
+  },
+  "sumo": {
+    "passenger": {"accel": 2.6, "decel": 4.5, "maxSpeed": 16.67, "minGap": 2.2, "sigma": 0.5, "tau": 1.0, "speedDev": 0.1},
+    "taxi":      {"accel": 2.6, "decel": 4.5, "maxSpeed": 16.67, "minGap": 2.0, "sigma": 0.4, "tau": 0.9, "speedDev": 0.1},
+    "delivery":  {"accel": 1.8, "decel": 4.0, "maxSpeed": 15.0,  "minGap": 2.5, "sigma": 0.5, "tau": 1.1, "speedDev": 0.08},
+    "truck":     {"accel": 1.1, "decel": 3.5, "maxSpeed": 13.9,  "minGap": 3.0, "sigma": 0.4, "tau": 1.3, "speedDev": 0.05},
+    "authority": {"accel": 2.8, "decel": 4.5, "maxSpeed": 16.67, "minGap": 2.2, "sigma": 0.3, "tau": 0.9, "speedDev": 0.1},
+    "emergency": {"accel": 2.2, "decel": 4.5, "maxSpeed": 16.67, "minGap": 2.5, "sigma": 0.3, "tau": 1.0, "speedDev": 0.1}
+  }
+}

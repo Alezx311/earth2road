@@ -1,0 +1,452 @@
+{
+  "date": "2026-09-28",
+  "version": "0.1.0b1",
+  "status": "source_publication_ready_experimental_beta",
+  "platform": "Windows 11 x64, build 26200",
+  "python": "3.14.0",
+  "godot": "4.6 stable",
+  "sumo": "1.27.1",
+  "pillow": "12.3.0",
+  "beamng": "0.39.4.0",
+  "unittest": {
+    "discovered": 302,
+    "passed": 301,
+    "skipped": 1,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 388.203,
+    "skip_reason": "Unix-only fake DuckDB executable fixture"
+  },
+  "initial_clean_checkout": {
+    "discovered": 302,
+    "skipped": 29,
+    "failures": 0,
+    "errors": 0,
+    "note": "Before map/cache installation and before the Pillow update"
+  },
+  "dependency_audit": {
+    "audited_pinned_runtime_packages": 16,
+    "known_vulnerabilities": 0,
+    "method": "pip-audit, fully pinned lock, no dependency resolution"
+  },
+  "godot_surface": {
+    "missing_total": 0,
+    "passed": true,
+    "routes": [
+      {
+        "checked": 374,
+        "edges": [
+          "31842206#6",
+          "-309180934#0",
+          "31726421#1",
+          "31726421#2",
+          "31726421#3",
+          "31726421#4",
+          "31726421#5",
+          "31726421#6",
+          "31726421#8",
+          "31726421#9",
+          "31726421#10",
+          "370073671#1",
+          "370073672#0",
+          "31841122#2",
+          "-31841122#3",
+          "-370073672#1"
+        ],
+        "examples": [],
+        "missing_surface": 0
+      },
+      {
+        "checked": 674,
+        "edges": [
+          "305584670#1",
+          "151162970",
+          "-114133827#5",
+          "-114133827#3",
+          "-114133827#2",
+          "-114133827#1",
+          "-114133827#0",
+          "-151162966#5",
+          "-151162966#4",
+          "-151162966#3",
+          "-151162966#2",
+          "-151162966#1",
+          "153863698#0",
+          "1286624298#5",
+          "1286624298#6",
+          "303435744#1",
+          "303435744#3",
+          "303435744#5",
+          "303435744#7",
+          "303435744#10",
+          "1286624297#0",
+          "1286624297#1",
+          "1286624297#4",
+          "75888475#0",
+          "37175333#0",
+          "37175333#2",
+          "31842199",
+          "37375953#0",
+          "-339794720#5",
+          "-506358240",
+          "185005006#1",
+          "-160901361#5",
+          "160901431#3",
+          "31726401#5"
+        ],
+        "examples": [],
+        "missing_surface": 0
+      },
+      {
+        "checked": 930,
+        "edges": [
+          "31838169",
+          "-46337762#1",
+          "-46337762#0",
+          "1200330288",
+          "1200330283",
+          "1200330286#0",
+          "1200330286#1",
+          "1200330289",
+          "-75728815",
+          "-46337760#1",
+          "-114133826#3",
+          "-114133826#2",
+          "-114133827#5",
+          "-114133827#3",
+          "-114133827#2",
+          "-114133827#1",
+          "-114133827#0",
+          "-151162966#5",
+          "-151162966#4",
+          "-151162966#3",
+          "-151162966#2",
+          "-151162966#1",
+          "153863698#0",
+          "1286624298#5",
+          "1286624298#6",
+          "303435744#1",
+          "303435744#3",
+          "303435744#5",
+          "303435744#7",
+          "303435744#10",
+          "1286624297#0",
+          "1286624297#1",
+          "1286624297#4",
+          "75888475#0",
+          "37175333#0",
+          "37175333#2",
+          "31842199",
+          "37375953#0",
+          "37375953#1",
+          "37375953#2",
+          "31726418#0",
+          "31726418#1",
+          "31726418#2",
+          "684755288",
+          "186897226#0"
+        ],
+        "examples": [],
+        "missing_surface": 0
+      },
+      {
+        "checked": 712,
+        "edges": [
+          "204980586",
+          "204980588#0",
+          "68254613#0",
+          "68254613#2",
+          "68254572#2",
+          "68254627#4",
+          "68254627#5",
+          "487795044#0",
+          "127659275#0",
+          "127659275#2",
+          "75527478#3",
+          "75527478#4",
+          "75527478#5",
+          "75728822",
+          "1335765721#0",
+          "1335765721#1",
+          "23491758#0",
+          "23491758#1",
+          "777068764",
+          "214163687",
+          "805499697",
+          "214163689",
+          "26131520#0",
+          "1177885610#0",
+          "-485214552#0",
+          "485214565#0",
+          "237140348#0",
+          "1293575119#0",
+          "1293575119#1",
+          "485214561#2",
+          "-237140346#3",
+          "645993373",
+          "-645993373"
+        ],
+        "examples": [],
+        "missing_surface": 0
+      }
+    ]
+  },
+  "godot_drive": {
+    "kerb": {
+      "end": [
+        -97.4937438964844,
+        -1.34593975543976,
+        -12.4472312927246
+      ],
+      "final_speed_kmh": 0.00189013236667961,
+      "max_rise": 0.33620822429657,
+      "min_distance_to_obstacle": -1.0,
+      "min_speed_second_half_kmh": 0.000197499431669712,
+      "passed": true,
+      "pavement_frames": 76,
+      "start": [
+        -70.698356628418,
+        -1.60609292984009,
+        0.481493592262268
+      ],
+      "travel": 29.7513809204102
+    },
+    "long_drive": {
+      "end": [
+        -319.71923828125,
+        -2.93880844116211,
+        28.1144428253174
+      ],
+      "final_speed_kmh": 84.7316093444824,
+      "max_rise": 0.0809931755065918,
+      "min_distance_to_obstacle": -1.0,
+      "min_speed_second_half_kmh": 68.7772499084473,
+      "passed": true,
+      "pavement_frames": 124,
+      "start": [
+        -70.5834350585938,
+        -1.60550224781036,
+        0.469826191663742
+      ],
+      "travel": 250.66487121582
+    },
+    "passed": true,
+    "reverse": {
+      "backwards": 22.9413757324219,
+      "end": [
+        -47.795768737793,
+        -1.44271230697632,
+        -2.1126275062561
+      ],
+      "final_speed_kmh": 19.9207054138184,
+      "gear": -1,
+      "max_rise": 0.103335022926331,
+      "min_distance_to_obstacle": -1.0,
+      "min_speed_second_half_kmh": 19.7448383331299,
+      "passed": true,
+      "pavement_frames": 0,
+      "start": [
+        -70.5961837768555,
+        -1.54604732990265,
+        0.471246540546417
+      ],
+      "travel": 22.9463577270508
+    },
+    "standstill_hold": {
+      "end": [
+        -70.5961837768555,
+        -1.54604732990265,
+        0.471246540546417
+      ],
+      "final_speed_kmh": 0.0108740248717368,
+      "max_rise": 0.0685150623321533,
+      "min_distance_to_obstacle": -1.0,
+      "min_speed_second_half_kmh": 2.39542661802261e-05,
+      "passed": true,
+      "pavement_frames": 0,
+      "start": [
+        -70.5834350585938,
+        -1.60550224781036,
+        0.469826191663742
+      ],
+      "travel": 0.0128275956958532
+    },
+    "stop_line": {
+      "end": [
+        -236.784088134766,
+        -3.21590757369995,
+        28.1279697418213
+      ],
+      "final_speed_kmh": 68.2889144897461,
+      "max_rise": 0.0680222511291504,
+      "min_distance_to_obstacle": -1.0,
+      "min_speed_second_half_kmh": 47.4059474945068,
+      "passed": true,
+      "pavement_frames": 0,
+      "start": [
+        -159.95817565918,
+        -1.88883912563324,
+        11.940110206604
+      ],
+      "travel": 78.5128479003906
+    },
+    "traffic_collision": {
+      "contacts": 1,
+      "end": [
+        -110.996269226074,
+        -1.69682800769806,
+        5.42407894134521
+      ],
+      "final_speed_kmh": 1.21041271086142e-05,
+      "max_rise": 0.0737838745117188,
+      "min_distance_to_obstacle": 4.39271879196167,
+      "min_speed_second_half_kmh": 1.59565365720482e-07,
+      "passed": true,
+      "pavement_frames": 0,
+      "start": [
+        -100.487991333008,
+        -1.73497140407562,
+        4.02658891677856
+      ],
+      "travel": 10.6007966995239
+    }
+  },
+  "traffic": {
+    "following_stationary_leader": {
+      "passed": true,
+      "speed": 0.0011914019057940076,
+      "bumper_gap": 2.5021026813886404,
+      "lane": "260484711#0_0"
+    },
+    "godot_ego_proxy": {
+      "passed": true,
+      "follower_speed": 0.0012204320283675644,
+      "ego_lane": "260484711#0_0"
+    },
+    "red_signal": {
+      "passed": true,
+      "speed": 0.0,
+      "distance_to_line": 1.0010002182980173,
+      "tls": "cluster_2880931548_3432237721_748732569"
+    },
+    "soak": {
+      "simulated_seconds": 1800,
+      "wall_seconds": 26.525237299999844,
+      "peak_vehicles": 100,
+      "min_after_warmup": 98,
+      "teleports": 0,
+      "collisions": 0,
+      "last_count": 100
+    }
+  },
+  "incidents": {
+    "speed_limit": {
+      "passed": true,
+      "edge": "31892269#2",
+      "active_mps": [
+        5.56,
+        5.56,
+        5.56
+      ],
+      "restored_mps": [
+        13.89,
+        13.89,
+        13.89
+      ]
+    },
+    "lane_closed": {
+      "passed": true,
+      "lane": "31892269#2_1",
+      "cars_on_closed": 0,
+      "cars_on_open": 3
+    },
+    "accident": {
+      "passed": true,
+      "vehicles": [
+        "inc3_v1",
+        "inc3_v2"
+      ],
+      "blocking": false,
+      "halting": 3,
+      "mean_speed": 5.56,
+      "baseline_speed": 13.23
+    },
+    "roadworks_expiry": {
+      "passed": true,
+      "edge": "31892269#2"
+    },
+    "traffic_light": {
+      "passed": true,
+      "tls": "2387943201",
+      "modes": {
+        "allred": "r",
+        "amber": "O",
+        "off": "O"
+      },
+      "program": "0",
+      "note": "amber blinking is driven by the bridge; SUMO has no flashing model"
+    }
+  },
+  "priority": {
+    "passed": true,
+    "crossing_seconds": {
+      "major": 3.5,
+      "minor": 4.3
+    },
+    "minor_min_speed": 4.008477177548721,
+    "collisions": 0
+  },
+  "beamng_synthetic": {
+    "status": "complete",
+    "nav_nodes": 11,
+    "nav_links": 14,
+    "samples": 53,
+    "max_surface_error_m": 0,
+    "vehicles": 8,
+    "traffic_count": 7,
+    "signals": 0,
+    "zip_sha256": "d15c36eaa9394a57f392325884cca0026875342fa487ece6c30a8b65ad05074c"
+  },
+  "local_map_index_sha256": {
+    "akadem": "7698745f63295359d079f37f62f5f0d55fc5fdbbe1eec8a6451755739a4f2ed0",
+    "rivne_mykolaiv": "09661a1fbee6f315a30b7a056b0380c7679ed6c7179e75e233d9fff7ac63a586"
+  },
+  "limits": [
+    "Linux CI is configured but not executed locally.",
+    "BeamNG synthetic map contains no traffic signals; this smoke does not validate signal behavior.",
+    "Historical real maps were copied for local use; they were not rebuilt or certified as BeamNG releases.",
+    "Headless checks do not establish graphical performance or replace manual driving acceptance.",
+    "Known non-fatal Godot shutdown resource warnings are described in VALIDATION.md."
+  ],
+  "rural_drive": {
+    "hold_m": 0.00542267970740795,
+    "passed": true,
+    "reverse_m": 17.0868148803711,
+    "routes": [
+      {
+        "contacts": 0,
+        "max_deviation_m": 1.18899977207184,
+        "offroad_frames": 0,
+        "passed": true,
+        "seconds": 82.0250000000113,
+        "travel_m": 350.013907104782
+      },
+      {
+        "contacts": 0,
+        "max_deviation_m": 0.559796631336212,
+        "offroad_frames": 0,
+        "passed": true,
+        "seconds": 81.5916666666777,
+        "travel_m": 350.02832776447
+      },
+      {
+        "contacts": 0,
+        "max_deviation_m": 0.878645777702332,
+        "offroad_frames": 0,
+        "passed": true,
+        "seconds": 81.8750000000112,
+        "travel_m": 350.001450529066
+      }
+    ]
+  }
+}

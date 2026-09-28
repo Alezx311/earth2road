@@ -1,0 +1,2 @@
+# Complete runtime dependencies, pinned in requirements.lock.
+-r requirements.lock

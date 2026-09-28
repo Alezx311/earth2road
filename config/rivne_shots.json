@@ -1,0 +1,38 @@
+{
+  "shots": [
+    {
+      "name": "rivne_center",
+      "lon": 31.5787,
+      "lat": 46.7665,
+      "snap": true,
+      "height": 3.5,
+      "heading": 90,
+      "pitch": -6
+    },
+    {
+      "name": "rivne_north",
+      "lon": 31.5784,
+      "lat": 46.7712,
+      "snap": true,
+      "height": 5,
+      "heading": 180,
+      "pitch": -15
+    },
+    {
+      "name": "rivne_farms",
+      "lon": 31.5885,
+      "lat": 46.7624,
+      "height": 18,
+      "heading": 95,
+      "pitch": -25
+    },
+    {
+      "name": "rivne_overview",
+      "lon": 31.5787,
+      "lat": 46.751,
+      "height": 1600,
+      "heading": 0,
+      "pitch": -48
+    }
+  ]
+}

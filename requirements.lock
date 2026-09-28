@@ -1,0 +1,17 @@
+# Python 3.14 / Windows validated runtime. Keep in sync with pyproject.toml extras.
+certifi==2026.7.22
+charset-normalizer==3.5.1
+eclipse-sumo==1.27.1
+idna==3.20
+libsumo==1.27.1
+numpy==2.5.3
+osmium==4.3.1
+pillow==12.3.0
+pyproj==3.7.2
+requests==2.34.2
+shapely==2.1.2
+sumo-data==1.27.1
+sumolib==1.27.1
+traci==1.27.1
+urllib3==2.8.0
+websockets==15.0.1

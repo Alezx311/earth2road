@@ -1,0 +1,41 @@
+# Local environments and tools
+.venv/
+.venv-*/
+.tools/
+.cache/
+.godot/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+out/
+logs/
+graphify-out/
+# Generated worlds, downloaded inputs and engine exports
+data/
+game/data/
+game/assets/cars/*
+!game/assets/cars/.gdignore
+game/assets/textures/*
+!game/assets/textures/.gdignore
+game/assets/visuals/
+*.zip
+*.pbf
+*.exe
+*.dll
+# Private/local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+.opencode/
+.claude/
+.codex/
+.agents/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

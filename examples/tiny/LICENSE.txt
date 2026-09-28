@@ -1,0 +1,1 @@
+Synthetic streets and flat elevation fixture. Copyright (c) 2026 Akadem Drive contributors. Licensed under the repository MIT license. These are not observed OSM or terrain data.

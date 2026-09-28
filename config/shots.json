@@ -1,0 +1,123 @@
+{
+  "note": "Фіксовані ракурси для порівняння графіки до/після. heading — за годинниковою від півночі (як у SUMO), height — метри над рельєфом, pitch — градуси (від'ємний — вниз). snap=true ставить камеру на найближчу смугу (не двір), що йде приблизно в напрямку heading, і бере напрямок смуги.",
+  "shots": [
+    {
+      "name": "metro_overview",
+      "lon": 30.3538,
+      "lat": 50.4636,
+      "heading": 40,
+      "height": 28,
+      "pitch": -28
+    },
+    {
+      "name": "metro_street",
+      "lon": 30.3556,
+      "lat": 50.463,
+      "heading": 355,
+      "height": 1.5,
+      "pitch": -2,
+      "snap": true
+    },
+    {
+      "name": "palladina",
+      "lon": 30.35625,
+      "lat": 50.46,
+      "heading": 180,
+      "height": 1.5,
+      "pitch": -2,
+      "snap": true
+    },
+    {
+      "name": "yard_parking",
+      "lon": 30.3578,
+      "lat": 50.4579,
+      "heading": 50,
+      "height": 14,
+      "pitch": -30
+    },
+    {
+      "name": "interchange",
+      "lon": 30.3545,
+      "lat": 50.4568,
+      "heading": 150,
+      "height": 30,
+      "pitch": -25
+    },
+    {
+      "name": "mcdonalds",
+      "lon": 30.3588,
+      "lat": 50.4572,
+      "heading": 140,
+      "height": 8,
+      "pitch": -15
+    },
+    {
+      "name": "bridge_below",
+      "lon": 30.3563,
+      "lat": 50.4532,
+      "heading": 350,
+      "height": 18,
+      "pitch": -18
+    },
+    {
+      "name": "yard_drive",
+      "lon": 30.3583,
+      "lat": 50.4588,
+      "heading": 90,
+      "height": 1.5,
+      "pitch": -4,
+      "snap": true,
+      "service": true
+    },
+    {
+      "name": "merge_ramp",
+      "lon": 30.3538,
+      "lat": 50.4644,
+      "heading": 60,
+      "height": 14,
+      "pitch": -30
+    },
+    {
+      "name": "merge_street",
+      "lon": 30.3549,
+      "lat": 50.4648,
+      "heading": 272,
+      "height": 1.5,
+      "pitch": -3
+    },
+    {
+      "name": "yard_deadend",
+      "lon": 30.35845,
+      "lat": 50.45825,
+      "heading": 20,
+      "height": 12,
+      "pitch": -45
+    },
+    {
+      "name": "traffic_metro",
+      "lon": 30.3553,
+      "lat": 50.464,
+      "heading": 10,
+      "height": 3.0,
+      "pitch": -8
+    },
+    {
+      "name": "traffic_palladina",
+      "lon": 30.35625,
+      "lat": 50.461,
+      "heading": 180,
+      "height": 2.2,
+      "pitch": -6,
+      "snap": true
+    },
+    {
+      "name": "signed_junction",
+      "lon": 30.377961,
+      "lat": 50.45873,
+      "heading": 93,
+      "height": 1.6,
+      "pitch": -3,
+      "snap": true
+    }
+  ]
+}

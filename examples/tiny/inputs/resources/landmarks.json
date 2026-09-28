@@ -1,0 +1,17 @@
+{
+  "note": "Synthetic stand-ins for named OSM footprints on the western ring. No logos and no trademark colours: the facade is a type chosen after looking at the place, not a copy of a photograph. Heights stay whatever OSM (or the usual assumption) already stored.",
+  "observed": "Google Street View at the Odesa interchange (panorama JhDT6j3QZikXhDYIAWnYqw, May 2015): blue guide sign, concrete overpass, panel towers, grass embankment, plain concrete sidewalk. Epicentr K on Kiltseva (Wikimedia, Andrew Niukin, 2012): long low retail box, glass ground floor. Mall footprints (Lavina, Respublika, Magellan and the others) are the OSM outlines.",
+  "by_id": {
+    "446901282": {"name": "Lavina Mall", "facade": "kyiv_fac_curtain", "roof": "kyiv_roof_flat"},
+    "293888317": {"name": "Respublika Park", "facade": "kyiv_fac_curtain", "roof": "kyiv_roof_flat"},
+    "31875997": {"name": "Магелан", "facade": "kyiv_fac_curtain", "roof": "kyiv_roof_flat"},
+    "115710630": {"name": "Promenada Park", "facade": "kyiv_fac_curtain", "roof": "kyiv_roof_flat"},
+    "103462701": {"name": "April City", "facade": "kyiv_fac_curtain", "roof": "kyiv_roof_flat"},
+    "448102837": {"name": "Academcity", "facade": "kyiv_fac_curtain", "roof": "kyiv_roof_flat"},
+    "151583167": {"name": "ТЦ ХІТ MALL", "facade": "kyiv_fac_curtain", "roof": "kyiv_roof_flat"},
+    "31728267": {"name": "Епіцентр К", "facade": "kyiv_fac_cladding", "roof": "kyiv_roof_flat"},
+    "135171867": {"name": "Ашан", "facade": "kyiv_fac_cladding", "roof": "kyiv_roof_flat"},
+    "99020986": {"name": "METRO", "facade": "kyiv_fac_cladding", "roof": "kyiv_roof_flat"},
+    "236589166": {"name": "БудМайдан", "facade": "kyiv_fac_cladding", "roof": "kyiv_roof_flat"}
+  }
+}

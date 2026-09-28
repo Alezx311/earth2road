@@ -1,0 +1,5 @@
+{
+  "note": "Observed traffic counts for calibration (tools/demand.py -> SUMO routeSampler). One entry per counting point, direction and hour: lon/lat on the road, bearing = driving direction in degrees clockwise from north (null = any), hour = start of the hour (local time), vehicles_per_hour. Always fill source and date. Empty = uncalibrated synthetic demand. Kyiv detector data (КМДА / ЦОДР, 330 detectors) is not published as open data (checked 2026-09-19); request it as public information or copy published figures by hand.",
+  "example": {"lon": 30.3552, "lat": 50.4648, "bearing": 90, "hour": 8, "vehicles_per_hour": 1200, "source": "URL or document", "date": "YYYY-MM-DD"},
+  "counts": []
+}
