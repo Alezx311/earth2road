@@ -13,6 +13,25 @@ it to **BeamNG.drive** (a level ZIP) and to the bundled **Godot** driving game.
 Road layout and buildings come from OSM. Heights, signal timings, traffic demand and street
 dressing are derived or synthetic, never measured data — every record says which.
 
+## Play in two commands
+
+You need Python 3.11+ (3.14 is validated), `curl` and internet for the first setup.
+
+```powershell
+.\setup.ps1      # Linux: ./setup.sh
+.\start.ps1      # Linux: ./start.sh
+```
+
+`setup` downloads Godot 4.6, the Python dependencies and the car models, and installs a small
+offline example map. `start` launches the game with traffic.
+
+To drive your own place, press **M → New map from any place on Earth…** in the game: find a
+place on the map or paste `lat, lon`, pick the area size (0.3–5 km) and press **Generate**.
+The game downloads OpenStreetMap data, builds the map and loads it. Controls and details:
+[docs/GAME.md](docs/GAME.md).
+
+Everything below is for the command line: scripted builds, BeamNG export and development.
+
 ## Install (generator)
 
 Use Python 3.14 for the pinned setup below. The generator supports Python 3.11+ with
