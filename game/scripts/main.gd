@@ -5,7 +5,9 @@ const Player = preload("res://scripts/player.gd")
 const TrafficView = preload("res://scripts/traffic_view.gd")
 const Map = preload("res://scripts/minimap.gd")
 const FreeCamera = preload("res://scripts/free_camera.gd")
-const ControlPanel = preload("res://scripts/control_panel.gd")
+const Hud = preload("res://scripts/hud.gd")
+const Ui = preload("res://scripts/ui_theme.gd")
+const Modal = preload("res://scripts/ui_modal.gd")
 const IncidentView = preload("res://scripts/incident_view.gd")
 const MapMenu = preload("res://scripts/map_menu.gd")
 const I18n = preload("res://scripts/i18n.gd")
@@ -34,6 +36,8 @@ var runtime := 0.0
 var capture_done := false
 var headless_limit := 0.0
 var hud: CanvasLayer
+var hud_view: Control
+var pause_menu: Control
 var offline := false
 var free_cam: Camera3D
 var spectating := false
@@ -91,7 +95,6 @@ func _ready() -> void:
 		OS.set_environment("AKADEM_MAP_MENU", "")
 		add_child(make_environment())
 		var layer := CanvasLayer.new()
-		layer.scale = Vector2(1.5, 1.5)
 		add_child(layer)
 		open_map_menu(layer, false)
 		return
@@ -208,11 +211,9 @@ func send(msg: Dictionary) -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo: return
-	if map_menu: return
+	if modal_open(): return
 	var code: int = event.physical_keycode
 	if code==KEY_M:
-		paused = true
-		send({"type":"pause","paused":true})
 		open_map_menu(hud, true)
 	elif code==KEY_F:
 		set_spectating(not spectating)
@@ -227,11 +228,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif code in [KEY_MINUS,KEY_KP_SUBTRACT]:
 		set_density(density_step(-1))
 	elif code==KEY_F1:
-		set_help(not help_panel.visible)
+		set_help(help_panel == null)
 	elif code==KEY_T:
-		panel.visible = not panel.visible
-		if not panel.visible:
-			panel.disarm()
+		toggle_traffic()
 	elif code in [KEY_ESCAPE,KEY_P]:
 		if code==KEY_ESCAPE and panel.armed != "":
 			panel.disarm()
@@ -241,9 +240,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		reconnect_clock = 0.0
 		connect_bridge()
 	elif code==KEY_L:
-		# Labels re-translate themselves; the texts rebuilt every frame follow on their own.
+		# Labels re-translate themselves; formatted texts follow NOTIFICATION_TRANSLATION_CHANGED.
 		I18n.toggle()
-		update_density_label()
 	elif code==KEY_F12:
 		capture()
 	elif spectating:
@@ -256,6 +254,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		reset_player()
 
 func open_map_menu(layer: CanvasLayer, closable: bool) -> void:
+	if map_menu: return
+	if pause_menu: pause_menu.hide()
 	map_menu = MapMenu.new()
 	map_menu.closable = closable
 	map_menu.current = WorldStream.map_id() if closable else ""
@@ -263,8 +263,10 @@ func open_map_menu(layer: CanvasLayer, closable: bool) -> void:
 	map_menu.closed.connect(func():
 		map_menu.queue_free()
 		map_menu = null
-		set_paused(false))
+		if pause_menu: pause_menu.show()
+		sync_modal_state())
 	layer.add_child(map_menu)
+	sync_modal_state()
 
 ## The scene is rebuilt from scratch for the new map; AKADEM_MAP is read by WorldStream.
 func switch_map(id: String) -> void:
@@ -272,17 +274,79 @@ func switch_map(id: String) -> void:
 	socket.close()
 	get_tree().reload_current_scene()
 
-## Pause also brings up the controls panel: no permanent hint bar on screen.
+func modal_open() -> bool:
+	return map_menu != null or help_panel != null or paused
+
+## Called at the opening event, before the next physics tick. Raw Input polling
+## must be gated as well as GUI events (a modal only consumes the latter).
+func sync_modal_state() -> void:
+	var blocked := modal_open()
+	if player:
+		player.enabled = not blocked and not spectating
+		player.input_blocked = blocked
+		if blocked: player.stop_looking()
+	if free_cam:
+		free_cam.input_blocked = blocked
+		if blocked:
+			free_cam.dragging = false
+			free_cam.panning = false
+	if blocked:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if panel: panel.disarm()
+	send({"type": "pause", "paused": blocked})
+
 func set_paused(on: bool) -> void:
 	paused = on
-	set_help(on)
-	send({"type":"pause","paused":paused})
+	if pause_menu:
+		pause_menu.queue_free()
+		pause_menu = null
+	if on:
+		pause_menu = Modal.new()
+		pause_menu.title = "PAUSED"
+		pause_menu.bounds = Rect2(0.33, 0.0, 0.34, 0.0)
+		pause_menu.compact = true
+		pause_menu.closed.connect(func(): set_paused(false))
+		hud.add_child(pause_menu)
+		var body: VBoxContainer = pause_menu.body
+		body.add_child(Ui.label("Take your time. Your drive will wait.", 20, Ui.MUTED, true))
+		var resume := Ui.button("Resume driving · P", func(): set_paused(false), true)
+		body.add_child(resume)
+		body.add_child(Ui.button("Maps · M", func(): open_map_menu(hud, true)))
+		body.add_child(Ui.button("Help · F1", func(): set_help(true)))
+		body.add_child(Ui.button("Language: English", func(): I18n.toggle()))
+		resume.grab_focus.call_deferred()
+	sync_modal_state()
+
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo: return
+	if map_menu: return
+	if help_panel and event.physical_keycode == KEY_F1:
+		set_help(false)
+		get_viewport().set_input_as_handled()
+	elif paused and help_panel == null and event.physical_keycode == KEY_P:
+		set_paused(false)
+		get_viewport().set_input_as_handled()
+
+func toggle_traffic() -> void:
+	panel.visible = not panel.visible
+	if not panel.visible: panel.disarm()
+	else: panel.focus_first()
+
+func ui_action(action: String) -> void:
+	match action:
+		"maps": open_map_menu(hud, true)
+		"pause": set_paused(true)
+		"help": set_help(true)
+		"traffic": toggle_traffic()
+		"spectator": set_spectating(not spectating)
+		"camera":
+			if not spectating: player.set_camera(not player.cockpit)
 
 ## Clicking the map: the ray hits a collider on a full tile, and beyond that (the
 ## spectator can be kilometres up) it falls back to the horizontal plane through the
 ## camera focus. The bridge knows the whole network and resolves the point to a lane.
 func _unhandled_input(event: InputEvent) -> void:
-	if panel == null or not panel.visible or not event is InputEventMouseButton: return
+	if modal_open() or panel == null or not panel.visible or not event is InputEventMouseButton: return
 	if event.button_index != MOUSE_BUTTON_LEFT or not event.pressed: return
 	var cam: Camera3D = free_cam if spectating else (player.inside if player.cockpit else player.chase)
 	if cam == null: return
@@ -334,6 +398,7 @@ func _process(delta: float) -> void:
 			set_density(density)
 			send({"type":"spectate","on":spectating})
 			send({"type":"speed","x":SPEEDS[speed_index]})
+			sync_modal_state()
 			if start_args.get("spectate",false) and not spectating:
 				set_spectating(true)
 	if not latest.is_empty():
@@ -350,7 +415,7 @@ func _process(delta: float) -> void:
 	var connected := ready_bridge and socket.get_ready_state()==WebSocketPeer.STATE_OPEN and frame_age<2
 	# Traffic is optional: the car drives whether or not the bridge is there. Once it
 	# connects, SUMO places the ego car wherever the player is (moveToXY).
-	player.enabled = not paused and not spectating and map_menu == null
+	player.enabled = not modal_open() and not spectating
 	if socket.get_ready_state()==WebSocketPeer.STATE_OPEN:
 		unreachable = 0.0
 	else:
@@ -369,7 +434,10 @@ func _process(delta: float) -> void:
 		adapt_view()
 	status.text = status_text(connected)
 	speed_label.text = "%03d" % roundi(absf(player.speed)*3.6)
-	detail.text = tr("%d cars  ·  %d FPS  ·  %s\n%s · SUMO %.0f ms") % [traffic.count(),Engine.get_frames_per_second(),gear_text() if not spectating else tr("camera %.0f m") % free_cam.distance,sim_clock(),float(last_header.get("step_ms",0.0))]
+	hud_view.gear.text = gear_text() if not spectating else "—"
+	detail.text = tr("%d cars · %d FPS · %s") % [traffic.count(), Engine.get_frames_per_second(), sim_clock()]
+	hud_view.buttons.camera.disabled = spectating
+	hud_view.buttons.spectator.set_pressed_no_signal(spectating)
 	track_shortfall(delta)
 	map_clock += delta
 	if map_clock > 0.2:
@@ -421,6 +489,7 @@ func set_spectating(on: bool) -> void:
 	if on == spectating:
 		return
 	spectating = on
+	sync_modal_state()
 	if on:
 		free_cam.start(player.pos, player.yaw, float(start_args.get("altitude", 120.0)))
 		start_args.erase("altitude")
@@ -435,6 +504,7 @@ func set_spectating(on: bool) -> void:
 
 func set_speed(index: int) -> void:
 	speed_index = clampi(index, 0, SPEEDS.size() - 1)
+	if panel: panel.show_speed(speed_index)
 	if spectating:
 		send({"type":"speed","x":SPEEDS[speed_index]})
 
@@ -461,6 +531,11 @@ func set_density(count: int, from_slider := false) -> void:
 		density_slider.set_value_no_signal(sqrt(float(density) / max_density) * 100.0)
 	update_density_label()
 	send({"type":"density","count":density})
+
+func _notification(what: int) -> void:
+	# Also reached from the Pause and Maps language buttons, not only the L key.
+	if what == NOTIFICATION_TRANSLATION_CHANGED:
+		update_density_label()
 
 func update_density_label() -> void:
 	if density_label == null:
@@ -505,67 +580,29 @@ func gear_text() -> String:
 	var g: int = player.body.current_gear if player.body else 0
 	return "R" if g == -1 else ("N" if g == 0 else "D%d" % g)
 
-func label(text: String, pos: Vector2, size_px: int, color: Color=Color.WHITE) -> Label:
-	var l := Label.new()
-	l.text=text
-	l.position=pos
-	l.add_theme_font_size_override("font_size",size_px)
-	l.add_theme_color_override("font_color",color)
-	return l
-
-## Free-floating cards, no full-width bars: the street stays visible. Controls and
-## attribution live in the F1 panel (also shown while paused), not on top of the game.
 func build_ui() -> void:
-	var layer := CanvasLayer.new()
-	hud = layer
-	add_child(layer)
-	layer.scale=Vector2(1.5,1.5)
-	layer.add_child(card(Vector2(440,12),Vector2(400,32)))
-	status=label("LOADING",Vector2(440,18),16,Color("f1bc60"))
-	status.size=Vector2(400,20)
-	status.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
-	layer.add_child(status)
-	minimap=Map.new()
-	minimap.position=Vector2(1020,456)
-	minimap.size=Vector2(232,232)
-	minimap.clip_contents=true
-	minimap.lanes=data.lanes
-	minimap.player=player
-	layer.add_child(minimap)
-	# Bottom centre: the left column belongs to the traffic panel, the right to the minimap.
-	layer.add_child(card(Vector2(517,592),Vector2(245,116)))
-	speed_label=label("000",Vector2(534,590),52)
-	layer.add_child(speed_label)
-	layer.add_child(label("km/h",Vector2(638,628),14,Color("a0b4bd")))
-	detail=label("",Vector2(533,662),12,Color("a0b4bd"))
-	layer.add_child(detail)
-	layer.add_child(card(Vector2(975,12),Vector2(280,62)))
-	density_slider = HSlider.new()
-	density_slider.position=Vector2(990,23)
-	density_slider.size=Vector2(250,20)
-	density_slider.min_value=0
-	density_slider.max_value=100
-	density_slider.step=0.5
-	density_slider.focus_mode=Control.FOCUS_NONE
-	density_slider.value_changed.connect(func(value):set_density(roundi(pow(value/100.0,2.0)*max_density/10.0)*10,true))
-	layer.add_child(density_slider)
-	density_label=label("",Vector2(990,48),12,Color("cfdae0"))
-	layer.add_child(density_label)
-	layer.add_child(label(data.get("attribution",ATTRIBUTION),Vector2(686,702),10,Color("6d828c")))
-	panel = ControlPanel.new()
+	hud = CanvasLayer.new()
+	add_child(hud)
+	hud_view = Hud.new()
+	hud.add_child(hud_view)
+	hud_view.action.connect(ui_action)
+	status = hud_view.status
+	speed_label = hud_view.speed_label
+	detail = hud_view.detail
+	minimap = hud_view.minimap
+	minimap.lanes = data.lanes
+	minimap.player = player
+	panel = hud_view.panel
 	panel.command.connect(send)
+	panel.closed.connect(toggle_traffic)
+	panel.speed_selected.connect(set_speed)
+	panel.density_selected.connect(func(value): set_density(roundi(pow(value / 100.0, 2.0) * max_density / 10.0) * 10, true))
 	panel.visible = start_args.get("panel", false)
-	layer.add_child(panel)
-	build_help(layer)
+	density_slider = panel.density_slider
+	density_label = panel.density_label
+	hud_view.buttons.spectator.toggle_mode = true
+	panel.show_speed(speed_index)
 	set_density(density)
-
-func card(pos: Vector2, size: Vector2, alpha := 0.88) -> ColorRect:
-	var rect := ColorRect.new()
-	rect.color=Color(0.025,0.05,0.07,alpha)
-	rect.position=pos
-	rect.size=size
-	rect.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	return rect
 
 const HELP_LINES := [
 	["DRIVING","WASD or arrows — throttle, brake, steer (S when stopped — reverse) · SPACE — handbrake\nC — camera · RMB + mouse — look around · wheel — camera distance · V — car model · R — back to start"],
@@ -576,25 +613,28 @@ const HELP_LINES := [
 const ATTRIBUTION := "© OpenStreetMap contributors · ODbL  |  Mapzen Terrain"
 const PROVENANCE := "Heights, facades, signs and signal phases are approximate or derived, not surveyed"
 
-func build_help(layer: CanvasLayer) -> void:
-	help_panel = Control.new()
-	help_panel.visible = false
-	help_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(help_panel)
-	help_panel.add_child(card(Vector2(300,110),Vector2(680,440),0.94))
-	help_panel.add_child(label("CONTROLS · F1",Vector2(326,132),20))
-	var y := 178.0
-	for block in HELP_LINES:
-		help_panel.add_child(label(block[0],Vector2(326,y),13,Color("f1bc60")))
-		help_panel.add_child(label(block[1],Vector2(326,y+20),13,Color("cfdae0")))
-		y += 74
-	help_panel.add_child(label("M — map menu · L — language (English / Українська)",Vector2(326,470),13,Color("f1bc60")))
-	help_panel.add_child(label(PROVENANCE,Vector2(326,490),11,Color("859ca7")))
-	help_panel.add_child(label(ATTRIBUTION,Vector2(326,508),11,Color("859ca7")))
-
 func set_help(on: bool) -> void:
 	if help_panel:
-		help_panel.visible = on
+		help_panel.queue_free()
+		help_panel = null
+	if on:
+		if pause_menu: pause_menu.hide()
+		help_panel = Modal.new()
+		help_panel.title = "CONTROLS · F1"
+		help_panel.bounds = Rect2(0.20, 0.08, 0.60, 0.84)
+		help_panel.closed.connect(func(): set_help(false))
+		hud.add_child(help_panel)
+		for block in HELP_LINES:
+			help_panel.body.add_child(Ui.label(block[0], 20, Ui.ACCENT))
+			help_panel.body.add_child(Ui.label(block[1], 20, Ui.TEXT, true))
+			help_panel.body.add_child(HSeparator.new())
+		help_panel.body.add_child(Ui.label("M — map menu · L — language (English / Українська)", 20, Ui.ACCENT, true))
+		help_panel.body.add_child(Ui.label("Traffic demand is synthetic", 18, Ui.MUTED, true))
+		help_panel.body.add_child(Ui.label(PROVENANCE, 18, Ui.MUTED, true))
+		help_panel.body.add_child(Ui.label(ATTRIBUTION, 18, Ui.MUTED, true))
+	elif pause_menu:
+		pause_menu.show()
+	sync_modal_state()
 
 func capture() -> void:
 	await RenderingServer.frame_post_draw

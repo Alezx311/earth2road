@@ -27,8 +27,11 @@ var size := Vector3(1.8, 1.45, 4.5)
 var enabled := true:
 	set(value):
 		enabled = value
+		if controller:
+			controller.set_physics_process(value)
 		if body:
 			body.freeze = not value
+var input_blocked := false
 var cockpit := false
 var contacts := 0
 var chase: Camera3D
@@ -226,7 +229,7 @@ func viewing() -> bool:
 	return cam != null and (cam == chase or cam == inside)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if body == null or not viewing():
+	if input_blocked or body == null or not viewing():
 		if looking:
 			stop_looking()
 		return

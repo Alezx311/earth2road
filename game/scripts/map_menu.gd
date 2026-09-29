@@ -10,12 +10,17 @@ signal closed
 const LocationPicker = preload("res://scripts/location_picker.gd")
 const I18n = preload("res://scripts/i18n.gd")
 const NAME_RE := "\"name\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\""
-const CARD := Rect2(390, 70, 500, 580)
+const Ui = preload("res://scripts/ui_theme.gd")
+const Modal = preload("res://scripts/ui_modal.gd")
 
 var closable := true
 var current := ""
 var content: Control
 var picker: Control
+var search: LineEdit
+var list: VBoxContainer
+var map_rows: Array[Button] = []
+var query := ""
 
 ## Top-level "name" in the key-sorted, indented index.json that terra-drive export writes.
 const SORTED_NAME := "\n  \"name\": \""
@@ -66,86 +71,70 @@ static func map_name(path: String) -> String:
 	return name
 
 func _ready() -> void:
+	theme = Ui.make()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	var shade := ColorRect.new()
-	shade.color = Color(0.01, 0.02, 0.03, 0.72)
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(shade)
 	build()
 
-## The list is rebuilt on a language switch (its composed texts are not plain keys).
 func build() -> void:
 	if content:
+		remove_child(content)
 		content.queue_free()
-	content = Control.new()
-	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content = Modal.new()
+	content.title = "CHOOSE A MAP"
+	content.bounds = Rect2(0.24, 0.08, 0.52, 0.84)
+	content.closed.connect(func():
+		if closable: closed.emit())
 	add_child(content)
-	var maps := available()
-	var card := ColorRect.new()
-	card.color = Color(0.025, 0.05, 0.07, 0.96)
-	card.position = CARD.position
-	card.size = CARD.size
-	content.add_child(card)
-	var title := Label.new()
-	title.text = "CHOOSE A MAP"
-	title.position = CARD.position + Vector2(26, 20)
-	title.add_theme_font_size_override("font_size", 20)
-	content.add_child(title)
-	var language := Button.new()
-	language.text = "Language: English"
-	language.focus_mode = Control.FOCUS_NONE
-	language.position = CARD.position + Vector2(CARD.size.x - 176, 18)
-	language.size = Vector2(150, 28)
-	language.add_theme_font_size_override("font_size", 12)
-	language.pressed.connect(func():
-		I18n.toggle()
-		build())
-	content.add_child(language)
-	var hint := Label.new()
-	hint.text = tr("↑↓ + ENTER or click") + (tr("  ·  ESC — back") if closable else "")
-	hint.position = CARD.position + Vector2(26, 50)
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", Color("859ca7"))
-	content.add_child(hint)
-	var create := Button.new()
-	create.text = "+  New map from any place on Earth…"
-	create.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	create.position = CARD.position + Vector2(20, 80)
-	create.size = Vector2(460, 38)
-	create.add_theme_font_size_override("font_size", 15)
-	create.add_theme_color_override("font_color", Color("f1bc60"))
-	create.pressed.connect(open_picker)
-	content.add_child(create)
-	# The list scrolls: generated maps accumulate.
-	var scroll := ScrollContainer.new()
-	scroll.position = CARD.position + Vector2(20, 130)
-	scroll.size = Vector2(466, CARD.size.y - 150)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	content.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 8)
-	scroll.add_child(list)
-	var first: Button = null
-	for m in maps:
-		var b := Button.new()
-		# Map names are data (often Ukrainian); never run them through the translation.
+	content.close_button.visible = closable
+	var body: VBoxContainer = content.body
+	body.add_child(Ui.label("Choose your next drive", 20, Ui.MUTED))
+	var create := Ui.button("+  New map from any place on Earth…", open_picker, true)
+	body.add_child(create)
+	search = LineEdit.new()
+	search.placeholder_text = "Search installed maps…"
+	search.text = query
+	search.text_changed.connect(filter_maps)
+	search.text_submitted.connect(func(_value):
+		for row in map_rows:
+			if row.visible:
+				row.pressed.emit()
+				break)
+	body.add_child(search)
+	list = VBoxContainer.new()
+	body.add_child(list)
+	map_rows.clear()
+	for m in available():
+		var b := Ui.button(m.name + (tr("   ·   current") if m.id == current else ""), func(): chosen.emit(m.id))
 		b.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-		b.text = m.name + (tr("   ·   current") if m.id == current else "")
-		b.tooltip_text = m.id
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.custom_minimum_size = Vector2(452, 36)
-		b.add_theme_font_size_override("font_size", 15)
-		b.pressed.connect(func(): chosen.emit(m.id))
+		b.clip_text = true
+		b.tooltip_text = m.name + "  /  " + m.id
+		b.set_meta("search", (m.name + " " + m.id).to_lower())
+		if m.id == current:
+			b.add_theme_color_override("font_color", Ui.ACCENT)
 		list.add_child(b)
-		if first == null or m.id == current:
-			first = b
-	if first:
-		first.grab_focus.call_deferred()
-	else:
-		create.grab_focus.call_deferred()
+		map_rows.append(b)
+	var empty := Ui.label("No maps found. Try another search or create a map.", 20, Ui.MUTED, true)
+	empty.name = "Empty"
+	list.add_child(empty)
+	filter_maps(query)
+	content.footer.add_child(Ui.label("↑↓ + ENTER or click", 18, Ui.MUTED))
+	content.footer.add_child(Ui.expand())
+	content.footer.add_child(Ui.button("Language: English", func():
+		I18n.toggle()
+		build()))
+	search.grab_focus.call_deferred()
+
+func filter_maps(value: String) -> void:
+	query = value
+	var found := 0
+	var needle := value.strip_edges().to_lower()
+	for row in map_rows:
+		# Godot's `"" in text` is false, so an empty query must match explicitly.
+		row.visible = needle == "" or needle in str(row.get_meta("search"))
+		if row.visible: found += 1
+	list.get_node("Empty").visible = found == 0
 
 func open_picker() -> void:
 	content.visible = false
@@ -154,13 +143,19 @@ func open_picker() -> void:
 	picker.back.connect(func():
 		picker.queue_free()
 		picker = null
-		build())
+		content.show()
+		search.grab_focus.call_deferred())
 	add_child(picker)
 
-func _unhandled_key_input(event: InputEvent) -> void:
-	if picker:
-		return
-	if closable and event is InputEventKey and event.pressed and not event.echo \
-			and event.physical_keycode in [KEY_ESCAPE, KEY_M]:
-		get_viewport().set_input_as_handled()
-		closed.emit()
+func _input(event: InputEvent) -> void:
+	if picker: return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if closable and event.physical_keycode == KEY_M and not get_viewport().gui_get_focus_owner() is LineEdit:
+			get_viewport().set_input_as_handled()
+			closed.emit()
+		elif event.physical_keycode == KEY_DOWN and search.has_focus():
+			for row in map_rows:
+				if row.visible:
+					row.grab_focus()
+					get_viewport().set_input_as_handled()
+					break

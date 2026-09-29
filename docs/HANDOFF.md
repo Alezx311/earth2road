@@ -1,5 +1,52 @@
 # TerraDrive handoff
 
+## 2026-09-29 — simulator UI redesign
+
+Separate commit on top of the PR integration. Physics, geometry and world formats unchanged;
+`akadem_maps`/`akadem-maps`, map IDs, hotkeys, English/Українська and OSM attribution kept.
+
+- Style: graphite surfaces, teal accent, amber warnings, 8 px rhythm, radius 8, no blur
+  (`ui_theme.gd`). `ui_modal.gd`: input shield, Tab-contained focus, focus return; a
+  `compact` variant fits its content (Pause). `hud.gd`: visible Maps/Pause/Camera/Spectator/
+  Traffic/Help buttons, speed and gear at the bottom, minimap on the right.
+- Map menu: search, empty state. Fixed: Godot's `"" in text` is false, so the empty query
+  hid every installed map. Pause and structured help are separate modals; modals also
+  block raw Input polling (player controller, spectator camera).
+- Picker: scrollable side panel with a scrollbar gutter; empty search rows hidden; plain
+  translated status per generator stage (raw `phase · stage` moved to Technical details);
+  connection hint only for download failures, "move or enlarge the area" otherwise;
+  Retry keeps the fields; per-run log path printed (the shared `logs/generate.log` was stale).
+- Language switches from the Pause/Maps buttons now also refresh formatted texts
+  (density label, speed-limit items) via NOTIFICATION_TRANSLATION_CHANGED.
+- follow_focus scrolled the picker and traffic panel against an unsorted first-frame
+  layout; both return to the top one frame after focusing.
+- Generator fix (`tools/generate_map.py`): the build reuses
+  `out/generated/.akadem-inputs/<id>.osm` by id, so after deleting a generated map a new
+  map with the same name elsewhere silently got the old area's OSM. `free_id` now treats
+  such an id as taken. Found by the real picker harness; unit test added.
+
+Checks (Windows, RTX 2070 SUPER):
+- `validate_ui.gd --ui-shots --offline` (tiny): passed at 1280x720, 1920x1080 and
+  2560x1440 requested; the OS clamped the last window to 2560x1421. Screenshots of HUD,
+  traffic, pause, help, maps, empty search, generator, progress and error in both languages
+  under `logs/qa-20260929/ui/` (ignored) were reviewed; Ukrainian text fits everywhere.
+- New `validate_generator.gd` (needs network, installs and activates a map): real picker
+  runs. Error via unreachable proxy (25.5 s, connection hint, Retry, name kept, process
+  exited), Cancel during an Overpass download (0.5 s, "Generation cancelled", Back
+  restored), then a complete 0.6 km build of a new map ID (33 s). No python/curl/netconvert
+  left afterwards. The QA map was deleted and `active_map` restored to `khreshatyk`.
+  Earlier harness runs were invalid: cached inputs made the "error" run succeed, and an
+  over-large jitter picked an area without roads (netconvert / "No suitable start road").
+- Full `python -m unittest discover -s tests` outside the sandbox: 319 tests OK, 1 skip
+  (325.0 s; the Windows-skipped DuckDB shebang fixture). `tools/check_publication.py`: ok.
+- Not done: same-conditions FPS comparison. The first attempt passed `--` directly to
+  `.\start.ps1` inside PowerShell, which consumes a bare `--`, so `--seconds=30`/`--no-vsync`
+  reached Godot as engine options and the game never quit. That instance (port 8793) was
+  left open for the user to close; repeat with `.\start.ps1 --map akadem --density 100 -- --
+  --seconds=30 --no-vsync --resolution 1920x1080` (or `powershell -File`) and compare with
+  `logs/qa-20260929/baseline-akadem.json` (median 154.29 FPS); investigate a drop above 5%.
+- Keyboard focus, Tab containment, Escape return and click actions are checked with
+  synthetic Godot events only; Windows Computer Use was unavailable, so no native input.
 ## 2026-09-29 — PR integration and Windows generator ownership
 
 User requested merging PR #1 then #2 without further tests and continuing to the UI redesign.

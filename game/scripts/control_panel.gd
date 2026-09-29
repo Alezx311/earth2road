@@ -5,14 +5,15 @@ extends PanelContainer
 ## Pick a situation, then click a road. With nothing picked, a click asks the bridge what
 ## is there (street, lanes, speed limit, traffic light) and unlocks the signal buttons.
 ##
-## This is the one place in the HUD built from containers instead of absolute positions:
-## it is a real form with two dozen controls, and a container keeps the rows aligned as
-## the incident list grows. Everything else in main.gd stays hand-placed.
-##
-## Texts are English translation keys (scripts/i18n.gd): labels and buttons re-translate
-## themselves when the language changes; composed texts go through tr().
-
 signal command(msg: Dictionary)
+signal speed_selected(index: int)
+signal density_selected(value: float)
+signal closed
+const Ui = preload("res://scripts/ui_theme.gd")
+var density_slider: HSlider
+var density_label: Label
+var time_buttons: Array[Button] = []
+var active_rows := {}
 
 const TOOLS := [
 	["accident", "Accident"],
@@ -42,27 +43,46 @@ var duration_menu: OptionButton
 var speed_menu: OptionButton
 var active_box: VBoxContainer
 var active_count: Label
+var body_scroll: ScrollContainer
 
 func _init() -> void:
 	visible = false
-	position = Vector2(20, 88)
-	custom_minimum_size = Vector2(300, 0)
-	size = Vector2(300, 0)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.025, 0.05, 0.07, 0.92)
-	style.content_margin_left = 14
-	style.content_margin_right = 14
-	style.content_margin_top = 12
-	style.content_margin_bottom = 12
-	add_theme_stylebox_override("panel", style)
 
 func _ready() -> void:
-	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 4)
-	add_child(root)
-	root.add_child(head("TRAFFIC CONTROL · T", 15, Color.WHITE))
-
-	root.add_child(head("SITUATION", 11, Color("f1bc60")))
+	theme = Ui.make()
+	var layout := VBoxContainer.new()
+	add_child(layout)
+	var header := HBoxContainer.new()
+	layout.add_child(header)
+	header.add_child(Ui.label("Traffic control", 24))
+	header.add_child(Ui.expand())
+	header.add_child(Ui.button("×", func(): closed.emit()))
+	var root := Ui.scroll_box(layout)
+	body_scroll = root.get_parent().get_parent()
+	root.add_child(Ui.label("TIME AND TRAFFIC", 18, Ui.ACCENT))
+	var speeds := HBoxContainer.new()
+	speeds.add_theme_constant_override("separation", 8)
+	root.add_child(speeds)
+	for i in range(6):
+		var b := Ui.button("×%d" % [0, 1, 2, 4, 8, 16][i], func(): speed_selected.emit(i))
+		b.toggle_mode = true
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 18)
+		b.add_theme_stylebox_override("normal", Ui.style(Ui.SURFACE, 8, Ui.BORDER))
+		speeds.add_child(b)
+		time_buttons.append(b)
+	root.add_child(Ui.label("Time speed applies in spectator mode", 16, Ui.MUTED, true))
+	density_label = Ui.label("", 18, Ui.TEXT, true)
+	root.add_child(density_label)
+	density_slider = HSlider.new()
+	density_slider.custom_minimum_size.y = 32
+	density_slider.max_value = 100
+	density_slider.step = 0.5
+	density_slider.value_changed.connect(func(v): density_selected.emit(v))
+	root.add_child(density_slider)
+	root.add_child(Ui.label("Traffic demand is synthetic", 16, Ui.MUTED, true))
+	root.add_child(HSeparator.new())
+	root.add_child(head("SITUATION", 18, Ui.ACCENT))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	root.add_child(grid)
@@ -78,17 +98,18 @@ func _ready() -> void:
 	root.add_child(rows)
 	rows.add_child(head("Duration", 11, Color("a0b4bd")))
 	duration_menu = OptionButton.new()
-	duration_menu.focus_mode = Control.FOCUS_NONE
+	duration_menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for item in DURATIONS:
 		duration_menu.add_item(item[0])
 	duration_menu.select(1)
 	rows.add_child(duration_menu)
 	rows.add_child(head("Speed", 11, Color("a0b4bd")))
 	speed_menu = OptionButton.new()
-	speed_menu.focus_mode = Control.FOCUS_NONE
+	speed_menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for value in SPEEDS:
-		speed_menu.add_item(tr("%d km/h") % value)
+		speed_menu.add_item("")
 	speed_menu.select(0)
+	translate_speeds()
 	rows.add_child(speed_menu)
 
 	hint = head("", 11, Color("f1bc60"))
@@ -114,7 +135,8 @@ func _ready() -> void:
 	root.add_child(active_count)
 	# Fixed height: the panel must not grow into the speedometer as situations pile up.
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 72)
+	scroll.custom_minimum_size = Vector2(0, 120)
+	scroll.follow_focus = true
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scroll)
 	active_box = VBoxContainer.new()
@@ -125,18 +147,33 @@ func _ready() -> void:
 	clear.pressed.connect(func(): command.emit({"type": "incident", "action": "clear"}))
 	root.add_child(clear)
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and speed_menu:
+		translate_speeds()
+
+## OptionButton items are formatted once, so they are refreshed when the language changes.
+func translate_speeds() -> void:
+	speed_menu.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	for i in SPEEDS.size():
+		speed_menu.set_item_text(i, tr("%d km/h") % SPEEDS[i])
+	speed_menu.select(speed_menu.selected)
+
+## Focuses the current time speed; follow_focus may scroll against an unsorted layout
+## on the first frame, so the panel is then returned to its top.
+func focus_first() -> void:
+	time_buttons[1].grab_focus()
+	await get_tree().process_frame
+	body_scroll.scroll_vertical = 0
+
 func head(text: String, size_px: int, colour: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", size_px)
-	l.add_theme_color_override("font_color", colour)
-	return l
+	return Ui.label(text, maxi(16, size_px), colour, true)
 
 func small_button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_size_override("font_size", 11)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size.y = 48
+	b.add_theme_font_size_override("font_size", 18)
 	return b
 
 ## Arming a tool turns the next click on a road into that situation.
@@ -188,20 +225,31 @@ func show_error(text: String) -> void:
 
 ## The bridge owns the list of live situations; the panel only mirrors it.
 func show_active(items: Array) -> void:
-	for child in active_box.get_children():
-		child.queue_free()
 	active_count.text = tr("ACTIVE SITUATIONS · %d") % items.size()
+	var live := {}
 	for item in items:
-		var row := HBoxContainer.new()
+		var id: String = item.id
+		live[id] = true
+		if not active_rows.has(id):
+			var row := HBoxContainer.new()
+			var name := Ui.label("", 16, Ui.TEXT, true)
+			row.add_child(name)
+			var drop := Ui.button("×", func(): command.emit({"type": "incident", "action": "remove", "id": id}))
+			drop.tooltip_text = "Cancel"
+			row.add_child(drop)
+			active_box.add_child(row)
+			active_rows[id] = row
 		var text: String = tr(item.get("label", item.get("kind", "")))
 		if item.get("left") != null:
 			text += tr(" · %d s") % int(item.left)
 		if item.get("blocking", false):
 			text += tr(" · road blocked")
-		var name := head(text, 11, Color("e08a6a") if item.get("blocking", false) else Color("cfdae0"))
-		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(name)
-		var drop := small_button("✕")
-		drop.pressed.connect(func(): command.emit({"type": "incident", "action": "remove", "id": item.id}))
-		row.add_child(drop)
-		active_box.add_child(row)
+		active_rows[id].get_child(0).text = text
+	for id in active_rows.keys():
+		if not live.has(id):
+			active_rows[id].queue_free()
+			active_rows.erase(id)
+
+func show_speed(index: int) -> void:
+	for i in time_buttons.size():
+		time_buttons[i].set_pressed_no_signal(i == index)

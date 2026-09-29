@@ -51,6 +51,14 @@ class IdTest(unittest.TestCase):
             (root/'data/build/town_2').mkdir(parents=True)
             self.assertEqual(gm.free_id('town', root), 'town_3')
 
+    def test_free_id_skips_a_leftover_input_cache(self):
+        # A deleted map's cached OSM is looked up by id and would stand in for a new area.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root/'out/generated/.akadem-inputs').mkdir(parents=True)
+            (root/'out/generated/.akadem-inputs/town.osm').write_text('<osm/>', encoding='utf8')
+            self.assertEqual(gm.free_id('town', root), 'town_2')
+
     def test_ukraine_box(self):
         self.assertTrue(gm.in_ukraine_box(50.45, 30.52))
         self.assertFalse(gm.in_ukraine_box(48.85, 2.35))

@@ -81,9 +81,12 @@ def slug(name, lat, lon):
 
 
 def free_id(base, root=ROOT):
-    """base, or base_2, base_3 … — whichever is installed neither in game/data nor data/build."""
+    """base, or base_2, base_3 … — whichever is installed neither in game/data nor data/build
+    and has no cached OSM input: the build reuses out/generated/.akadem-inputs/<id>.osm by id,
+    so a deleted map's leftover input would silently replace a new area's data."""
     def taken(mid):
-        return (root/'game/data'/mid).exists() or (root/'data/build'/mid).exists()
+        return ((root/'game/data'/mid).exists() or (root/'data/build'/mid).exists()
+                or (root/'out/generated/.akadem-inputs'/f'{mid}.osm').exists())
     if not taken(base):
         return base
     n = 2

@@ -14,6 +14,7 @@ var tilt := deg_to_rad(-50.0)
 var distance := 120.0
 var target_distance := 120.0
 var active := false
+var input_blocked := false
 var dragging := false
 var panning := false
 
@@ -46,7 +47,7 @@ func stop() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not active:
+	if not active or input_blocked:
 		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
@@ -68,7 +69,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			focus += basis.x * (-event.relative.x * scale) + basis.z * (-event.relative.y * scale)
 
 func _process(delta: float) -> void:
-	if not active:
+	if not active or input_blocked:
 		return
 	var fast := 4.0 if Input.is_key_pressed(KEY_SHIFT) else 1.0
 	var move := Vector2.ZERO

@@ -32,11 +32,28 @@ const KM_PER_DEG_LON := 111.320
 const MIN_SIZE_KM := 0.3
 const MAX_SIZE_KM := 5.0
 const LARGE_KM := 2.5
-const VIEW := Rect2(20, 20, 820, 680)
-const SIDE_X := 860.0
-const SIDE_W := 400.0
-const EVENTS_FILE := "logs/generate_events.jsonl"
-const LOG_FILE := "logs/generate.log"
+const Ui = preload("res://scripts/ui_theme.gd")
+const SIDE_W := 536.0
+## Plain-language status per generator stage (tools/generate_map.py, akadem_maps/world.py);
+## the raw phase/stage stays in the technical details.
+const STAGE_TEXT := {
+	"start": "Starting the generator…",
+	"sources": "Downloading map data…",
+	"geometry": "Reading the map data…",
+	"terrain": "Shaping the terrain…",
+	"network": "Building the road network…",
+	"roads": "Building roads and scenery…",
+	"ground": "Building roads and scenery…",
+	"landcover": "Building roads and scenery…",
+	"buildings": "Placing buildings…",
+	"trees": "Placing trees…",
+	"signs": "Placing road signs…",
+	"tiles": "Packing map tiles…",
+	"surface_audit": "Checking road surfaces…",
+	"provenance": "Recording data sources…",
+	"export": "Preparing the map to drive…",
+	"install": "Installing the map…",
+}
 
 # Map view state: `center` is what the view shows, `selected` is what will be built.
 var center := Vector2(30.52, 50.45)          # (lon, lat)
@@ -68,6 +85,11 @@ var generate_button: Button
 var back_button: Button
 var search_request: HTTPRequest
 var last_search := -10.0
+var side: VBoxContainer
+var details: Label
+var details_button: Button
+var search_status: Label
+var had_error := false
 
 # Generator process
 var pid := -1
@@ -80,76 +102,91 @@ var cancel_path := ""
 var cancelling := false
 
 func _ready() -> void:
+	theme = Ui.make()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	DirAccess.make_dir_recursive_absolute(TILE_CACHE)
 	var bg := ColorRect.new()
-	bg.color = Color(0.025, 0.05, 0.07, 0.97)
+	bg.color = Ui.BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	var layout := VBoxContainer.new()
+	Ui.inset(self).add_child(layout)
+	var header := HBoxContainer.new()
+	layout.add_child(header)
+	header.add_child(Ui.label("NEW MAP", 32))
+	header.add_child(Ui.expand())
+	header.add_child(Ui.label("Choose a place. Build a drive.", 20, Ui.MUTED))
+	var columns := HBoxContainer.new()
+	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	columns.add_theme_constant_override("separation", 24)
+	layout.add_child(columns)
+	var map_column := VBoxContainer.new()
+	map_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	columns.add_child(map_column)
+	var map_tools := HBoxContainer.new()
+	map_column.add_child(map_tools)
+	map_tools.add_child(Ui.label("1 / LOCATION", 18, Ui.ACCENT))
+	map_tools.add_child(Ui.expand())
+	map_tools.add_child(Ui.button("−", func(): zoom_at(view.size / 2.0, -1)))
+	map_tools.add_child(Ui.button("+", func(): zoom_at(view.size / 2.0, 1)))
 	view = Control.new()
-	view.position = VIEW.position
-	view.size = VIEW.size
+	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	view.clip_contents = true
+	view.focus_mode = Control.FOCUS_ALL
 	view.mouse_filter = Control.MOUSE_FILTER_STOP
 	view.draw.connect(draw_map)
 	view.gui_input.connect(map_input)
-	add_child(view)
-	var attribution := Label.new()
-	attribution.text = "© OpenStreetMap contributors"
-	attribution.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-	attribution.position = VIEW.position + Vector2(VIEW.size.x - 190, VIEW.size.y - 20)
-	attribution.add_theme_font_size_override("font_size", 11)
-	attribution.add_theme_color_override("font_color", Color("1d2b33"))
-	var attribution_bg := ColorRect.new()
-	attribution_bg.color = Color(1, 1, 1, 0.75)
-	attribution_bg.position = attribution.position - Vector2(6, 1)
-	attribution_bg.size = Vector2(190, 18)
-	attribution_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(attribution_bg)
-	add_child(attribution)
-	var help := Label.new()
-	help.text = "Drag — pan · wheel — zoom · click — set the centre"
-	help.position = VIEW.position + Vector2(10, 8)
-	help.add_theme_font_size_override("font_size", 12)
-	help.add_theme_color_override("font_color", Color("1d2b33"))
-	help.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.85))
-	help.add_theme_constant_override("outline_size", 4)
-	add_child(help)
+	view.resized.connect(func(): view.queue_redraw())
+	map_column.add_child(view)
+	map_column.add_child(Ui.label("Drag — pan · wheel — zoom · click — set the centre", 18, Ui.MUTED, true))
+	map_column.add_child(Ui.label("© OpenStreetMap contributors · ODbL", 16, Ui.MUTED))
+	var card := PanelContainer.new()
+	card.custom_minimum_size.x = SIDE_W + 48
+	columns.add_child(card)
+	side = VBoxContainer.new()
+	card.add_child(side)
 	search_request = HTTPRequest.new()
 	search_request.timeout = 15.0
 	search_request.request_completed.connect(search_done)
 	add_child(search_request)
 	build_side()
-	# Start where the player is now: the current map's centre, if it records one.
 	var here := current_map_center()
 	if here != Vector2.INF:
 		center = here
 		selected = here
 	sync_fields()
+	search.grab_focus.call_deferred()
+	# follow_focus can scroll against a not yet sorted layout; start at the top instead.
+	await get_tree().process_frame
+	(search.get_parent().get_parent().get_parent() as ScrollContainer).scroll_vertical = 0
 
 func build_side() -> void:
-	var box := VBoxContainer.new()
-	box.position = Vector2(SIDE_X, 20)
-	box.size = Vector2(SIDE_W, 680)
-	box.add_theme_constant_override("separation", 6)
-	add_child(box)
-	box.add_child(head("NEW MAP", 20, Color.WHITE))
+	var box := Ui.scroll_box(side)
+	box.add_child(Ui.label("Find a place", 24))
 	search = LineEdit.new()
 	search.placeholder_text = "Search a place (Enter)"
 	search.text_submitted.connect(func(_t): run_search())
 	box.add_child(search)
+	var find_button := Ui.button("Search", run_search)
+	box.add_child(find_button)
+	search_status = Ui.label("", 18, Ui.WARNING, true)
+	search_status.visible = false
+	box.add_child(search_status)
 	results = VBoxContainer.new()
-	results.add_theme_constant_override("separation", 2)
+	results.visible = false
 	box.add_child(results)
-	box.add_child(head("Latitude, longitude (e.g. 50.45, 30.52)", 11, Color("a0b4bd")))
+	box.add_child(Ui.label("Latitude, longitude (e.g. 50.45, 30.52)", 18, Ui.MUTED, true))
 	coords = LineEdit.new()
 	coords.text_submitted.connect(func(_t): apply_coords())
 	coords.focus_exited.connect(apply_coords)
 	box.add_child(coords)
-	size_label = head("", 12, Color("cfdae0"))
+	box.add_child(HSeparator.new())
+	box.add_child(Ui.label("2 / AREA & DETAILS", 18, Ui.ACCENT))
+	size_label = Ui.label("", 20, Ui.TEXT, true)
 	box.add_child(size_label)
 	size_slider = HSlider.new()
+	size_slider.custom_minimum_size.y = 32
 	size_slider.min_value = MIN_SIZE_KM
 	size_slider.max_value = MAX_SIZE_KM
 	size_slider.step = 0.1
@@ -159,55 +196,54 @@ func build_side() -> void:
 		update_size()
 		view.queue_redraw())
 	box.add_child(size_slider)
-	size_warning = head("", 11, Color("859ca7"))
-	size_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	size_warning = Ui.label("", 18, Ui.MUTED, true)
 	box.add_child(size_warning)
-	box.add_child(head("Map name", 11, Color("a0b4bd")))
+	box.add_child(Ui.label("Map name", 18, Ui.MUTED))
 	name_edit = LineEdit.new()
 	box.add_child(name_edit)
 	signs_box = CheckBox.new()
 	signs_box.text = "Ukrainian road signs (Ukraine only)"
-	signs_box.focus_mode = Control.FOCUS_NONE
-	signs_box.add_theme_font_size_override("font_size", 12)
+	signs_box.add_theme_font_size_override("font_size", 18)
 	box.add_child(signs_box)
-	var note := head("Downloads OpenStreetMap data and terrain. Areas outside Ukraine build without road signs.", 11, Color("859ca7"))
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.custom_minimum_size = Vector2(SIDE_W, 0)
-	box.add_child(note)
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(spacer)
-	status = head("", 12, Color("f1bc60"))
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.custom_minimum_size = Vector2(SIDE_W, 0)
-	box.add_child(status)
+	box.add_child(Ui.label("Downloads OpenStreetMap data and terrain. Areas outside Ukraine build without road signs.", 18, Ui.MUTED, true))
+	details_button = Ui.button("Technical details", func(): details.visible = not details.visible)
+	details_button.toggle_mode = true
+	box.add_child(details_button)
+	details = Ui.label("", 16, Ui.MUTED, true)
+	details.visible = false
+	box.add_child(details)
+	side.add_child(HSeparator.new())
+	side.add_child(Ui.label("3 / BUILD", 18, Ui.ACCENT))
+	status = Ui.label("Select an area, then Generate", 20, Ui.TEXT, true)
+	side.add_child(status)
 	progress = ProgressBar.new()
+	progress.custom_minimum_size.y = 24
 	progress.max_value = 1.0
 	progress.step = 0.001
 	progress.visible = false
-	box.add_child(progress)
+	side.add_child(progress)
 	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 10)
-	box.add_child(buttons)
-	back_button = Button.new()
-	back_button.text = "Back"
-	back_button.custom_minimum_size = Vector2(120, 38)
-	back_button.pressed.connect(back_or_cancel)
+	side.add_child(buttons)
+	back_button = Ui.button("Back", back_or_cancel)
+	back_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_child(back_button)
-	generate_button = Button.new()
-	generate_button.text = "Generate"
-	generate_button.custom_minimum_size = Vector2(200, 38)
-	generate_button.add_theme_font_size_override("font_size", 16)
-	generate_button.pressed.connect(start_generation)
+	generate_button = Ui.button("Generate", start_generation, true)
+	generate_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_child(generate_button)
 	update_size()
 
-func head(text: String, size_px: int, colour: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", size_px)
-	l.add_theme_color_override("font_color", colour)
-	return l
+func _input(event: InputEvent) -> void:
+	Ui.trap_focus(self, event)
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		if not cancelling and not back_button.disabled: back_or_cancel()
+
+func set_search_status(text: String) -> void:
+	search_status.text = text
+	search_status.visible = text != ""
+
+func technical(text: String) -> void:
+	details.text = (details.text + "\n" + text).right(3000)
 
 ## index.json records bbox as [west, south, east, north]; its centre is a good start.
 func current_map_center() -> Vector2:
@@ -275,10 +311,10 @@ func draw_map() -> void:
 	var a := lonlat_to_screen(Vector2(b[0], b[3]))
 	var z := lonlat_to_screen(Vector2(b[2], b[1]))
 	var rect := Rect2(a, z - a)
-	view.draw_rect(rect, Color(0.95, 0.55, 0.1, 0.18))
-	view.draw_rect(rect, Color(0.95, 0.45, 0.05, 0.95), false, 2.0)
+	view.draw_rect(rect, Color(0.1, 0.65, 0.55, 0.18))
+	view.draw_rect(rect, Color("208d7d"), false, 2.0)
 	var p := lonlat_to_screen(selected)
-	view.draw_circle(p, 5.0, Color(0.95, 0.45, 0.05))
+	view.draw_circle(p, 5.0, Color("208d7d"))
 	view.draw_circle(p, 2.0, Color.WHITE)
 
 ## A tile from the disk cache, loaded while drawing (a redraw requested inside the draw
@@ -330,7 +366,7 @@ func tile_done(key: String, http: HTTPRequest, result: int, code: int, body: Pac
 	else:
 		failed[key] = true
 		if failed.size() == 1:
-			status.text = tr("Map tiles unavailable (offline?) — coordinates still work")
+			set_search_status(tr("Map tiles unavailable (offline?) — coordinates still work"))
 	view.queue_redraw()
 	pump()
 
@@ -343,6 +379,21 @@ func remember(key: String, tex: Texture2D) -> void:
 # --- Input ------------------------------------------------------------------------
 
 func map_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed:
+		var movement := Vector2.ZERO
+		match event.physical_keycode:
+			KEY_LEFT: movement.x = -1
+			KEY_RIGHT: movement.x = 1
+			KEY_UP: movement.y = -1
+			KEY_DOWN: movement.y = 1
+			KEY_EQUAL: zoom_at(view.size / 2.0, 1)
+			KEY_MINUS: zoom_at(view.size / 2.0, -1)
+			KEY_ENTER:
+				if pid < 0: select(center, false)
+		if movement != Vector2.ZERO:
+			center = from_tile(to_tile(center, zoom) + movement * 0.25, zoom)
+		view.queue_redraw()
+		view.accept_event()
 	if event is InputEventMouseButton:
 		if event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and event.pressed:
 			zoom_at(event.position, 1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1)
@@ -384,15 +435,17 @@ func sync_fields() -> void:
 	update_size()
 
 ## "50.45, 30.52", "50.45 30.52" or "50.45;30.52" (latitude first, as web maps copy it).
-func apply_coords() -> void:
+func apply_coords() -> bool:
+	if pid >= 0: return false
 	var parts := coords.text.replace(";", ",").replace(",", " ").split(" ", false)
 	if parts.size() == 2 and parts[0].is_valid_float() and parts[1].is_valid_float():
 		var lat := parts[0].to_float()
 		var lon := parts[1].to_float()
 		if absf(lat) < 85.0 and absf(lon) <= 180.0:
 			select(Vector2(lon, lat), true)
-			return
+			return true
 	status.text = tr("Invalid coordinates")
+	return false
 
 func update_size() -> void:
 	if size_label == null:
@@ -403,11 +456,18 @@ func update_size() -> void:
 	# Edges near the antimeridian or the poles cannot be built.
 	var b := area_bbox()
 	if generate_button:
+		generate_button.text = "Retry" if had_error else "Generate"
+		search.editable = pid < 0
+		coords.editable = pid < 0
+		name_edit.editable = pid < 0
+		size_slider.editable = pid < 0
+		signs_box.disabled = pid >= 0
 		generate_button.disabled = pid >= 0 or b[0] < -180.0 or b[2] > 180.0 or b[1] <= -85.0 or b[3] >= 85.0
 
 # --- Search -----------------------------------------------------------------------
 
 func run_search() -> void:
+	if pid >= 0: return
 	var q := search.text.strip_edges()
 	if q == "":
 		return
@@ -418,19 +478,21 @@ func run_search() -> void:
 	search_request.cancel_request()
 	for child in results.get_children():
 		child.queue_free()
+	results.visible = false
 	status.text = tr("Searching…")
 	var lang := "Accept-Language: " + ("uk,en" if TranslationServer.get_locale().begins_with("uk") else "en")
 	search_request.request(SEARCH_URL % q.uri_encode(), [USER_AGENT, lang])
 
 func search_done(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-		status.text = tr("Search failed (HTTP %d)") % code
+		set_search_status(tr("Search failed (HTTP %d)") % code)
 		return
 	var found = JSON.parse_string(body.get_string_from_utf8())
 	if not found is Array or found.is_empty():
-		status.text = tr("Nothing found")
+		set_search_status(tr("Nothing found"))
 		return
-	status.text = ""
+	set_search_status("")
+	results.visible = true
 	for item in found:
 		var lat := str(item.get("lat", "")).to_float()
 		var lon := str(item.get("lon", "")).to_float()
@@ -441,9 +503,10 @@ func search_done(result: int, code: int, _headers: PackedStringArray, body: Pack
 		b.tooltip_text = title
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.clip_text = true
-		b.custom_minimum_size = Vector2(SIDE_W, 26)
-		b.add_theme_font_size_override("font_size", 11)
+		b.custom_minimum_size = Vector2(0, 48)
+		b.add_theme_font_size_override("font_size", 18)
 		b.pressed.connect(func():
+			if pid >= 0: return
 			zoom = 14
 			select(Vector2(lon, lat), true)
 			if name_edit.text.strip_edges() == "":
@@ -458,7 +521,7 @@ static func project_root() -> String:
 func start_generation() -> void:
 	if pid >= 0:
 		return
-	apply_coords()
+	if not apply_coords(): return
 	var root := project_root()
 	var python := root + ("/.venv/Scripts/python.exe" if OS.get_name() == "Windows" else "/.venv/bin/python")
 	if not FileAccess.file_exists(python):
@@ -468,6 +531,8 @@ func start_generation() -> void:
 	events_path = root + "/logs/generate_%d_%d.jsonl" % [OS.get_process_id(), Time.get_ticks_msec()]
 	cancel_path = events_path + ".cancel"
 	cancelling = false
+	had_error = false
+	details.text = events_path + ".log"
 	if FileAccess.file_exists(events_path):
 		DirAccess.remove_absolute(events_path)
 	var args := PackedStringArray([root + "/tools/generate_map.py",
@@ -486,7 +551,7 @@ func start_generation() -> void:
 	lines_seen = 0
 	finished = false
 	last_stage = ""
-	print("Map generator started (pid %d); full log: %s" % [pid, root + "/" + LOG_FILE])
+	print("Map generator started (pid %d); full log: %s" % [pid, events_path + ".log"])
 	status.text = tr("Starting the generator…")
 	progress.value = 0.0
 	progress.visible = true
@@ -529,8 +594,9 @@ func _process(delta: float) -> void:
 			if cancelling:
 				fail(tr("Generation cancelled"))
 				return
-			printerr("Map generator stopped without a result (log: %s)" % LOG_FILE)
-			fail(tr("Generator stopped without a result (see logs/generate.log)"))
+			printerr("Map generator stopped without a result (log: %s.log)" % events_path)
+			had_error = true
+			fail(tr("Could not build the map. Check your connection and retry."))
 
 func read_events() -> void:
 	if not FileAccess.file_exists(events_path):
@@ -544,20 +610,24 @@ func read_events() -> void:
 			continue
 		match str(record.get("event", "")):
 			"stage":
-				progress.value = float(record.get("progress", progress.value))
-				status.text = "%s · %s" % [tr(str(record.get("phase", ""))), tr(str(record.get("stage", "")))]
+				progress.value = maxf(progress.value, float(record.get("progress", progress.value)))
+				back_button.disabled = cancelling or record.get("phase", "") == "install"
+				status.text = stage_text(str(record.get("phase", "")), str(record.get("stage", "")))
 				var stage := "%s · %s" % [record.get("phase", ""), record.get("stage", "")]
 				if stage != last_stage:
 					last_stage = stage
+					technical("%s (%d%%)" % [stage, int(progress.value * 100)])
 					print("Map generator: %s (%d%%)" % [stage, int(progress.value * 100)])
 			"download":
 				var url := str(record.get("url", ""))
+				technical(url)
 				status.text = tr("Downloading OpenStreetMap data from %s…") % url.get_slice("/", 2)
 				print("Map generator: downloading from %s" % url)
 				if record.has("query_url"):
 					print("  to check by hand, open: %s" % record["query_url"])
 			"warning":
-				status.text = str(record.get("message", ""))
+				technical(str(record.get("message", "")))
+				status.text = tr("Server busy. Trying another source…")
 				print("Map generator: %s" % record.get("message", ""))
 			"result":
 				finished = true
@@ -567,9 +637,25 @@ func read_events() -> void:
 				generated.emit.call_deferred(str(record.get("id", "")))
 			"error":
 				var message := str(record.get("message", record.get("code", "")))
-				printerr("Map generator failed: %s (log: %s)" % [message, LOG_FILE])
-				fail(tr("Failed: %s") % message)
+				printerr("Map generator failed: %s (log: %s.log)" % [message, events_path])
+				technical(message)
+				had_error = record.get("code", "") != "cancelled"
+				fail(error_text(message) if had_error else tr("Generation cancelled"))
 	lines_seen = lines.size()
+
+## Network failures suggest the connection; anything else (e.g. no drivable roads in the
+## area) suggests another area. The raw message stays in the technical details.
+func error_text(message: String) -> String:
+	var lower := message.to_lower()
+	if "download" in lower or "urlopen" in lower or "http" in lower or "timed out" in lower:
+		return tr("Could not build the map. Check your connection and retry.")
+	return tr("Could not build this area. Move it or make it larger, then retry.")
+
+static func stage_text(phase: String, stage: String) -> String:
+	if STAGE_TEXT.has(stage):
+		return TranslationServer.translate(STAGE_TEXT[stage])
+	return TranslationServer.translate({"build": "Building roads and scenery…",
+		"export": "Preparing the map to drive…", "install": "Installing the map…"}.get(phase, "Working…"))
 
 func fail(message: String) -> void:
 	finished = true
