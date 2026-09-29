@@ -86,6 +86,8 @@ class PipelineTest(unittest.TestCase):
         cfg = calls[0][1]
         self.assertEqual(cfg['id'], 'lviv_2')
         self.assertEqual(cfg['bbox'], gm.bbox_around(49.84, 24.03, 1.0))
+        self.assertEqual(cfg['overpass_maxsize'], 256 * 1024 * 1024)
+        self.assertEqual([cfg['overpass']] + cfg['overpass_mirrors'], gm.OVERPASS)
         self.assertEqual(calls[0][2], root/'out/generated/lviv_2')
         self.assertEqual(calls[2], ('install', False, True))
         self.assertEqual([r['event'] for r in records].count('result'), 0)   # main() emits the one result
@@ -94,6 +96,19 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(progress, sorted(progress))
         self.assertIn({'phase': 'build', 'stage': 'download', 'progress': 0.4},
                       [{k: r[k] for k in ('phase', 'stage', 'progress')} for r in records if r['event'] == 'stage'])
+
+
+class WatchParentTest(unittest.TestCase):
+    def test_cancels_once_the_parent_is_gone(self):
+        parents = iter([100, 100, 1])      # reparented to init: the game exited
+        stopped = []
+        stderr, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            gm.watch_parent(100, poll=0.001, getppid=lambda: next(parents, 1),
+                            stop=lambda: stopped.append(True)).join(timeout=5)
+        finally:
+            sys.stderr = stderr
+        self.assertEqual(stopped, [True])
 
 
 if __name__ == '__main__':

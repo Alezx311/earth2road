@@ -8,6 +8,7 @@ import json
 import math
 from pathlib import Path
 import subprocess
+import urllib.parse
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -60,14 +61,33 @@ def download(url, path, form=None, max_time=180):
                         shutil.copyfileobj(response,out)
                 Path(str(path)+'.part').replace(path)
                 return
-            except Exception:
+            except Exception as exc:
+                # HTTPError owns a response stream even when urlopen did not enter
+                # the context manager. Close it before retrying another mirror.
+                if hasattr(exc, 'close'):
+                    exc.close()
                 if attempt == 2: raise
                 time.sleep(1)
-    args = ['curl', '-fL', '--retry', '2', '--max-time', str(max_time), '-A', user_agent(), url, '-o', str(path)+'.part']
+    # -sS: no progress meter (it went straight to the game's terminal), errors only; they are
+    # captured and become the exception message.
+    args = ['curl', '-sSfL', '--retry', '2', '--max-time', str(max_time), '-A', user_agent(), url, '-o', str(path)+'.part']
     if form:
         args.extend(['--data-urlencode', 'data='+form])
-    subprocess.run(args, check=True)
+    done = subprocess.run(args, capture_output=True, text=True)
+    if done.returncode:
+        raise RuntimeError(curl_error(done.returncode, done.stderr, max_time))
     Path(str(path)+'.part').replace(path)
+
+def curl_error(returncode, stderr, max_time):
+    """A short reason for a failed curl run: 'HTTP 504', 'timed out after 240 s', …"""
+    import re
+    status = re.search(r'returned error: (\d{3})', stderr or '')
+    if status:
+        return f'HTTP {status.group(1)}'
+    if returncode == 28:
+        return f'timed out after {max_time} s'
+    lines = [l for l in (stderr or '').splitlines() if l.startswith('curl:')]
+    return lines[-1] if lines else f'curl exit {returncode}'
 
 def fetch(cfg, context):
     BUILD, RAW = context.build, context.raw
@@ -101,19 +121,31 @@ def fetch(cfg, context):
     overpass_used = cfg.get('overpass')
     if not dest.exists():
         timeout = int(cfg.get('overpass_timeout', 120))
-        q = f'[out:xml][timeout:{timeout}][maxsize:1073741824];(way({s},{w},{n},{e});relation["type"="restriction"]({s},{w},{n},{e});relation["type"="multipolygon"]({s},{w},{n},{e}););(._;>;);out body;'
+        # maxsize is the RAM the server reserves for the query; a busy server turns large
+        # reservations away (504/429) while it still admits small ones. Small areas can ask
+        # for less (tools/generate_map.py: 256 MiB covers a dense 5 km city square).
+        maxsize = int(cfg.get('overpass_maxsize', 1073741824))
+        q = f'[out:xml][timeout:{timeout}][maxsize:{maxsize}];(way({s},{w},{n},{e});relation["type"="restriction"]({s},{w},{n},{e});relation["type"="multipolygon"]({s},{w},{n},{e}););(._;>;);out body;'
         # Public Overpass servers are often overloaded (504/429): optional mirrors are tried in
         # order. The OSM data is the same; the manifest records which server answered.
         urls = [cfg['overpass']] + [u for u in cfg.get('overpass_mirrors', []) if u != cfg['overpass']]
+        failures = []
         for i, url in enumerate(urls):
+            # Overpass answers the same query as GET ?data=…: that link can be opened in a
+            # browser to check a failing server by hand.
+            context.notify('download', source='overpass', url=url,
+                           query_url=url+'?'+urllib.parse.urlencode({'data': q}))
             try:
                 context.download(url, dest, q, max_time=timeout+120)
                 overpass_used = url
                 break
             except RuntimeError as exc:
+                failures.append(f'{urllib.parse.urlsplit(url).hostname}: {exc.__cause__ or exc}')
                 if i == len(urls) - 1:
-                    raise
-                print(f'{exc}; trying {urls[i+1]}', flush=True)
+                    raise RuntimeError(f'Could not download OpenStreetMap data from Overpass ({"; ".join(failures)}). '
+                                       'The public Overpass servers are often overloaded (HTTP 504/429); '
+                                       'try again in a few minutes.') from exc
+                context.notify('warning', message=f'{failures[-1]}; trying {urllib.parse.urlsplit(urls[i+1]).hostname}')
     context.record_input(dest)
     root = ET.parse(dest).getroot()
     if root.tag != 'osm':
