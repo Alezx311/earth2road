@@ -1,5 +1,19 @@
 # TerraDrive handoff
 
+## 2026-09-29 — double-click Windows launcher
+
+- `TerraDrive.cmd` at the root: first run calls `setup.ps1`, later runs `start.ps1`
+  (both with `-ExecutionPolicy Bypass`, so a downloaded ZIP works). Missing Python 3.11+ →
+  offers `winget install Python.Python.3.14 --scope user`, otherwise points to python.org.
+  Arguments go to start.ps1; `-File` keeps `--`, so `TerraDrive.cmd --map tiny -- -- --seconds=5`.
+- A real `.exe` in Git was not added: binaries are excluded by DECISIONS and `.gitignore`.
+- Fixed `setup.ps1`: the committed file held a BEL byte instead of `\a` in
+  `game\data\active_map`; Test-Path threw, so setup failed at its last step on every run.
+- Checks: fresh clone in a temp folder, first `TerraDrive.cmd` run from zero 176 s
+  (setup, Godot import, tiny map, game with bridge on port 8796, exit 0); second run 13 s
+  without setup; setup rerun keeps the installed map; the old setup.ps1 exits 1 on the same
+  clone. Publication audit reports only the user's uncommitted deletion of `start_rivne.ps1`.
+
 ## 2026-09-29 — opaque vehicles (uncommitted)
 
 Symptom: cars were partly see-through. Cause: the procedural kit (`game/visuals/vehicles.gd`)
