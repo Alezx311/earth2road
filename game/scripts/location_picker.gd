@@ -75,6 +75,9 @@ var events_path := ""
 var lines_seen := 0
 var poll_clock := 0.0
 var finished := false
+var last_stage := ""
+var cancel_path := ""
+var cancelling := false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -453,6 +456,8 @@ static func project_root() -> String:
 	return ProjectSettings.globalize_path("res://").trim_suffix("/").get_base_dir()
 
 func start_generation() -> void:
+	if pid >= 0:
+		return
 	apply_coords()
 	var root := project_root()
 	var python := root + ("/.venv/Scripts/python.exe" if OS.get_name() == "Windows" else "/.venv/bin/python")
@@ -460,13 +465,16 @@ func start_generation() -> void:
 		status.text = tr("Could not start the generator: %s") % python
 		return
 	DirAccess.make_dir_recursive_absolute(root + "/logs")
-	events_path = root + "/" + EVENTS_FILE
+	events_path = root + "/logs/generate_%d_%d.jsonl" % [OS.get_process_id(), Time.get_ticks_msec()]
+	cancel_path = events_path + ".cancel"
+	cancelling = false
 	if FileAccess.file_exists(events_path):
 		DirAccess.remove_absolute(events_path)
 	var args := PackedStringArray([root + "/tools/generate_map.py",
 		"--lat", "%.6f" % selected.y, "--lon", "%.6f" % selected.x, "--size-km", "%.2f" % size_km,
 		"--region-profile", "ukraine" if signs_box.button_pressed else "experimental",
-		"--events", events_path, "--log", root + "/" + LOG_FILE])
+		"--events", events_path, "--log", events_path + ".log", "--exit-with-parent",
+		"--parent-pid", str(OS.get_process_id()), "--cancel-file", cancel_path])
 	var map_name := name_edit.text.strip_edges()
 	if map_name != "":
 		args.append_array(["--name", map_name])
@@ -477,20 +485,33 @@ func start_generation() -> void:
 		return
 	lines_seen = 0
 	finished = false
+	last_stage = ""
+	print("Map generator started (pid %d); full log: %s" % [pid, root + "/" + LOG_FILE])
 	status.text = tr("Starting the generator…")
 	progress.value = 0.0
 	progress.visible = true
 	back_button.text = "Cancel"
 	update_size()
 
+## Stops the generator together with its children (curl, netconvert…). The generator runs
+## in its own process group (Godot starts it with setsid), so SIGTERM to the group reaches
+## all of them; OS.kill alone would SIGKILL only Python and orphan a running download.
+func stop_generator() -> void:
+	if OS.get_name() == "Windows":
+		var request := FileAccess.open(cancel_path, FileAccess.WRITE)
+		if request:
+			request.store_string("cancel\n")
+		else:
+			OS.execute("taskkill", ["/PID", str(pid), "/T", "/F"])
+	elif OS.execute("kill", ["-TERM", "-%d" % pid]) != 0:
+		OS.kill(pid)
+
 func back_or_cancel() -> void:
 	if pid >= 0:
-		OS.kill(pid)
-		pid = -1
-		progress.visible = false
-		back_button.text = "Back"
-		status.text = tr("Cancelled; nothing was installed")
-		update_size()
+		stop_generator()
+		cancelling = true
+		back_button.disabled = true
+		status.text = tr("Cancelling…")
 	else:
 		back.emit()
 
@@ -505,6 +526,10 @@ func _process(delta: float) -> void:
 	if not finished and not OS.is_process_running(pid):
 		read_events()
 		if not finished:
+			if cancelling:
+				fail(tr("Generation cancelled"))
+				return
+			printerr("Map generator stopped without a result (log: %s)" % LOG_FILE)
 			fail(tr("Generator stopped without a result (see logs/generate.log)"))
 
 func read_events() -> void:
@@ -521,6 +546,19 @@ func read_events() -> void:
 			"stage":
 				progress.value = float(record.get("progress", progress.value))
 				status.text = "%s · %s" % [tr(str(record.get("phase", ""))), tr(str(record.get("stage", "")))]
+				var stage := "%s · %s" % [record.get("phase", ""), record.get("stage", "")]
+				if stage != last_stage:
+					last_stage = stage
+					print("Map generator: %s (%d%%)" % [stage, int(progress.value * 100)])
+			"download":
+				var url := str(record.get("url", ""))
+				status.text = tr("Downloading OpenStreetMap data from %s…") % url.get_slice("/", 2)
+				print("Map generator: downloading from %s" % url)
+				if record.has("query_url"):
+					print("  to check by hand, open: %s" % record["query_url"])
+			"warning":
+				status.text = str(record.get("message", ""))
+				print("Map generator: %s" % record.get("message", ""))
 			"result":
 				finished = true
 				pid = -1
@@ -528,7 +566,9 @@ func read_events() -> void:
 				status.text = tr("Done: %s — loading…") % str(record.get("id", ""))
 				generated.emit.call_deferred(str(record.get("id", "")))
 			"error":
-				fail(tr("Failed: %s") % str(record.get("message", record.get("code", ""))))
+				var message := str(record.get("message", record.get("code", "")))
+				printerr("Map generator failed: %s (log: %s)" % [message, LOG_FILE])
+				fail(tr("Failed: %s") % message)
 	lines_seen = lines.size()
 
 func fail(message: String) -> void:
@@ -536,9 +576,10 @@ func fail(message: String) -> void:
 	pid = -1
 	progress.visible = false
 	back_button.text = "Back"
+	back_button.disabled = false
 	status.text = message
 	update_size()
 
 func _exit_tree() -> void:
 	if pid >= 0:
-		OS.kill(pid)
+		stop_generator()

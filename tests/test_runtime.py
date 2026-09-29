@@ -11,6 +11,16 @@ import runtime
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_godot_platform_matrix(self):
+        for name, platform, fragment in [('nt', 'win32', 'win64.exe'),
+                                         ('posix', 'linux', 'linux.x86_64'),
+                                         ('posix', 'darwin', 'macos.app/Contents/MacOS/Godot')]:
+            with self.subTest(platform=platform), mock.patch.object(runtime.os, 'name', name), \
+                    mock.patch.object(runtime.sys, 'platform', platform):
+                self.assertIn(fragment, runtime.godot_names()[0])
+                self.assertIn('macos.universal.zip' if platform == 'darwin' else fragment,
+                              runtime.godot_url())
+
     def test_venv_python_falls_back_when_venv_is_missing_or_a_stub(self):
         self.assertTrue(runtime.venv_python().exists() or runtime.venv_python() == Path(sys.executable))
         stub = runtime.ROOT / '.venv'

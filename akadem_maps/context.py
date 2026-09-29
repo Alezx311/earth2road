@@ -104,6 +104,11 @@ class BuildContext:
         if self.emit:
             self.emit('stage', stage=stage, progress=round(fraction, 3))
 
+    def notify(self, event, **data):
+        """Informational event ('download', 'warning') for GUI clients; a no-op without a sink."""
+        if self.emit:
+            self.emit(event, **data)
+
     @property
     def build(self):
         return self.world

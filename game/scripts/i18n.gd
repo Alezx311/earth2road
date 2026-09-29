@@ -8,6 +8,8 @@ const SETTINGS := "user://settings.cfg"
 const LOCALES := ["en", "uk"]
 
 const UK := {
+	"Cancelling…": "Скасування…",
+	"Generation cancelled": "Генерацію скасовано",
 	# HUD status
 	"LOADING": "ЗАВАНТАЖЕННЯ",
 	"PAUSED · P — resume": "ПАУЗА · P — продовжити",
@@ -101,6 +103,7 @@ const UK := {
 	"Search failed (HTTP %d)": "Пошук не вдався (HTTP %d)",
 	"Invalid coordinates": "Некоректні координати",
 	"Starting the generator…": "Запуск генератора…",
+	"Downloading OpenStreetMap data from %s…": "Завантаження даних OpenStreetMap з %s…",
 	"Could not start the generator: %s": "Не вдалося запустити генератор: %s",
 	"Generator stopped without a result (see logs/generate.log)": "Генератор зупинився без результату (див. logs/generate.log)",
 	"Failed: %s": "Помилка: %s",

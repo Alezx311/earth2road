@@ -1,5 +1,38 @@
 # TerraDrive handoff
 
+## 2026-09-29 — PR integration and Windows generator ownership
+
+User requested merging PR #1 then #2 without further tests and continuing to the UI redesign.
+Both original commits and their handoff entries below are preserved. GitHub returned no
+check runs on either original PR head; both had an approval. macOS results below belong
+to the PR author, not this Windows session. Native Bash 3.2 was not available here.
+
+- Removed `maps.mail.ru` from the default generator mirrors.
+- Windows generators own a kill-on-close Job Object, including netconvert/duarouter
+  descendants. A retained parent handle detects game exit; a per-run cancel file requests
+  cleanup, with a five-second forced job termination fallback if Python is blocked.
+- Picker cancellation waits for process exit; concurrent runs have distinct event/log files.
+- Closed urllib HTTPError response streams before retry. PowerShell surface/drive wrappers
+  prefer the console engine and explicitly wait for its exit.
+- Already completed: 16 runtime/generator/lifecycle tests, two Windows HTTP/timeout tests,
+  and a launcher test covering simulated Linux/macOS selection, paths containing spaces
+  and no bridge arguments. These are not native macOS/Linux execution results.
+- Initial full discovery: 315 tests, one skip, one failure and one error (408.429 s).
+  The Godot asset subprocess timed out and the vehicle subprocess crashed in the sandbox.
+  Repeating `tests.test_asset_dependencies tests.test_vehicle_availability -v` outside the
+  sandbox passed all 13 tests. Full discovery was not repeated before merging, as requested.
+- `pip check`, publication audit and elevated Godot `--headless --path game --import` passed.
+  First import failed to create editor directories in the sandbox. First launcher fixture
+  inherited AKADEM_MAP; fixed by isolating its environment. Sandbox Start-Process also failed
+  with duplicate Path/PATH; surface/drive checks were restarted outside the sandbox.
+- `start.ps1` on isolated port 8793: tiny (25 s, 1280x720), akadem (30 s, 1920x1080),
+  both exit 0 with 100 cars. Baseline screenshots/metrics: `logs/qa-20260929/` (ignored).
+  Median FPS: tiny 330, akadem 154.29; same-map comparison is still required after redesign.
+- Traffic and priority validation ran; UI interaction, generation through the redesigned
+  picker, full post-change suite and final runtime report remain for the next work unit.
+- Windows Computer Use initialization failed on an unavailable dependency import root;
+  no native UI input was sent during this integration work.
+
 ## 2026-09-29 — macOS: setup.sh downloads the macOS Godot build
 
 Symptom: `./setup.sh` on macOS downloaded `Godot_v4.6-stable_linux.x86_64` and the import failed with "cannot execute binary file". Everything else in `setup.sh` already worked on macOS.
@@ -15,6 +48,44 @@ Checks (macOS 26, Apple Silicon):
 - `AKADEM_MAP=tiny tools/check_drive.sh`: exit 0, all six drive scenarios `passed: true`.
 - `./start.sh` then failed with `bridge_args[@]: unbound variable`: macOS `/bin/bash` is 3.2, which treats an empty array as unbound under `set -u`. `start.sh` now expands it as `${bridge_args[@]+"${bridge_args[@]}"}`; `"$@"` and the always non-empty `gen_args` are unaffected.
 - `./start.sh --map tiny -- --seconds=25`: exit 0, Metal renderer on Apple M5, `WORLD_READY map=tiny`, bridge "ready" and "Client connected (map=tiny)", and no bridge process was left afterwards.
+## 2026-09-29 — map picker: download feedback, and no orphaned curl after Ctrl+C
+
+Symptoms (macOS, in-game "New map"): curl's progress and `HTTP 504` errors appeared in the terminal while the picker showed only "build · sources"; after Ctrl+C the game closed but curl kept running and writing to the terminal, and a second Ctrl+C did nothing.
+- **504s:** Overpass was busy, and our query was the kind it turns away first (root cause under Fixes: the 1 GiB `maxsize`). No API key is involved. At 09:20 UTC even a one-node query to overpass-api.de returned 504 "The server is probably too busy"; kumi.systems returned 504 after 108 s and private.coffee timed out.
+- **Orphan:** Godot's `OS.create_process` starts the generator with `setsid` (checked: child pgid = child pid, and grandchildren share it), so the terminal's SIGINT never reaches it. The orphaned curl had ppid 1 and no tty.
+  - `OS.kill` in Cancel/`_exit_tree` SIGKILLed only Python.
+  - On SIGINT Godot exits at once (status 130) without `_exit_tree`, so the generator and its curl were never stopped.
+
+Fixes:
+- **`prepare.download`:** curl runs with `-sS` and captured stderr; `curl_error()` turns failures into `HTTP 504` / `timed out after N s`.
+- **`prepare.fetch`:** emits `download` (`url`, plus a browser-openable `query_url` = `?data=<query>`) per Overpass server and `warning` before each fallback. The final error lists each server with its reason. `BuildContext.notify` sends these events.
+- **`location_picker.gd`:**
+  - The status line shows the download and warnings.
+  - The terminal gets the log path, stage changes, the URLs, warnings and errors.
+  - Cancel/`_exit_tree` send SIGTERM to the generator's process group (`kill -TERM -<pid>`); Windows keeps `OS.kill`.
+- **`generate_map.py`:**
+  - SIGTERM → KeyboardInterrupt, so `subprocess.run` kills curl, the staging directory is cleaned and a `cancelled` error is written.
+  - `--exit-with-parent` (passed by the game; POSIX only) cancels when `getppid()` changes, with a SIGKILL of the process group after 15 s as a fallback.
+- README documents the `download` and `warning` events.
+- **Root cause of the 504s: the query's `[maxsize:1073741824]`.** Overpass admits queries by the RAM they reserve.
+  - Wrocław 1.5 km, same moment, both servers: 1 GiB → overpass-api.de 429 (partly from three parallel probes) and maps.mail.ru 504. The default (512 MiB) or 128 MiB → 200 and identical data (3.2 MB, 4495 ways).
+  - A 5 km square of central Wrocław (the picker maximum) at 256 MiB → 200, 70 MB, 98k ways, no `remark`.
+  - `prepare.fetch` now reads `overpass_maxsize`; the default is still 1 GiB, so existing configs are unchanged. `generate_map.py` sets 256 MiB.
+- **Mirrors (`generate_map.OVERPASS`):**
+  - Added VK Maps (`maps.mail.ru/osm/tools/overpass`), which is global and keyless per the OSM wiki.
+  - kumi.systems is no longer listed on the wiki and timed out, so it moved to last.
+  - Other listed instances need a key or payment, or cover one region only (CH, GB/IE, Virginia, Ethiopia).
+  - overpass.openstreetmap.ru (connect timeout) and overpass.osm.jp (TLS error) did not work.
+- Live check: `prepare.fetch` with the generator config for Wrocław 1.5 km → overpass-api.de answered in 1.6 s, 4495 ways.
+
+Checks:
+- Unit tests: 311 OK, 28 skipped. New: mirror failures and events, `curl_error`, `watch_parent`.
+- Headless Godot driving the real picker (`scratchpad` harness, Wrocław 1.5 km):
+  - Cancel during the download → "Cancelled; nothing was installed", with no curl or generator left.
+  - SIGKILL of Godot → the watchdog cancelled within 3 s.
+  - SIGINT with default disposition → Godot exited with 130 at once; the watchdog cancelled and nothing was left.
+- Failed experiment: the first SIGINT test sent the signal to a background job of a non-interactive shell, where SIGINT is ignored, so Godot kept running until the harness timeout. It was repeated with SIGINT reset to default.
+- Not checked: Windows (no curl there; the urllib path and `OS.kill` are unchanged).
 
 ## 2026-09-28 — traffic dropped mid-game: SUMO crash from road situations
 
