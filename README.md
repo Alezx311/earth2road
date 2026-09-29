@@ -118,6 +118,8 @@ Install never overwrites an installed map unless `--replace` (the old copy goes 
 
 Add `--events FILE` (or `--events -` for stdout) to any command: one JSON object per line —
 `stage` (with monotonic `progress` 0…1), `error` (`code`, `message`) and a final `result`.
+Informational records may appear in between: `download` (`url`, and for Overpass a
+browser-openable `query_url`) and `warning` (`message`, e.g. a busy server and the next mirror).
 Human-readable log goes to stderr.
 
 ## Limitations

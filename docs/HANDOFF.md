@@ -1,5 +1,44 @@
 # TerraDrive handoff
 
+## 2026-09-29 — map picker: download feedback, and no orphaned curl after Ctrl+C
+
+Symptoms (macOS, in-game "New map"): curl's progress and `HTTP 504` errors appeared in the terminal while the picker showed only "build · sources"; after Ctrl+C the game closed but curl kept running and writing to the terminal, and a second Ctrl+C did nothing.
+- **504s:** Overpass was busy, and our query was the kind it turns away first (root cause under Fixes: the 1 GiB `maxsize`). No API key is involved. At 09:20 UTC even a one-node query to overpass-api.de returned 504 "The server is probably too busy"; kumi.systems returned 504 after 108 s and private.coffee timed out.
+- **Orphan:** Godot's `OS.create_process` starts the generator with `setsid` (checked: child pgid = child pid, and grandchildren share it), so the terminal's SIGINT never reaches it. The orphaned curl had ppid 1 and no tty.
+  - `OS.kill` in Cancel/`_exit_tree` SIGKILLed only Python.
+  - On SIGINT Godot exits at once (status 130) without `_exit_tree`, so the generator and its curl were never stopped.
+
+Fixes:
+- **`prepare.download`:** curl runs with `-sS` and captured stderr; `curl_error()` turns failures into `HTTP 504` / `timed out after N s`.
+- **`prepare.fetch`:** emits `download` (`url`, plus a browser-openable `query_url` = `?data=<query>`) per Overpass server and `warning` before each fallback. The final error lists each server with its reason. `BuildContext.notify` sends these events.
+- **`location_picker.gd`:**
+  - The status line shows the download and warnings.
+  - The terminal gets the log path, stage changes, the URLs, warnings and errors.
+  - Cancel/`_exit_tree` send SIGTERM to the generator's process group (`kill -TERM -<pid>`); Windows keeps `OS.kill`.
+- **`generate_map.py`:**
+  - SIGTERM → KeyboardInterrupt, so `subprocess.run` kills curl, the staging directory is cleaned and a `cancelled` error is written.
+  - `--exit-with-parent` (passed by the game; POSIX only) cancels when `getppid()` changes, with a SIGKILL of the process group after 15 s as a fallback.
+- README documents the `download` and `warning` events.
+- **Root cause of the 504s: the query's `[maxsize:1073741824]`.** Overpass admits queries by the RAM they reserve.
+  - Wrocław 1.5 km, same moment, both servers: 1 GiB → overpass-api.de 429 (partly from three parallel probes) and maps.mail.ru 504. The default (512 MiB) or 128 MiB → 200 and identical data (3.2 MB, 4495 ways).
+  - A 5 km square of central Wrocław (the picker maximum) at 256 MiB → 200, 70 MB, 98k ways, no `remark`.
+  - `prepare.fetch` now reads `overpass_maxsize`; the default is still 1 GiB, so existing configs are unchanged. `generate_map.py` sets 256 MiB.
+- **Mirrors (`generate_map.OVERPASS`):**
+  - Added VK Maps (`maps.mail.ru/osm/tools/overpass`), which is global and keyless per the OSM wiki.
+  - kumi.systems is no longer listed on the wiki and timed out, so it moved to last.
+  - Other listed instances need a key or payment, or cover one region only (CH, GB/IE, Virginia, Ethiopia).
+  - overpass.openstreetmap.ru (connect timeout) and overpass.osm.jp (TLS error) did not work.
+- Live check: `prepare.fetch` with the generator config for Wrocław 1.5 km → overpass-api.de answered in 1.6 s, 4495 ways.
+
+Checks:
+- Unit tests: 311 OK, 28 skipped. New: mirror failures and events, `curl_error`, `watch_parent`.
+- Headless Godot driving the real picker (`scratchpad` harness, Wrocław 1.5 km):
+  - Cancel during the download → "Cancelled; nothing was installed", with no curl or generator left.
+  - SIGKILL of Godot → the watchdog cancelled within 3 s.
+  - SIGINT with default disposition → Godot exited with 130 at once; the watchdog cancelled and nothing was left.
+- Failed experiment: the first SIGINT test sent the signal to a background job of a non-interactive shell, where SIGINT is ignored, so Godot kept running until the harness timeout. It was repeated with SIGINT reset to default.
+- Not checked: Windows (no curl there; the urllib path and `OS.kill` are unchanged).
+
 ## 2026-09-28 — traffic dropped mid-game: SUMO crash from road situations
 
 Symptom: traffic worked, then the status turned to "NO TRAFFIC BRIDGE". Windows logged an APPCRASH of `python.exe` in `_libsumo.pyd` (0xc0000005) at 22:01:57; `bridge.log` had been overwritten by the next launch. Plain simulation (×16, 2 h simulated) and driving an ego car (8 min) did not crash.

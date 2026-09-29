@@ -281,6 +281,29 @@ class WorldContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'Download failed'):
                 ctx.download('https://example.invalid',raw/'missing')
 
+    def test_overpass_mirrors_report_each_failure(self):
+        from akadem_maps.core.prepare import fetch
+        raw=self.root/'raw-mirrors';raw.mkdir()
+        cfg=validate_config({**self.cfg,'id':'busy','overpass':'https://a.example/api/interpreter',
+                             'overpass_mirrors':['https://b.example/api/interpreter'],'overpass_maxsize':268435456})
+        seen=[]
+        ctx=BuildContext(self.root/'mirrors',raw,self.root,False,emit=lambda event,**data:seen.append((event,data)))
+        with patch('akadem_maps.core.prepare.download',side_effect=RuntimeError('HTTP 504')):
+            with self.assertRaisesRegex(RuntimeError,r'a\.example: HTTP 504; b\.example: HTTP 504\).*try again'):
+                fetch(cfg,ctx)
+        downloads=[data for event,data in seen if event=='download']
+        self.assertEqual([d['url'] for d in downloads],['https://a.example/api/interpreter','https://b.example/api/interpreter'])
+        self.assertTrue(downloads[0]['query_url'].startswith('https://a.example/api/interpreter?data=%5Bout%3Axml%5D'))
+        self.assertIn('%5Bmaxsize%3A268435456%5D',downloads[0]['query_url'])
+        self.assertEqual([data['message'] for event,data in seen if event=='warning'],['a.example: HTTP 504; trying b.example'])
+
+    def test_curl_errors_are_short(self):
+        from akadem_maps.core.prepare import curl_error
+        self.assertEqual(curl_error(22,'curl: (22) The requested URL returned error: 504\n',240),'HTTP 504')
+        self.assertEqual(curl_error(28,'curl: (28) Operation timed out after 240001 milliseconds',240),'timed out after 240 s')
+        self.assertEqual(curl_error(6,'curl: (6) Could not resolve host: x.invalid\n',240),'curl: (6) Could not resolve host: x.invalid')
+        self.assertEqual(curl_error(7,'',240),'curl exit 7')
+
     def test_cli_jsonl_error_is_machine_readable(self):
         process=subprocess.run([sys.executable,'-m','akadem_maps','build','--bbox','10','0','-10','1','--id','bad','--name','bad','--output',str(self.root/'bad-cli'),'--events','-'],capture_output=True,text=True,cwd=ROOT)
         self.assertEqual(process.returncode,1)
