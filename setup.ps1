@@ -53,7 +53,7 @@ $env:APPDATA = $savedAppData
 
 # A fresh checkout has no maps (game/data/ is not in Git): install the offline example so
 # start.ps1 works right away. Skipped when any map is already installed.
-if (-not (Test-Path -LiteralPath 'game\datactive_map')) {
+if (-not (Test-Path -LiteralPath 'game\data\active_map')) {
     $cli = Join-Path $PSScriptRoot '.venv\Scripts\terra-drive.exe'
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     & $cli build --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output "out/tiny-world-$stamp"

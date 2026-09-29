@@ -17,6 +17,12 @@ dressing are derived or synthetic, never measured data — every record says whi
 
 You need Python 3.11+ (3.14 is validated), `curl` and internet for the first setup.
 
+**Windows, no terminal:** download the repository (Code → Download ZIP), unpack it and
+double-click **`TerraDrive.cmd`**. The first run installs everything (it offers to install
+Python with winget if it is missing); later runs start the game straight away.
+
+Or from a terminal:
+
 ```powershell
 .\setup.ps1      # Linux/macOS: ./setup.sh
 .\start.ps1      # Linux/macOS: ./start.sh

@@ -8,3 +8,4 @@
 game/addons/gevp/** -whitespace
 # Offline inputs are pinned by SHA-256 in manifest.json: keep bytes exact on every OS
 examples/tiny/inputs/** -text
+*.cmd text eol=crlf
