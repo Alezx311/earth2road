@@ -1,4 +1,4 @@
-include README.uk.md CONTRIBUTING.md requirements.txt requirements.lock setup.ps1 setup.sh start.ps1 start.sh start_rivne.ps1
+include README.uk.md CONTRIBUTING.md requirements.txt requirements.lock setup.ps1 setup.sh start.ps1 start.sh TerraDrive.cmd
 recursive-include config *.json *.xml *.geojson
 recursive-include examples *.json *.xml *.osm *.png *.txt
 recursive-include tests *.py

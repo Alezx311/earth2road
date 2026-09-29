@@ -12,7 +12,7 @@
 - Checks: fresh clone in a temp folder, first `TerraDrive.cmd` run from zero 176 s
   (setup, Godot import, tiny map, game with bridge on port 8796, exit 0); second run 13 s
   without setup; setup rerun keeps the installed map; the old setup.ps1 exits 1 on the same
-  clone. Publication audit reports only the user's uncommitted deletion of `start_rivne.ps1`.
+  clone. `start_rivne.ps1` was removed at the user's request (also from MANIFEST.in).
 
 ## 2026-09-29 — opaque vehicles (uncommitted)
 
