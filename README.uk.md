@@ -44,6 +44,11 @@ python -m pip install -c requirements.lock ".[generator]"               # з к�
 terra-drive doctor                        # перевіряє numpy, shapely, pyproj, osmium, SUMO netconvert
 ```
 
+`setup.ps1` / `setup.sh` (і `TerraDrive.cmd`) ставлять CLI у локальний `.venv`, а не в `PATH`,
+тож просто `terra-drive` там «не знайдено». Використовуйте `.\.venv\Scripts\terra-drive`
+(Linux/macOS: `.venv/bin/terra-drive`), спершу активуйте venv (`.\.venv\Scripts\Activate.ps1`,
+`source .venv/bin/activate`) або запускайте `python -m akadem_maps` з Python цього venv.
+
 Гравцеві експортованої BeamNG-карти потрібен лише BeamNG.drive — без Python.
 
 ## Швидкий старт — повністю офлайн-приклад
@@ -81,6 +86,12 @@ SIGTERM, код 130, нічого не публікується). Повторн
 ```bash
 terra-drive export --target beamng --world out/my_area --output out/my_area_beamng [--level-id my_level]
 ```
+
+`--world` — тека світу: `--output` команди `terra-drive build` або `out/generated/<id>` для карти,
+створеної в грі (M → New map). Тека `--output` ще не повинна існувати. ID рівня може містити лише
+малі латинські літери, цифри та `_`; типово це `kyiv_<ID карти>`. `tools/export_beamng.py
+--world <тека> --output <тека>` робить те саме для старих скриптів; його `--map` приймає ID
+встановленої карти, як-от `tiny`, а не шлях.
 
 Результат: ZIP рівня, `artifact.json` (SHA-256, версія), `acceptance.json` (статус `pending` —
 структурна перевірка не є прийманням у грі) і технічні звіти `reports/`.

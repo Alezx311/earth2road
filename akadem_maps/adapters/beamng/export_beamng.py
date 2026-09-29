@@ -1041,13 +1041,15 @@ GROUPS = ('KyivGenerated', 'KyivNavigation', 'KyivProps', 'KyivSignals', 'KyivSk
 def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True):
     lift = VERTICAL_OFFSET if lift is None else float(lift)
     if not re.fullmatch('[a-z0-9_]+', mid):
-        raise ValueError('Invalid map id')
+        hint = (' (that looks like a folder: export a world folder with --world)'
+                if any(c in str(mid) for c in '/\\.:') else '')
+        raise ValueError(f'Invalid map id {mid!r}: use lowercase letters, digits and _ only{hint}')
     source_root = Path(world_dir) if world_dir else Path(source_root)
     config_file=source_root/'config.json' if world_dir else source_root/'config'/f'{mid}.json'
     config=read_json(config_file) if config_file.exists() else {}
     level_id = level_id or config.get('level_id') or ('kyiv_akadem' if mid == 'akadem' else 'kyiv_' + mid)
     if not re.fullmatch('[a-z0-9_]+', level_id):
-        raise ValueError('Invalid level id')
+        raise ValueError(f'Invalid level id {level_id!r}: use lowercase letters, digits and _ only, e.g. my_level')
     source = source_root if world_dir else source_root / 'game/data' / mid
     build = source_root if world_dir else source_root / 'data/build' / mid
     index = read_json(source / 'index.json')
@@ -1420,7 +1422,11 @@ def validate_level(level):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--map', default='focus_metro_mcd')
+    parser.add_argument('--map', default='focus_metro_mcd',
+                        help='Installed map id (game/data/<id>); a world folder path is treated as --world')
+    parser.add_argument('--world', type=Path,
+                        help='World folder from `terra-drive build` or the in-game generator (out/generated/<id>); '
+                             'writes the same installable ZIP as `terra-drive export --target beamng`')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--level-id')
     parser.add_argument('--overrides', type=Path)
@@ -1437,8 +1443,17 @@ def main():
     if args.capture_edits:
         print(f'Captured {capture_edits(args.capture_edits, args.output)} changed objects')
         return
-    print(json.dumps(export_map(args.map, args.output, args.level_id, args.overrides,
-                                lift=args.vertical_offset),
+    world = args.world
+    if world is None and not re.fullmatch('[a-z0-9_]+', args.map) and (Path(args.map) / 'config.json').is_file():
+        world = Path(args.map)
+    if world is not None:
+        if args.vertical_offset != VERTICAL_OFFSET:
+            parser.error('--vertical-offset applies to installed map ids, not to --world exports')
+        from akadem_maps.adapters.beamng.export import export_world
+        result = export_world(world, args.output, overrides=args.overrides, level_id=args.level_id)
+    else:
+        result = export_map(args.map, args.output, args.level_id, args.overrides, lift=args.vertical_offset)
+    print(json.dumps(result,
                      ensure_ascii=True, indent=2))
 
 

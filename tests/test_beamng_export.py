@@ -429,6 +429,28 @@ class ExportTests(unittest.TestCase):
                 export_map('test', root / 'out', source_root=root)
             self.assertFalse((root / 'out').exists())
 
+    def test_invalid_ids_explain_the_rule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture(root)
+            with self.assertRaisesRegex(ValueError, 'lowercase letters.*--world'):
+                export_map('out/generated/test', root / 'a', source_root=root)
+            with self.assertRaisesRegex(ValueError, "'My-Level'.*lowercase letters"):
+                export_map('test', root / 'b', level_id='My-Level', source_root=root)
+
+    def test_legacy_tool_exports_a_world_folder_passed_as_map(self):
+        import export_beamng
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            world = Path(tmp) / 'my_world'
+            write_json(world / 'config.json', {'id': 'my_world'})
+            for flags in (['--map', str(world)], ['--world', str(world)]):
+                argv = ['export_beamng.py', *flags, '--output', str(Path(tmp) / 'out'), '--level-id', 'my_level']
+                with mock.patch('akadem_maps.adapters.beamng.export.export_world', return_value={'zip': 'x.zip'}) as run, \
+                        mock.patch.object(sys, 'argv', argv), mock.patch('builtins.print'):
+                    export_beamng.main()
+                run.assert_called_once_with(world, Path(tmp) / 'out', overrides=None, level_id='my_level')
+
     def test_capture_delete_add_move_and_source_conflict(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

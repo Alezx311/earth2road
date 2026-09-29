@@ -66,4 +66,5 @@ if (-not (Test-Path -LiteralPath 'game\data\active_map')) {
 
 Write-Host "Setup done. Run .\start.ps1 (the offline example map 'tiny' is installed if no other map was)."
 Write-Host "To rebuild a map: .\.venv\Scripts\python.exe tools\prepare.py --config config\<id>.json --install [--replace] [--activate]"
+Write-Host "BeamNG ZIP of a map: .\.venv\Scripts\terra-drive export --target beamng --world out\generated\<id> --output out\<id>_beamng"
 Write-Host "New map anywhere: .\start.ps1 --generate LAT LON [--size KM] [--name NAME], or M -> New map in the game."

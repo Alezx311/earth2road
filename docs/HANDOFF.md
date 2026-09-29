@@ -1,5 +1,25 @@
 # TerraDrive handoff
 
+## 2026-09-30 — BeamNG export from a user's report
+
+Report: "`terra-drive` doesn't exist" and `tools/export_beamng.py` "says the map ID/level ID
+is invalid".
+
+- `terra-drive` exists, but `setup.ps1`/`setup.sh`/`TerraDrive.cmd` install it into `.venv`,
+  not onto `PATH`; README only showed the bare command. README (en/uk) now names
+  `.venv\Scripts\terra-drive`, venv activation and `python -m akadem_maps`; setup prints the
+  BeamNG export command with the venv path.
+- `tools/export_beamng.py --map` takes an installed map ID; a world folder path
+  (`out/generated/<id>`) failed with a bare `Invalid map id`. The tool now has `--world`, and a
+  `--map` value that is a folder with `config.json` goes the same way; both call
+  `adapters.beamng.export.export_world` (the CLI's path). Map/level ID errors now show the value
+  and the `[a-z0-9_]` rule.
+- Checks: tiny world built from `examples/tiny`; `tools/export_beamng.py --map <world>` ZIP
+  SHA-256 equals `terra-drive export --target beamng` on the same world (d15c36ea…) and
+  `terra-drive validate --target beamng` passes; `--level-id My-Level` gives the new message.
+  `python -m unittest discover -s tests`: 321 passed, 1 skipped (2 new tests in
+  `test_beamng_export`). Not checked in BeamNG.drive itself.
+
 ## 2026-09-29 — double-click Windows launcher
 
 - `TerraDrive.cmd` at the root: first run calls `setup.ps1`, later runs `start.ps1`

@@ -31,5 +31,6 @@ if [[ ! -f game/data/active_map ]]; then
   .venv/bin/terra-drive install --target godot --export "out/tiny-godot-$stamp" --root . --activate
 fi
 echo "TerraDrive setup complete. Run ./start.sh (the offline example map 'tiny' is installed if no other map was)."
+echo 'BeamNG ZIP of a map: .venv/bin/terra-drive export --target beamng --world out/generated/<id> --output out/<id>_beamng'
 echo 'Rebuild a map: .venv/bin/python tools/prepare.py --config config/<id>.json --install [--replace] [--activate]'
 echo 'New map anywhere: ./start.sh --generate LAT LON [--size KM] [--name NAME], or M → New map in the game.'

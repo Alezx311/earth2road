@@ -48,6 +48,11 @@ python -m pip install -c requirements.lock ".[generator]"               # from a
 terra-drive doctor                        # checks numpy, shapely, pyproj, osmium, SUMO netconvert
 ```
 
+`setup.ps1` / `setup.sh` (and `TerraDrive.cmd`) install the CLI into the local `.venv`, not onto
+`PATH`, so a plain `terra-drive` is "not found" there. Use `.\.venv\Scripts\terra-drive`
+(Linux/macOS: `.venv/bin/terra-drive`), activate the venv first (`.\.venv\Scripts\Activate.ps1`,
+`source .venv/bin/activate`), or run `python -m akadem_maps` with the venv's Python.
+
 Players of an exported BeamNG map need only BeamNG.drive — no Python.
 
 ## Quick start — fully offline example
@@ -87,6 +92,12 @@ recorded inputs with `--inputs <world>/inputs --offline` for identical network a
 ```bash
 terra-drive export --target beamng --world out/my_area --output out/my_area_beamng [--level-id my_level]
 ```
+
+`--world` is a world folder: the `--output` of `terra-drive build`, or `out/generated/<id>` for a
+map made in the game (M → New map). `--output` must not exist yet. A level ID may contain only
+lowercase letters, digits and `_`; by default it is `kyiv_<map id>`. `tools/export_beamng.py
+--world <folder> --output <folder>` does the same for older scripts; its `--map` takes an
+installed map ID such as `tiny`, not a path.
 
 Output: the level ZIP, `artifact.json` (SHA-256, version), `acceptance.json` (status
 `pending` — structural validation is not in-game acceptance) and technical `reports/`.
