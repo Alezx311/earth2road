@@ -5,15 +5,22 @@ mkdir -p .tools .cache logs
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo 'Python 3.11+ is required (3.14 is the pinned, validated version).'; exit 1; }
 python3 -m venv .venv
 .venv/bin/python -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
-if [[ ! -x .tools/Godot_v4.6-stable_linux.x86_64 ]]; then
-  curl -fL --retry 2 https://github.com/godotengine/godot/releases/download/4.6-stable/Godot_v4.6-stable_linux.x86_64.zip -o .tools/godot.zip
-  unzip -o .tools/godot.zip -d .tools
+source tools/godot.sh
+if [[ ! -x "$godot" ]]; then
+  curl -fL --retry 2 "$godot_url" -o .tools/godot.zip
+  if [[ -n "$godot_app" ]]; then
+    rm -rf .tools/Godot.app "$godot_app"
+    unzip -q -o .tools/godot.zip -d .tools
+    mv .tools/Godot.app "$godot_app"
+  else
+    unzip -o .tools/godot.zip -d .tools
+  fi
 fi
 .venv/bin/python tools/fetch_assets.py
 .venv/bin/python tools/fetch_textures.py || echo 'Textures not downloaded — the game will use flat materials.'
 .venv/bin/python tools/fetch_visual_assets.py || echo 'CC0 visual pack not downloaded — benches and lamps stay procedural.'
 # Builds game/.godot (class_name cache for the vehicle addon); start.sh repeats it if missing.
-XDG_DATA_HOME="$PWD/.cache/data" XDG_CONFIG_HOME="$PWD/.cache/config" .tools/Godot_v4.6-stable_linux.x86_64 --headless --path game --import || echo 'Godot import failed; start.sh will retry.'
+XDG_DATA_HOME="$PWD/.cache/data" XDG_CONFIG_HOME="$PWD/.cache/config" "$godot" --headless --path game --import || echo 'Godot import failed; start.sh will retry.'
 # As in setup.ps1: configured maps are not rebuilt here.
 # A fresh checkout has no maps (game/data/ is not in Git): install the offline example so
 # start.sh works right away. Skipped when any map is already installed.

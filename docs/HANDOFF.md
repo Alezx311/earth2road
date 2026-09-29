@@ -1,5 +1,21 @@
 # TerraDrive handoff
 
+## 2026-09-29 — macOS: setup.sh downloads the macOS Godot build
+
+Symptom: `./setup.sh` on macOS downloaded `Godot_v4.6-stable_linux.x86_64` and the import failed with "cannot execute binary file". Everything else in `setup.sh` already worked on macOS.
+
+Fix:
+- **`tools/godot.sh` (new):** sourced by `setup.sh`, `start.sh`, `tools/check_drive.sh` and `tools/check_surface.sh`; picks the binary and download URL by `uname -s`. Linux paths are unchanged. macOS uses `Godot_v4.6-stable_macos.universal.zip`, unpacked from `Godot.app` to `.tools/Godot_v4.6-stable_macos.app` (binary: `Contents/MacOS/Godot`).
+- **`akadem_maps/runtime.py`:** `godot_names()` / `godot_url()` return the macOS bundle on `darwin`, so tests and CI find it.
+- On macOS Godot ignores `XDG_*`; editor settings and `user://` go to `~/Library/Application Support/Godot`.
+
+Checks (macOS 26, Apple Silicon):
+- `./setup.sh`: exit 0; downloaded the universal build (arm64 + x86_64), Godot import created `game/.godot/global_script_class_cache.cfg`, and the `tiny` map was installed.
+- `.venv/bin/python -m unittest discover -s tests`: 308 tests OK, 28 skipped (map data not generated); `test_vehicle_availability` ran against the macOS Godot.
+- `AKADEM_MAP=tiny tools/check_drive.sh`: exit 0, all six drive scenarios `passed: true`.
+- `./start.sh` then failed with `bridge_args[@]: unbound variable`: macOS `/bin/bash` is 3.2, which treats an empty array as unbound under `set -u`. `start.sh` now expands it as `${bridge_args[@]+"${bridge_args[@]}"}`; `"$@"` and the always non-empty `gen_args` are unaffected.
+- `./start.sh --map tiny -- --seconds=25`: exit 0, Metal renderer on Apple M5, `WORLD_READY map=tiny`, bridge "ready" and "Client connected (map=tiny)", and no bridge process was left afterwards.
+
 ## 2026-09-28 — traffic dropped mid-game: SUMO crash from road situations
 
 Symptom: traffic worked, then the status turned to "NO TRAFFIC BRIDGE". Windows logged an APPCRASH of `python.exe` in `_libsumo.pyd` (0xc0000005) at 22:01:57; `bridge.log` had been overwritten by the next launch. Plain simulation (×16, 2 h simulated) and driving an ego car (8 min) did not crash.

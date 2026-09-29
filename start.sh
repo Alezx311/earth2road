@@ -6,7 +6,7 @@ export XDG_CONFIG_HOME="$PWD/.cache/config"
 export XDG_CACHE_HOME="$PWD/.cache"
 export PYTHONUTF8=1
 mkdir -p logs "$XDG_DATA_HOME" "$XDG_CONFIG_HOME"
-godot=.tools/Godot_v4.6-stable_linux.x86_64
+source tools/godot.sh
 # Godot resolves class_name types (the vehicle addon's Vehicle/Wheel) from game/.godot, which
 # only an import creates. Without it main.gd fails to compile and the car never spawns.
 if [[ ! -f game/.godot/global_script_class_cache.cfg ]]; then
@@ -42,7 +42,8 @@ export AKADEM_MAP="$map"
 if [[ ! -f "game/data/$map/index.json" ]]; then
   echo "Map '$map' is not built. Run ./setup.sh or .venv/bin/python tools/prepare.py --config config/$map.json --install"; exit 1
 fi
-.venv/bin/python tools/traffic.py "${bridge_args[@]}" > logs/bridge.log 2>&1 &
+# ${a[@]+...}: bash 3.2 (macOS /bin/bash) treats an empty array as unbound under set -u.
+.venv/bin/python tools/traffic.py ${bridge_args[@]+"${bridge_args[@]}"} > logs/bridge.log 2>&1 &
 traffic_pid=$!
 cleanup() { kill "$traffic_pid" 2>/dev/null || true; wait "$traffic_pid" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM

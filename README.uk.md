@@ -15,8 +15,8 @@
 Потрібні Python 3.11+ (перевірено 3.14), `curl` та інтернет для першого запуску.
 
 ```powershell
-.\setup.ps1      # Linux: ./setup.sh
-.\start.ps1      # Linux: ./start.sh
+.\setup.ps1      # Linux/macOS: ./setup.sh
+.\start.ps1      # Linux/macOS: ./start.sh
 ```
 
 `setup` завантажує Godot 4.6, Python-залежності й моделі машин і встановлює невелику
@@ -118,7 +118,8 @@ terra-drive install --target godot --export out/my_area_godot --root . [--replac
 - Висоти наближені (грубий DEM, припущені висоти мостів і з'їздів).
 - Фази світлофорів — типові netconvert; попит трафіку синтетичний.
 - Доповнення будинків (Overture/Microsoft) необов'язкове й вимкнене для київських карт.
-- Linux не є перевіреною платформою цієї beta.
+- Linux і macOS не є перевіреними платформами цієї beta (macOS: `setup.sh`, `start.sh`, модульні
+  тести та headless-перевірка їзди виконані один раз на Apple Silicon).
 
 ## Повідомлення про помилку
 

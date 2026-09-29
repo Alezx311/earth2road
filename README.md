@@ -18,8 +18,8 @@ dressing are derived or synthetic, never measured data — every record says whi
 You need Python 3.11+ (3.14 is validated), `curl` and internet for the first setup.
 
 ```powershell
-.\setup.ps1      # Linux: ./setup.sh
-.\start.ps1      # Linux: ./start.sh
+.\setup.ps1      # Linux/macOS: ./setup.sh
+.\start.ps1      # Linux/macOS: ./start.sh
 ```
 
 `setup` downloads Godot 4.6, the Python dependencies and the car models, and installs a small
@@ -125,7 +125,8 @@ Human-readable log goes to stderr.
 - Heights are approximate (coarse DEM, assumed bridge and ramp heights).
 - Signal timings are netconvert defaults; traffic demand is synthetic.
 - Building enrichment (Overture/Microsoft) is optional and off for the Kyiv maps.
-- Linux is not a tested platform for this beta.
+- Linux and macOS are not tested platforms for this beta (macOS: `setup.sh`, `start.sh`, unit
+  tests and the headless drive check were run once on Apple Silicon).
 
 ## Reporting a bug
 

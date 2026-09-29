@@ -1,4 +1,4 @@
-"""Platform binary resolution for Windows and Linux layouts."""
+"""Platform binary resolution for Windows, Linux and macOS layouts."""
 import os
 import sys
 import tempfile
@@ -39,6 +39,9 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(any('4.6' in n for n in names))
         if os.name == 'nt':
             self.assertTrue(any(n.endswith('.exe') for n in names))
+        elif sys.platform == 'darwin':
+            self.assertTrue(any('macos.app' in n for n in names))
+            self.assertIn('macos.universal.zip', runtime.godot_url())
         else:
             self.assertTrue(any('linux' in n for n in names))
 

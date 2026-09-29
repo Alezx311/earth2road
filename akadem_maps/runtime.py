@@ -1,8 +1,9 @@
 """Platform paths for the venv, Godot 4.6 and SUMO binaries.
 
 Linux setup.sh used `.venv/bin/...` and `Godot_v4.6-stable_linux.x86_64`.
-Windows uses `.venv/Scripts/` and `Godot_v4.6-stable_win64.exe`. Callers must
-not hard-code either layout.
+Windows uses `.venv/Scripts/` and `Godot_v4.6-stable_win64.exe`. macOS uses
+`.venv/bin/` and the app bundle `Godot_v4.6-stable_macos.app` (see tools/godot.sh).
+Callers must not hard-code any of these layouts.
 """
 import os
 import shutil
@@ -81,12 +82,16 @@ def godot_names():
     if os.name == 'nt':
         return (f'Godot_v{GODOT_VERSION}_win64.exe',
                 f'Godot_v{GODOT_VERSION}_win64_console.exe')
+    if sys.platform == 'darwin':
+        return (f'Godot_v{GODOT_VERSION}_macos.app/Contents/MacOS/Godot',)
     return (f'Godot_v{GODOT_VERSION}_linux.x86_64',)
 
 
 def godot_url():
     if os.name == 'nt':
         archive = f'Godot_v{GODOT_VERSION}_win64.exe.zip'
+    elif sys.platform == 'darwin':
+        archive = f'Godot_v{GODOT_VERSION}_macos.universal.zip'
     else:
         archive = f'Godot_v{GODOT_VERSION}_linux.x86_64.zip'
     return f'https://github.com/godotengine/godot/releases/download/{GODOT_VERSION}/{archive}'
