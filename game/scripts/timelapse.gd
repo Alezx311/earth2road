@@ -9,7 +9,8 @@ extends Node
 ##   ffmpeg -framerate 15 -i logs/timelapse/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p out.mp4
 ## Nothing here changes the game itself.
 ## Options: --timelapse-near=X,Z (centre, default: middle of the map), --timelapse-title=TEXT,
-## --timelapse-outro=TEXT (last caption).
+## --timelapse-fly=X1,Z1,X2,Z2[,X3,Z3…] (street-level flight path, may bend with the street),
+## --timelapse-outro=TEXT (last caption), --timelapse-cars=N (cars on the map before recording).
 
 const World = preload("res://scripts/world.gd")
 const Palette = preload("res://visuals/palette.gd")
@@ -42,6 +43,7 @@ var junction := Vector3.ZERO      # signalised junction next to the main street
 var avenue := Vector3.FORWARD     # direction of the main street through the centre
 var fly_from := Vector3.ZERO
 var fly_to := Vector3.ZERO
+var fly_path: Array = []          # street-level flight: two or more points along a street
 var extent := 1000.0              # map size, metres
 var keys: Array = []              # camera keyframes [t, focus, heading, tilt, distance]
 var pieces: Array = []            # {"node", "start", "end", "motion", "base"}
@@ -158,9 +160,13 @@ func measure() -> void:
 	var fly := arg("fly", "")
 	if fly != "":
 		var f := fly.split(",")
-		fly_from = Vector3(float(f[0]), center.y, float(f[1]))
-		fly_to = Vector3(float(f[2]), center.y, float(f[3]))
-		avenue = (fly_to - fly_from).normalized()
+		for i in range(0, f.size() - 1, 2):
+			fly_path.append(Vector3(float(f[i]), center.y, float(f[i + 1])))
+		fly_from = fly_path[0]
+		fly_to = fly_path[fly_path.size() - 1]
+		avenue = (fly_path[1] - fly_path[0]).normalized()
+	if fly_path.is_empty():
+		fly_path = [fly_from, fly_to]
 	# Signalised junction nearest to the start of the flight.
 	var best_sig: Dictionary = {}
 	var best_d := INF
@@ -198,11 +204,23 @@ func build_keys() -> void:
 		# Straight down the street axis and steep: in a dense grid anything else is inside a block.
 		[22.0, junction, h, -58, 190.0],
 		[25.0, junction, h, -50, 140.0],
-		[27.6, fly_from, h, -15, 66.0],
-		[35.0, fly_to, h, -15, 66.0],
-		[37.0, fly_to, h, -45, 320.0],
-		[39.6, fly_to.lerp(center, 0.5), h + 45, -34, d0 * 0.6],
-		[LENGTH, center, h + 80, -32, d0 * 0.75],
+	]
+	# Street-level flight: one key per path point, timed by distance, heading along the path.
+	var total := 0.0
+	for i in range(1, fly_path.size()):
+		total += fly_path[i].distance_to(fly_path[i - 1])
+	var run := 0.0
+	var end_h := h
+	for i in range(fly_path.size()):
+		if i > 0:
+			run += fly_path[i].distance_to(fly_path[i - 1])
+		var dir: Vector3 = (fly_path[mini(i + 1, fly_path.size() - 1)] - fly_path[maxi(i - 1, 0)]).normalized()
+		end_h = rad_to_deg(heading_along(dir))
+		keys.append([27.6 + 7.4 * run / total, fly_path[i], end_h, -15, 66.0])
+	keys += [
+		[37.0, fly_to, end_h, -45, 320.0],
+		[39.6, fly_to.lerp(center, 0.5), end_h + 45, -34, d0 * 0.6],
+		[LENGTH, center, end_h + 80, -32, d0 * 0.75],
 	]
 	var last := 0.0
 	for k in keys:
@@ -257,13 +275,15 @@ func aim(t: float) -> void:
 
 ## Wait for every tile at its final level, the bridge and some traffic on the streets.
 func prepare() -> void:
+	# --timelapse-cars=N: wait until the simulation holds N cars (a large map fills slowly).
+	var wanted := mini(main.density, int(arg("cars", "200")))
 	var waited := 0.0
-	while waited < 300.0:
+	while waited < 900.0:
 		await get_tree().process_frame
 		waited += get_process_delta_time()
 		aim(0.0)
 		var cars: int = main.traffic.count()
-		if main.world.pending() == 0 and main.world.jobs.is_empty() and main.ready_bridge and waited > 8.0 and cars >= mini(main.density, 200):
+		if main.world.pending() == 0 and main.world.jobs.is_empty() and main.ready_bridge and waited > 8.0 and cars >= wanted:
 			return
 	push_warning("Timelapse: started without everything ready (bridge %s, %d cars)" % [main.ready_bridge, main.traffic.count()])
 

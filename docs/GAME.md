@@ -88,6 +88,7 @@ $env:AKADEM_MAP = 'manhattan'
 ffmpeg -framerate 15 -i logs/timelapse/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 20 timelapse.mp4
 ```
 
-Options (local map metres): `--timelapse-near=X,Z` centre, `--timelapse-fly=X1,Z1,X2,Z2`
-street-level flight (keep it on a street axis in dense cities), `--timelapse-title=TEXT`,
-`--timelapse-outro=TEXT`. The game itself is unchanged without `--timelapse`.
+Options (local map metres): `--timelapse-near=X,Z` centre, `--timelapse-fly=X1,Z1,X2,Z2[,…]`
+street-level flight path (keep it on the street axis; more points follow a curved street),
+`--timelapse-cars=N` cars in the simulation before recording starts (large maps fill slowly),
+`--timelapse-title=TEXT`, `--timelapse-outro=TEXT`. The game itself is unchanged without `--timelapse`.
