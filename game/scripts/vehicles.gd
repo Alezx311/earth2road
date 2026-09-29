@@ -1,9 +1,9 @@
 extends RefCounted
-## Vehicle models from config/vehicles.json. The default template is procedural
-## (visuals/vehicles.gd) built to the configured real size; a Kenney Car Kit GLB
-## (tools/fetch_assets.py) is only a fallback. availability() follows the configured
-## catalogue, not the presence of a fetched GLB. Instances get their own lamp materials
-## so traffic can show brake lights and indicators.
+## Vehicle models from config/vehicles.json. The Kenney Car Kit GLB (CC0, fetched by
+## tools/fetch_assets.py) is used when present, rescaled to the configured real size; the
+## procedural kit (visuals/vehicles.gd) is the fallback for a checkout without the pack.
+## availability() follows the configured catalogue, not the presence of a fetched GLB.
+## Instances get their own lamp materials so traffic can show brake lights and indicators.
 
 const VisualVehicles = preload("res://visuals/vehicles.gd")
 const CARS := "res://assets/cars/"
@@ -11,6 +11,8 @@ const CONFIG := "res://../config/vehicles.json"
 
 static var _catalog: Dictionary
 static var _templates: Dictionary = {}
+## false: always build the procedural fallback (comparison and fallback checks).
+static var use_glb := true
 
 static func catalog() -> Dictionary:
 	if _catalog.is_empty():
@@ -35,16 +37,15 @@ static func template(name: String) -> Dictionary:
 		return _templates[name]
 	if not catalog().models.has(name):
 		return {}
-	var generated := VisualVehicles.template(name, catalog().models[name])
-	if not generated.is_empty():
-		_templates[name] = generated
-		return generated
+	var glb := ProjectSettings.globalize_path(CARS + name + ".glb")
 	var doc := GLTFDocument.new()
 	var state := GLTFState.new()
-	var err := doc.append_from_file(ProjectSettings.globalize_path(CARS + name + ".glb"), state)
-	if err != OK:
-		push_error("Cannot load vehicle model %s (%d); run tools/fetch_assets.py" % [name, err])
-		return {}
+	if not use_glb or not FileAccess.file_exists(glb) or doc.append_from_file(glb, state) != OK:
+		var generated := VisualVehicles.template(name, catalog().models[name])
+		if not generated.is_empty():
+			generated.lamps = lamp_spots(generated.root.get_node("body"), generated.size)
+			_templates[name] = generated
+		return generated
 	var scene: Node3D = doc.generate_scene(state)
 	var spec: Dictionary = catalog().models[name]
 	var size := Vector3(spec.size[0], spec.size[1], spec.size[2])
@@ -90,7 +91,8 @@ static func template(name: String) -> Dictionary:
 		root.add_child(pivot)
 		pivots.append(pivot.position)
 	scene.free()
-	_templates[name] = {"root": root, "size": size, "tire_radius": tire, "wheels": pivots}
+	_templates[name] = {"root": root, "size": size, "tire_radius": tire, "wheels": pivots,
+		"lamps": lamp_spots(body_node, size)}
 	return _templates[name]
 
 ## A fresh vehicle: {"root", "wheels": [FL, FR, RL, RR] Node3D, "lamps": {...}, "size", "tire_radius"}
@@ -102,24 +104,56 @@ static func instantiate(name: String) -> Dictionary:
 	var wheels: Array = []
 	for key in ["wheel-front-left", "wheel-front-right", "wheel-back-left", "wheel-back-right"]:
 		wheels.append(root.get_node(key))
-	var size: Vector3 = t.size
 	var lamps := {
 		"brake": lamp_material(Color("ff2a1f")),
 		"left": lamp_material(Color("ffa31a")),
 		"right": lamp_material(Color("ffa31a")),
 		"head": lamp_material(Color("fff6e0")),
 	}
-	var rear := size.z * 0.5 + 0.015
-	var front := -size.z * 0.5 - 0.015
+	for spot in t.lamps:
+		add_lamp(root, spot.position, spot.size, lamps[spot.kind])
+	lamps.head.emission_energy_multiplier = 0.4
+	return {"root": root, "wheels": wheels, "lamps": lamps, "size": t.size, "tire_radius": t.tire_radius}
+
+## Lamp boxes placed on the body's actual front and rear surface: a ray along Z through the
+## body triangles at each lamp's x/y, moved inwards where a tapered corner makes it miss.
+## Nominal catalogue ends are the last fallback. [{position, size, kind}] in vehicle space.
+static func lamp_spots(body: MeshInstance3D, size: Vector3) -> Array:
+	var faces := body.mesh.get_faces()
+	for i in faces.size():
+		faces[i] = body.transform * faces[i]
 	var y := clampf(size.y * 0.45, 0.6, 1.1)
+	var spots: Array = []
 	for side in [-1.0, 1.0]:
 		var x: float = side * (size.x * 0.5 - 0.22)
-		add_lamp(root, Vector3(x, y, rear), Vector3(0.32, 0.12, 0.03), lamps.brake)
-		add_lamp(root, Vector3(x + side * 0.12, y + 0.1, rear), Vector3(0.08, 0.06, 0.03), lamps.left if side < 0 else lamps.right)
-		add_lamp(root, Vector3(x + side * 0.12, y, front), Vector3(0.08, 0.06, 0.03), lamps.left if side < 0 else lamps.right)
-		add_lamp(root, Vector3(x, y, front), Vector3(0.3, 0.1, 0.03), lamps.head)
-	lamps.head.emission_energy_multiplier = 0.4
-	return {"root": root, "wheels": wheels, "lamps": lamps, "size": size, "tire_radius": t.tire_radius}
+		var turn := "left" if side < 0 else "right"
+		for item in [[Vector3(x, y, 1), Vector3(0.32, 0.12, 0.03), "brake"],
+				[Vector3(x + side * 0.12, y + 0.1, 1), Vector3(0.08, 0.06, 0.03), turn],
+				[Vector3(x + side * 0.12, y, -1), Vector3(0.08, 0.06, 0.03), turn],
+				[Vector3(x, y, -1), Vector3(0.3, 0.1, 0.03), "head"]]:
+			var p: Vector3 = item[0]
+			var end := INF
+			for shrink in [1.0, 0.85, 0.7, 0.55]:
+				end = surface_z(faces, p.x * shrink, p.y, p.z, size.z)
+				if end != INF:
+					p.x *= shrink
+					break
+			if end == INF:
+				end = p.z * size.z * 0.5
+			spots.append({"position": Vector3(p.x, p.y, end + p.z * 0.015), "size": item[1], "kind": item[2]})
+	return spots
+
+## Outermost body surface at (x, y) towards +Z (way = 1, rear) or -Z (way = -1, front),
+## or INF when the ray misses the body.
+static func surface_z(faces: PackedVector3Array, x: float, y: float, way: float, length: float) -> float:
+	var from := Vector3(x, y, way * length)
+	var dir := Vector3(0, 0, -way)
+	var best := INF
+	for i in range(0, faces.size(), 3):
+		var hit = Geometry3D.ray_intersects_triangle(from, dir, faces[i], faces[i + 1], faces[i + 2])
+		if hit != null:
+			best = minf(best, from.distance_to(hit))
+	return INF if best == INF else from.z + dir.z * best
 
 ## One static mesh (body + wheels, no lamps) and the shared colour texture, for the
 ## MultiMesh far traffic: {"mesh": ArrayMesh, "texture": Texture2D, "size": Vector3}.

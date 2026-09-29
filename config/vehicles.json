@@ -1,5 +1,5 @@
 {
-  "note": "Vehicle catalogue. Models are built procedurally to the listed real-world size (metres) by game/visuals/vehicles.gd; the fetched Kenney Car Kit GLB (tools/fetch_assets.py) is only a fallback and availability follows this catalogue. share = synthetic traffic mix (not measured). SUMO vType params are generic assumptions.",
+  "note": "Vehicle catalogue. Models are the Kenney Car Kit GLB (CC0, tools/fetch_assets.py) rescaled to the listed real-world size (metres); without the fetched pack game/visuals/vehicles.gd builds a procedural stand-in. Availability follows this catalogue. share = synthetic traffic mix (not measured). SUMO vType params are generic assumptions.",
   "player_models": ["sedan", "hatchback-sports", "suv", "taxi", "van"],
   "models": {
     "sedan":            {"size": [1.80, 1.45, 4.50], "tire_radius": 0.32, "share": 0.26, "class": "passenger"},

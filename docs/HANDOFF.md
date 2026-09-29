@@ -1,5 +1,32 @@
 # TerraDrive handoff
 
+## 2026-09-29 — opaque vehicles (uncommitted)
+
+Symptom: cars were partly see-through. Cause: the procedural kit (`game/visuals/vehicles.gd`)
+built triangles with mixed winding, so Godot culled whole body sides, glass and hubs, and
+`generate_normals` inverted their shading.
+
+- Kenney Car Kit GLB (CC0, already pinned in `config/assets.json` and fetched by
+  `tools/fetch_assets.py`) is now the primary model source, rescaled to `config/vehicles.json`
+  sizes as before. The procedural kit remains the fallback when the pack is not fetched;
+  `Vehicles.use_glb = false` forces it for comparisons.
+- Procedural kit fixed as well: each primitive sets an interior reference point and every
+  triangle is turned to face away from it (boxes, loft sections and caps, glass, wheels).
+- Lamp boxes were placed on the nominal catalogue ends and floated in front of tapered
+  Kenney bumpers. `lamp_spots` now rays along Z through the body triangles and moves
+  inwards on a miss.
+- Physics is unchanged: collision boxes and wheels still come from the catalogue sizes.
+- New `game/scripts/validate_vehicle_looks.gd`: three close views of every catalogue model on
+  a neutral stage (`--procedural` for the fallback). Sheets under `logs/qa-20260929/`
+  (`vehicles-before`, `vehicles-kenney`, `vehicles-after`, `vehicles-procedural`) reviewed:
+  before showed see-through sides; after both sources are solid and lamps sit on the body.
+- `tests.test_vehicle_availability tests.test_asset_dependencies`: 13 passed.
+  `AKADEM_MAP=tiny tools/check_drive.ps1`: all six scenarios passed.
+- Not done: an in-game akadem screenshot with traffic. One attempt crashed while building
+  the world (`world.gd:55` SurfaceTool out of memory; 16 GB RAM free, file not touched here)
+  while a stray test game from port 8794 was still open; not yet repeated. Full suite and
+  the FPS comparison are also still to run after this change.
+
 ## 2026-09-29 — simulator UI redesign
 
 Separate commit on top of the PR integration. Physics, geometry and world formats unchanged;
@@ -42,8 +69,9 @@ Checks (Windows, RTX 2070 SUPER):
 - Not done: same-conditions FPS comparison. The first attempt passed `--` directly to
   `.\start.ps1` inside PowerShell, which consumes a bare `--`, so `--seconds=30`/`--no-vsync`
   reached Godot as engine options and the game never quit. That instance (port 8793) was
-  left open for the user to close; repeat with `.\start.ps1 --map akadem --density 100 -- --
-  --seconds=30 --no-vsync --resolution 1920x1080` (or `powershell -File`) and compare with
+  left open for the user to close. From a PowerShell prompt three separators are needed
+  (PowerShell, start.ps1, then Godot's user arguments): `.\start.ps1 --map akadem
+  --density 100 -- -- --resolution 1920x1080 -- --seconds=30 --no-vsync`; compare with
   `logs/qa-20260929/baseline-akadem.json` (median 154.29 FPS); investigate a drop above 5%.
 - Keyboard focus, Tab containment, Escape return and click actions are checked with
   synthetic Godot events only; Windows Computer Use was unavailable, so no native input.

@@ -55,8 +55,8 @@ Godot project once; this builds `game/.godot`, which the vehicle addon's classes
 Spectator: WASD moves, Q/E or wheel changes height, right mouse looks, Shift accelerates.
 Density and time controls are available in the panel. High densities may reduce simulation speed.
 
-Vehicle models are downloaded from Kenney; optional ambientCG textures and Poly Haven props
-have procedural fallbacks. See THIRD_PARTY_NOTICES and config manifests for attribution.
+Vehicle models are downloaded from Kenney (a procedural stand-in is used until they are
+fetched); optional ambientCG textures and Poly Haven props have procedural fallbacks. See THIRD_PARTY_NOTICES and config manifests for attribution.
 For a missing car pack, run `.venv/Scripts/python.exe tools/fetch_assets.py` before playing.
 
 ## Runtime checks

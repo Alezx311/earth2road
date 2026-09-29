@@ -5,6 +5,10 @@ static var atlas: ImageTexture
 static var material: StandardMaterial3D
 const COLORS := ["b8b9b7","223640","202325","686e70","d4d5cf","ac2420","d4c894","375362","e5e4dc","344248","d4b749","738078","b7bcc0","e9e2ca","c77735","25303a"]
 var surfaces: Dictionary = {}
+## Point inside the primitive being built: every triangle is turned to face away from it.
+## Godot culls back faces (front = clockwise seen from outside), so a mixed winding
+## left see-through panels and inverted shading. INF keeps the given order.
+var inside := Vector3.INF
 
 static func init() -> void:
 	if atlas != null: return
@@ -23,6 +27,10 @@ func triangle(a: Vector3,b: Vector3,c: Vector3,color: int) -> void:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		surfaces[color]=st
 	var st: SurfaceTool=surfaces[color]
+	if inside!=Vector3.INF and (b-a).cross(c-a).dot((a+b+c)/3.0-inside)>0.0:
+		var swap:=b
+		b=c
+		c=swap
 	for p in [a,b,c]:
 		st.set_uv(Vector2((color+.5)/16.0,.5))
 		st.add_vertex(p)
@@ -32,6 +40,8 @@ func quad(a: Vector3,b: Vector3,c: Vector3,d: Vector3,color: int) -> void:
 	triangle(a,c,d,color)
 
 func box(center: Vector3,size: Vector3,color: int) -> void:
+	var outer:=inside
+	inside=center
 	var a:=center-size*.5
 	var b:=center+size*.5
 	quad(Vector3(a.x,a.y,a.z),Vector3(b.x,a.y,a.z),Vector3(b.x,b.y,a.z),Vector3(a.x,b.y,a.z),color)
@@ -40,21 +50,32 @@ func box(center: Vector3,size: Vector3,color: int) -> void:
 	quad(Vector3(b.x,a.y,a.z),Vector3(b.x,a.y,b.z),Vector3(b.x,b.y,b.z),Vector3(b.x,b.y,a.z),color)
 	quad(Vector3(a.x,b.y,a.z),Vector3(b.x,b.y,a.z),Vector3(b.x,b.y,b.z),Vector3(a.x,b.y,b.z),color)
 	quad(Vector3(a.x,a.y,b.z),Vector3(b.x,a.y,b.z),Vector3(b.x,a.y,a.z),Vector3(a.x,a.y,a.z),color)
+	inside=outer
 
 func loft(sections: Array, color: int) -> void:
 	# z, lower half width, shoulder half width, lower y, shoulder y, crown y
+	var outer:=inside
 	var rings: Array=[]
+	var centres: Array=[]
 	for s in sections:
+		centres.append(Vector3(0,(s[3]+s[5])*.5,s[0]))
 		rings.append([Vector3(-s[1],s[3],s[0]),Vector3(-s[2],s[4],s[0]),Vector3(-s[2]*.88,s[5],s[0]),Vector3(s[2]*.88,s[5],s[0]),Vector3(s[2],s[4],s[0]),Vector3(s[1],s[3],s[0])])
 	for i in range(rings.size()-1):
+		inside=(centres[i]+centres[i+1])*.5
 		for j in range(6):
 			var k: int=(j+1)%6
 			quad(rings[i][j],rings[i+1][j],rings[i+1][k],rings[i][k],color)
+	# End caps face away from the neighbouring ring.
+	inside=centres[1]
 	for j in range(1,5):
 		triangle(rings[0][0],rings[0][j],rings[0][j+1],color)
+	inside=centres[-2]
+	for j in range(1,5):
 		triangle(rings[-1][0],rings[-1][j+1],rings[-1][j],color)
+	inside=outer
 
 func wheel(radius: float, width: float) -> void:
+	inside=Vector3.ZERO
 	var n:=24
 	for i in range(n):
 		var a:=TAU*i/n
@@ -103,6 +124,8 @@ static func template(name: String,spec: Dictionary) -> Dictionary:
 	var z_rear: float=l*.36
 	var roof_w:=w*.78
 	var roof_h:=h*.96
+	# Glass panels are single quads: they face away from the middle of the cabin.
+	kit.inside=Vector3(0,(belt+roof_h)*.5,(z_front+z_rear)*.5)
 	var bl:=Vector3(-w*.93,belt,z_front)
 	var br:=Vector3(w*.93,belt,z_front)
 	var tl:=Vector3(-roof_w,roof_h,z_roof_front)
