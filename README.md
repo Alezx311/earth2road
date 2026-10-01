@@ -36,7 +36,13 @@ place on the map or paste `lat, lon`, pick the area size (0.3–5 km) and press 
 The game downloads OpenStreetMap data, builds the map and loads it. Controls and details:
 [docs/GAME.md](docs/GAME.md).
 
-Everything below is for the command line: scripted builds, BeamNG export and development.
+To export a map to BeamNG.drive, open **Maps (M)** and click **Export to BeamNG…** beside
+the map. Choose a folder and click **Export ZIP**. The window shows the current stage and
+supports cancellation; when done, use **Open folder** or **Copy ZIP path**. Each export
+gets a new subfolder, preserving earlier ZIPs. Install the ZIP manually in BeamNG's mods
+folder. The game remembers your output folder; BeamNG does not need to be installed to export.
+
+Everything below is for the command line: scripted builds, exports and development.
 
 ## Install (generator)
 
@@ -98,6 +104,11 @@ map made in the game (M → New map). `--output` must not exist yet. A level ID 
 lowercase letters, digits and `_`; by default it is `kyiv_<map id>`. `tools/export_beamng.py
 --world <folder> --output <folder>` does the same for older scripts; its `--map` takes an
 installed map ID such as `tiny`, not a path.
+
+`--optimization balanced` (default) shares identical vertices in the DAE files, merges flat
+ground (≤5 cm height error, tile edges kept exact) and gives sidewalks a simplified collision
+mesh without the curb bevel. `--optimization legacy` writes the previous unoptimized geometry.
+Per-category measurements: `reports/performance.json` (`--map`: `<output>.performance.json`).
 
 Output: the level ZIP, `artifact.json` (SHA-256, version), `acceptance.json` (status
 `pending` — structural validation is not in-game acceptance) and technical `reports/`.

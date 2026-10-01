@@ -449,7 +449,7 @@ class ExportTests(unittest.TestCase):
                 with mock.patch('akadem_maps.adapters.beamng.export.export_world', return_value={'zip': 'x.zip'}) as run, \
                         mock.patch.object(sys, 'argv', argv), mock.patch('builtins.print'):
                     export_beamng.main()
-                run.assert_called_once_with(world, Path(tmp) / 'out', overrides=None, level_id='my_level')
+                run.assert_called_once_with(world, Path(tmp) / 'out', overrides=None, level_id='my_level', optimization='balanced')
 
     def test_capture_delete_add_move_and_source_conflict(self):
         with tempfile.TemporaryDirectory() as tmp:

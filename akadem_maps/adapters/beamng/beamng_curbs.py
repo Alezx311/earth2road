@@ -19,6 +19,55 @@ HEIGHT = .035
 WIDTH = .15
 BEVEL = .008
 MAX_STEP = 2.0
+ARC_ERROR = .002
+
+
+def arc_segments(radius, error=ARC_ERROR):
+    """Segments per quadrant for a bounded circular-arc sagitta."""
+    return max(1, math.ceil(math.pi / (4 * math.acos(max(-1., 1-error/radius)))))
+
+
+def simplify_patch(patch, height):
+    """Remove collinear XY boundary stations only when their Z profile agrees.
+
+    RDP checks every discarded station against its final retained segment, so
+    errors do not accumulate. XY is locked to numerical precision; ramps and
+    lowered crossings retain their height breakpoints.
+    """
+    import numpy as np
+    def ring(coords):
+        coords = list(coords)[:-1]
+        if len(coords) < 5:
+            return coords
+        def chain(points):
+            values = np.asarray([height(x,y) for x,y in points])
+            keep = {0,len(points)-1}
+            stack = [(0,len(points)-1)]
+            while stack:
+                a,b = stack.pop()
+                if b-a < 2:
+                    continue
+                delta = values[b,:2]-values[a,:2]
+                length = float(delta@delta)
+                if length < 1e-18:
+                    keep.update(range(a,b+1))
+                    continue
+                part = values[a+1:b]
+                t = np.clip((part[:,:2]-values[a,:2])@delta/length,0,1)
+                projected = values[a]+t[:,None]*(values[b]-values[a])
+                score = np.maximum(np.linalg.norm(part[:,:2]-projected[:,:2],axis=1)/1e-9,
+                                   np.abs(part[:,2]-projected[:,2])/.002)
+                i = int(np.argmax(score))
+                if score[i] > 1:
+                    k=a+1+i
+                    keep.add(k); stack.extend(((a,k),(k,b)))
+            return [points[i] for i in sorted(keep)]
+        half = len(coords)//2
+        return chain(coords[:half+1])[:-1]+chain(coords[half:]+coords[:1])[:-1]
+    candidate = Polygon(ring(patch.exterior.coords), [ring(r.coords) for r in patch.interiors])
+    if not candidate.is_valid or candidate.is_empty or patch.symmetric_difference(candidate).area > 1e-7:
+        return patch
+    return candidate
 
 
 def _walk_sources(tiles):
@@ -32,7 +81,7 @@ def _walk_sources(tiles):
                 [beam_point(p) for p in t] for t in area['triangles']]
 
 
-def build_sidewalks(tiles, pavement=None):
+def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=None):
     tiles = list(tiles)
     pavement = pavement or Pavement.from_tiles(tiles)
     crossings = []
@@ -109,12 +158,9 @@ def build_sidewalks(tiles, pavement=None):
             audit['patches'] += 1
             # Inward round offsets fit corners without miter spikes. The 16-way
             # quarter circles have <1 mm sagitta at this profile width.
-            inner = patch.buffer(-WIDTH, join_style='round', quad_segs=16)
-            bevel_inner = patch.buffer(-BEVEL, join_style='round', quad_segs=16)
-            curb_top = bevel_inner.difference(inner)
-            bevel = patch.difference(bevel_inner)
             cache = {}
             lifts = {}
+            patch_boundary = patch.boundary
 
             def vertex(x, y, lip=False):
                 xy = (round(x, 8), round(y, 8), lip)
@@ -133,7 +179,7 @@ def build_sidewalks(tiles, pavement=None):
                     base = road_z*(1-blend)+base*blend
                 # End caps and crossings are flush; transition over one metre.
                 # The boundary lies away from asphalt at these open connections.
-                boundary_dist = pt.distance(patch.boundary)
+                boundary_dist = pt.distance(patch_boundary)
                 if road:
                     raised = 1
                 else:
@@ -153,9 +199,20 @@ def build_sidewalks(tiles, pavement=None):
                 cache[xy] = (x, y, base+lift)
                 return cache[xy]
 
-            for geom, material, lip in ((inner, 'kyiv_concrete', False),
-                                        (curb_top, 'kyiv_curb', False),
-                                        (bevel, 'kyiv_curb', True)):
+            if optimization != 'legacy':
+                patch = simplify_patch(patch, vertex)
+            inner = patch.buffer(-WIDTH, join_style='round', quad_segs=16 if optimization == 'legacy' else arc_segments(WIDTH))
+            bevel_inner = patch.buffer(-BEVEL, join_style='round', quad_segs=16 if optimization == 'legacy' else arc_segments(BEVEL))
+            curb_top = bevel_inner.difference(inner)
+            bevel = patch.difference(bevel_inner)
+
+            layers = [(mesh, inner, 'kyiv_concrete', False),
+                      (mesh, curb_top, 'kyiv_curb', False),
+                      (mesh, bevel, 'kyiv_curb', True)]
+            if collision is not None:
+                layers += [(collision, inner, 'kyiv_concrete', False),
+                           (collision, patch.difference(inner), 'kyiv_curb', False)]
+            for target, geom, material, lip in layers:
                 for pg in polygons(geom):
                     pg = shapely.segmentize(pg, MAX_STEP)
                     for tri in shapely.constrained_delaunay_triangles(pg).geoms:
@@ -166,9 +223,9 @@ def build_sidewalks(tiles, pavement=None):
                             v = vertex(x, y)
                             if lip:
                                 v = (x, y, v[2]-min(lifts[(round(x,8),round(y,8))],
-                                                  max(0, BEVEL-Point(x,y).distance(patch.boundary))))
+                                                  max(0, BEVEL-Point(x,y).distance(patch_boundary))))
                             vertices.append(v)
-                        mesh.tri(material, *vertices, up=True)
+                        target.tri(material, *vertices, up=True)
             for ring in [patch.exterior, *patch.interiors]:
                 points = list(shapely.segmentize(ring, MAX_STEP).coords)
                 for a, b in zip(points, points[1:]):
@@ -190,6 +247,13 @@ def build_sidewalks(tiles, pavement=None):
                     ba, bb = (a[0], a[1], za), (b[0], b[1], zb)
                     mesh.tri('kyiv_curb', ba, bb, vb)
                     mesh.tri('kyiv_curb', ba, vb, va)
+                    if collision is not None:
+                        ca = (a[0], a[1], za+ha)
+                        cb = (b[0], b[1], zb+hb)
+                        collision.tri('kyiv_curb', ba, bb, cb)
+                        collision.tri('kyiv_curb', ba, cb, ca)
                     audit['curb_length_m'] += math.dist(a, b)
     audit['triangles'] = mesh.count
+    audit['collision_triangles'] = collision.count if collision is not None else mesh.count
+    audit['arc_error_m'] = ARC_ERROR if optimization != 'legacy' else None
     return mesh, audit

@@ -3,6 +3,7 @@
 No Blender or Godot installation is needed to export the cached city snapshot.
 """
 from collections import defaultdict
+from array import array
 import math
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -185,7 +186,99 @@ class Mesh:
                 part.uvs[mat].append(uvs[i] if i < len(uvs) else None)
         return buckets
 
-    def write(self,path,origin=(0,0,0),uv_scales=None):
+    def write(self, path, origin=(0,0,0), uv_scales=None, *, optimization='balanced', collision=None):
+        """Stream indexed attributes; share only identical position/normal/UV tuples.
+
+        The key uses the same six decimals as the legacy writer, so indexing cannot
+        alter exported shading, texture seams or coordinates. Work is bounded to
+        one material at a time. Optional Colmesh nodes use triangle collisions.
+        """
+        if optimization not in ('balanced', 'legacy'):
+            raise ValueError('Unknown BeamNG optimization: '+str(optimization))
+        if optimization == 'legacy':
+            self._write_legacy(path, origin, uv_scales)
+            return {'triangles': self.count, 'vertices': self.count*3,
+                    'collision_triangles': 0, 'bytes': Path(path).stat().st_size}
+        uv_scales = uv_scales or {}
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        meshes = [(False, self)] + ([(True, collision)] if collision is not None else [])
+        materials = sorted({m for _, mesh in meshes for m in mesh.faces})
+        nodes = []
+        vertex_count = 0
+        with path.open('w', encoding='utf8', newline='\n') as out:
+            def line(s):
+                out.write(s+'\n')
+            def numbers(values, fmt):
+                for i in range(0, len(values), 4096):
+                    if i:
+                        out.write(' ')
+                    out.write(' '.join(fmt(v) for v in values[i:i+4096]))
+            line('<?xml version="1.0" encoding="utf-8"?>')
+            line('<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">')
+            line('<asset><created>2026-09-21T00:00:00Z</created><modified>2026-09-21T00:00:00Z</modified><unit name="meter" meter="1"/><up_axis>Z_UP</up_axis></asset>')
+            line('<library_effects>')
+            for mat in materials:
+                line(f'<effect id="{mat}-fx"><profile_COMMON><technique sid="common"><lambert><diffuse><color>0.5 0.5 0.5 1</color></diffuse></lambert></technique></profile_COMMON></effect>')
+            line('</library_effects><library_materials>')
+            for mat in materials:
+                line(f'<material id="{mat}" name="{mat}"><instance_effect url="#{mat}-fx"/></material>')
+            line('</library_materials><library_geometries>')
+            for is_collision, mesh in meshes:
+                for mat in sorted(mesh.faces):
+                    faces = mesh.faces[mat]
+                    if not faces:
+                        continue
+                    gid = f'g{len(nodes)}'
+                    name = f'Colmesh{len(nodes)}-1' if is_collision else f'part{len(nodes)}_a600'
+                    nodes.append((gid, name, mat))
+                    values = [array('d'), array('d'), array('d')]
+                    indices, lookup = array('I'), {}
+                    explicit = mesh.uvs[mat]
+                    scale = uv_scales.get(mat, 1.)
+                    ox, oy, oz = origin
+                    for i, tri in enumerate(faces):
+                        n = normal(cross(sub(tri[1],tri[0]), sub(tri[2],tri[0])))
+                        # The rounded normal is shared by all three corners.
+                        nkey = (round(n[0], 6), round(n[1], 6), round(n[2], 6))
+                        vertical, side = abs(n[2]) < .5, abs(n[0]) < abs(n[1])
+                        fixed = explicit[i] if i < len(explicit) else None
+                        for corner, p in enumerate(tri):
+                            if fixed:
+                                u, v = fixed[corner]
+                            elif vertical:
+                                u, v = (p[0] if side else p[1])*scale, p[2]*scale
+                            else:
+                                u, v = p[0]*scale, p[1]*scale
+                            key = (round(p[0]-ox, 6), round(p[1]-oy, 6), round(p[2]-oz, 6),
+                                   *nkey, round(u, 6), round(v, 6))
+                            idx = lookup.get(key)
+                            if idx is None:
+                                idx = len(lookup)
+                                lookup[key] = idx
+                                values[0].extend(key[:3]); values[1].extend(key[3:6]); values[2].extend(key[6:])
+                            indices.append(idx)
+                    vertex_count += len(lookup)
+                    del lookup
+                    line(f'<geometry id="{gid}" name="{gid}"><mesh>')
+                    for (label, stride, params), data in zip((('pos',3,'XYZ'),('normal',3,'XYZ'),('uv',2,'ST')), values):
+                        sid = f'{gid}-{label}'
+                        out.write(f'<source id="{sid}"><float_array id="{sid}-array" count="{len(data)}">')
+                        numbers(data, lambda v: f'{v:.6f}')
+                        line(f'</float_array><technique_common><accessor source="#{sid}-array" count="{len(data)//stride}" stride="{stride}">'+''.join(f'<param name="{p}" type="float"/>' for p in params)+'</accessor></technique_common></source>')
+                    line(f'<vertices id="{gid}-verts"><input semantic="POSITION" source="#{gid}-pos"/></vertices>')
+                    out.write(f'<triangles count="{len(faces)}" material="{mat}"><input semantic="VERTEX" source="#{gid}-verts" offset="0"/><input semantic="NORMAL" source="#{gid}-normal" offset="0"/><input semantic="TEXCOORD" source="#{gid}-uv" offset="0" set="0"/><p>')
+                    numbers(indices, str)
+                    line('</p></triangles></mesh></geometry>')
+            line('</library_geometries><library_visual_scenes><visual_scene id="Scene"><node id="base00" name="base00"><node id="start01" name="start01">')
+            for gid, name, mat in nodes:
+                line(f'<node id="node{gid}" name="{name}"><instance_geometry url="#{gid}"><bind_material><technique_common><instance_material symbol="{mat}" target="#{mat}"/></technique_common></bind_material></instance_geometry></node>')
+            line('</node></node></visual_scene></library_visual_scenes><scene><instance_visual_scene url="#Scene"/></scene></COLLADA>')
+        return {'triangles': self.count, 'vertices': vertex_count,
+                'collision_triangles': collision.count if collision is not None else 0,
+                'bytes': path.stat().st_size}
+
+    def _write_legacy(self,path,origin=(0,0,0),uv_scales=None):
         """One material submesh per geometry; normals and UVs explicit. Z_UP retained.
 
         UVs are world metres, scaled per material so a tileable texture keeps its

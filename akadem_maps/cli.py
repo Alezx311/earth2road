@@ -55,6 +55,7 @@ def parser():
     e.add_argument('--world',type=Path,required=True);e.add_argument('--output',type=Path,required=True)
     e.add_argument('--overrides',type=Path);e.add_argument('--offline',action='store_true')
     e.add_argument('--level-id')
+    e.add_argument('--optimization', choices=('balanced','legacy'), default='balanced', help='BeamNG geometry optimization')
     i=sub.add_parser('install',help='Copy a Godot export into a game checkout (explicit, never implicit)')
     i.add_argument('--target',choices=('godot',),required=True)
     i.add_argument('--export',type=Path,required=True);i.add_argument('--root',type=Path,default=Path.cwd())
@@ -101,7 +102,7 @@ def main(argv=None):
                     result=export_world(args.world,args.output,offline=args.offline)
                 else:
                     from .adapters.beamng.export import export_world
-                    result=export_world(args.world,args.output,overrides=args.overrides,level_id=args.level_id)
+                    result=export_world(args.world,args.output,overrides=args.overrides,level_id=args.level_id,optimization=args.optimization)
             elif args.command=='capture':
                 from .adapters.beamng.export_beamng import capture_edits
                 if args.output.exists():

@@ -37,13 +37,13 @@ def validate_level(level):
         raise ValueError('DAE materials without definition: '+', '.join(sorted(missing)[:20]))
     return result
 
-def export_world(world, output, *, overrides=None, level_id=None):
+def export_world(world, output, *, overrides=None, level_id=None, optimization='balanced'):
     world=Path(world).resolve()
     validate_world(world)
     cfg=read_json(world/'config.json')
     mid=cfg['id']
     with atomic_directory(output) as stage:
-        report=export_map(mid,stage/'mod',level_id=level_id,overrides=overrides,world_dir=world,namespace=True,package_zip=False)
+        report=export_map(mid,stage/'mod',level_id=level_id,overrides=overrides,world_dir=world,namespace=True,package_zip=False,optimization=optimization)
         level=stage/'mod/levels'/report['level_id']
         info=read_json(level/'info.json')
         info['version']=__version__
@@ -57,6 +57,7 @@ def export_world(world, output, *, overrides=None, level_id=None):
         write_json(level/'info.json',info)
         technical=stage/'reports'
         technical.mkdir()
+        shutil.move(str(stage/'mod.performance.json'),str(technical/'performance.json'))
         for name in ('kyiv-manifest.json','kyiv-baseline.json','placement-corrections.json','building-conflicts.json'):
             shutil.move(str(level/name),str(technical/name))
         write_json(technical/'world.json',read_json(world/'world.json'))
@@ -87,14 +88,21 @@ def validate_export(source):
         with tempfile.TemporaryDirectory() as temp:
             with zipfile.ZipFile(source) as archive:
                 roots=set()
+                plate_roots=set()
                 for name in archive.namelist():
                     contained(temp,name)
                     parts=name.split('/')
+                    # Ukrainian exports include this level's generated licence plates.
+                    if len(parts)>=5 and parts[:3]==['vehicles','common','licenseplates']:
+                        plate_roots.add(parts[3])
+                        continue
                     if parts[0]!='levels' or len(parts)<3:
                         raise ValueError('ZIP member outside levels/<id>/: '+name)
                     roots.add(parts[1])
                 if len(roots)!=1:
                     raise ValueError('Expected exactly one level')
+                if plate_roots-roots:
+                    raise ValueError('Licence plates belong to a different level')
                 if archive.testzip():
                     raise ValueError('Corrupt ZIP member')
                 archive.extractall(temp)

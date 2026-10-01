@@ -1,5 +1,107 @@
 # TerraDrive handoff
 
+## 2026-10-01 — BeamNG geometry optimization (`--optimization balanced|legacy`)
+
+Started by Codex (ran out of quota mid-benchmark), finished by Claude.
+
+- `balanced` is the default for `terra-drive export`, `tools/export_beamng.py` and the GUI tool;
+  `legacy` keeps the previous writer and geometry.
+- `Mesh.write` streams indexed COLLADA: only identical (position, normal, UV) tuples at the
+  legacy six decimals are shared, so expanded triangles equal the legacy output exactly.
+- `simplify_ground` (`adapters/beamng/optimization.py`) replaces interior vertex fans that lie
+  in a ≤5 cm slab; boundary/tile/material edges stay exact, uncertain topology is kept.
+  Ground is now its own `kyiv_ground` chunk set instead of part of `kyiv_surface`.
+- Sidewalks: collinear boundary stations removed only when the height profile agrees (RDP,
+  2 mm Z); arc segment count from a 2 mm sagitta bound; a separate `Colmesh-1` collision mesh
+  without the bevel. Walk cells with no collider triangles get `collisionType: None`
+  (previously an empty `Collision Mesh`).
+- Stock lamp/highway-lamp/guardrail instances switch to `Collision Mesh` (Codex: those shapes
+  ship a Colmesh-1). **Not verified in BeamNG** — check lamps still collide in-game.
+- `performance.json` (per-category triangles/vertices/bytes, stage timings) goes to
+  `reports/` (world/GUI export) or beside `--map` output. It is outside the deterministic ZIP.
+- Claude: removed unused `MeshSpool`/`sink` plumbing; sped up the indexed writer's key
+  (normal rounded once per triangle). ZIP content was byte-identical before/after this change.
+
+Checks (tiny, `tools/export_beamng.py --map tiny`):
+
+| | legacy | balanced |
+|---|---|---|
+| collision triangles (generated) | 109 467 | 78 488 (−28%) |
+| DAE vertices | 330 777 | 180 509 (−45%) |
+| unpacked level | 28 MB | 17 MB |
+| ZIP | 3.81 MB | 3.71 MB |
+| export time | 20 s | 22 s (sidewalk stage +2–3 s) |
+
+- BeamNG tests (`test_beamng_optimization`, `_export`, `_curbs`, `_gui`): 52 OK.
+- Full `.venv/Scripts/python.exe -m unittest discover -s tests`: 331 run, OK (1 skipped),
+  343.5 s. Log: `logs/beamng-opt-unittest.log`.
+- No BeamNG runtime test. Codex's interrupted attempt left `out/beamng-stage-a362…`
+  (ignored, safe to delete).
+
+Real map `kyiv_shuliavka` (sequential runs, same machine; `out/cmp-shul-*`, `logs/cmp-shul-*`):
+
+| | legacy | balanced |
+|---|---|---|
+| collision triangles (generated) | 13.55 M | 10.84 M (−20%) |
+| DAE vertices | 43.4 M | 42.7 M (−1.6%) |
+| DAE bytes / unpacked | 3.81 GB / 3.7 GB | 3.80 GB / 3.7 GB |
+| ZIP | 595 MB | 685 MB (**+15%**) |
+| export time | 44 min | 52 min (**+18%**; sidewalks 32→38 min) |
+
+- The tiny-map gains mostly do not carry over. Ground reduction is ~0.4% here
+  (1.657 M → 1.651 M triangles) versus 18% on tiny. The sidewalk collision mesh
+  (4.0 M triangles) adds more vertices than indexing saves (20.1 M → 22.1 M), and the ZIP
+  grows. The real win is −20% static collision triangles (sidewalk visual 6.70 M → collision 4.00 M).
+- Before making `balanced` the default for large maps, consider: dropping UV/normal
+  attributes from Colmesh geometry, finding out why `simplify_ground` rejects real fans
+  (probably fan size >12 or ear-clipping dropping collinear points), and the export-time regression.
+- Remaining: balanced sidewalks are slower (height evaluation of all boundary stations in
+  `simplify_patch`, extra collision layers); in-game FPS/physics not measured.
+
+## 2026-10-01 — BeamNG ZIP export from the map menu
+
+- Maps now has an **Export to BeamNG…** action beside each installed map. The modal
+  selects/persists an output folder, shows stages and elapsed time, supports cancellation,
+  and offers Open folder / Copy ZIP path on success. English and Ukrainian; ZIP only,
+  no BeamNG installation or launch. Exporting does not load or activate the selected map.
+- `tools/export_beamng_gui.py` exports the installed snapshot through the existing adapter,
+  checks the network hash, namespaces resources, separates technical reports, validates the
+  ZIP and publishes a unique run directory atomically. It preserves the installed name and
+  attribution rather than labelling every map as Kyiv. Sources and earlier exports stay intact.
+  JSONL events and per-run logs live under ignored `logs/`; the default output is `out/beamng`.
+- The adapter's optional `emit` callback reports actual stages without invented percentages.
+  Process ownership/cancellation reuses generator lifecycle handling. The UI waits for process
+  exit before accepting a terminal result; a completed export wins a late cancel request.
+- Fixed a validator mismatch exposed by the new path: Ukrainian ZIPs contain generated
+  `vehicles/common/licenseplates/<level_id>/` artwork. ZIP validation now accepts that
+  level's plates while rejecting other level IDs and unrelated vehicle paths.
+
+Checks:
+- `tests.test_beamng_export`: 32 passed. New `tests.test_beamng_gui`: 6 passed, including
+  real reproducible ZIPs, Unicode/spaced paths, unchanged sources, repeat exports, missing
+  data/hash mismatch, cancellation/failure cleanup, packaging failure and bad destinations.
+- Full `.venv/Scripts/python.exe -m unittest discover -s tests -v`: 327 run in 349.945 s;
+  324 passed, 1 skipped, 1 failure and 1 error under the sandbox. The two failures were
+  existing Godot subprocess checks (vehicle availability native crash; asset smoke timeout).
+  Both passed individually outside the sandbox (0.466 s / 0.635 s). Full-run log:
+  `logs/beamng-gui-unittest.log`. Do not describe the original full run as passing.
+- Godot import passed. `validate_beamng_export.gd --runtime` passed headless and in rendered
+  1280×720 / 1920×1080 windows: tiny ZIP, retry after missing data, immediate cancellation,
+  partial JSONL reads, search filtering, focus/Escape and duplicate-start prevention.
+  The final 1920×1080 run also checks removal of the export UI stops its child process.
+  EN/UK screenshots under `logs/qa-beamng-ui/` were inspected.
+- Follow-up: folder chooser opening/selection and final styling passed at 1280×720;
+  the 6 Python tests passed again after strengthening cancellation coverage to interrupt
+  the actual geometry stage rather than mocking the exporter entry point.
+- Existing `validate_ui.gd --offline` on tiny passed outside the sandbox; Godot's dummy
+  renderer printed RID/mesh warnings but the UI assertions completed with no failures.
+- Failed experiments: first headless launch without an explicit writable log crashed in
+  Godot before the script; retry with an explicit log passed. The existing UI harness could
+  not write its `user://` fixture inside the sandbox and stalled; its owned test process was
+  stopped and the same harness passed outside the sandbox. No user's game was stopped.
+- Source publication check passed. No BeamNG runtime test or real-map geometry certification
+  was performed for this UI change.
+
 ## 2026-09-30 — BeamNG export from a user's report
 
 Report: "`terra-drive` doesn't exist" and `tools/export_beamng.py` "says the map ID/level ID

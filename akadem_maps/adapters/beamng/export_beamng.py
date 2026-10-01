@@ -265,9 +265,9 @@ def building_mesh(building, facade, roof):
     return mesh
 
 
-def tile_meshes(tile, sidewalks=True):
+def tile_meshes(tile, sidewalks=True, ground=True):
     surface, paint = Mesh(), Mesh()
-    for tri in tile.get('ground', []):
+    for tri in tile.get('ground', []) if ground else []:
         surface.tri('kyiv_ground', *(beam_point(p) for p in tri), up=True)
     for tri in tile.get('parking', []):
         surface.tri('kyiv_asphalt_worn', *(beam_point(p) for p in tri), up=True)
@@ -427,12 +427,14 @@ def spawn_sphere(name, record):
                                         math.sin(heading), math.cos(heading), 0, 0, 0, 1])
 
 
-def static_mesh(level, level_id, name, mesh, origin, collision=True, parent='KyivGenerated'):
+def static_mesh(level, level_id, name, mesh, origin, collision=True, parent='KyivGenerated', *, optimization='balanced', collision_mesh=None, metrics=None, category='props'):
     relative = f'art/shapes/{name}.dae'
-    mesh.write(level / relative, origin, uv_scales=UV)
+    stats = mesh.write(level / relative, origin, uv_scales=UV, optimization=optimization, collision=collision_mesh)
+    if metrics is not None:
+        metrics.add(category, stats, collision)
     return scene_object(name, 'TSStatic', parent, shapeName=f'/levels/{level_id}/{relative}', position=list(origin),
                         rotationMatrix=[1, 0, 0, 0, 1, 0, 0, 0, 1], scale=[1, 1, 1],
-                        collisionType='Visible Mesh Final' if collision else 'None', decalType='Visible Mesh',
+                        collisionType=('Collision Mesh' if collision_mesh is not None else 'Visible Mesh Final') if collision else 'None', decalType='Visible Mesh',
                         meshCulling=True, useInstanceRenderData=True, canSaveDynamicFields=True)
 
 
@@ -563,7 +565,7 @@ def canopy_mesh(centre, angle):
     return mesh
 
 
-def fuel_canopies(level, level_id, pois, occupied, counts, corridors=None):
+def fuel_canopies(level, level_id, pois, occupied, counts, corridors=None, *, optimization='balanced', metrics=None):
     """One canopy per fuel quick-travel point that has a clear forecourt."""
     objects = []
     for poi in pois:
@@ -585,7 +587,7 @@ def fuel_canopies(level, level_id, pois, occupied, counts, corridors=None):
             continue
         mesh = canopy_mesh(centre, poi.get('angle', 0))
         objects.append(static_mesh(level, level_id, stable_id('kyiv_canopy', poi['id']), mesh, centre,
-                                   collision=False, parent='KyivProps'))
+                                   collision=False, parent='KyivProps', optimization=optimization, metrics=metrics))
         counts['fuel_canopies'] += 1
     return objects
 
@@ -617,7 +619,7 @@ def bridge_rails(tile, tileid):
     return result
 
 
-def road_signs(level, level_id, tiles, plates, corridors=None):
+def road_signs(level, level_id, tiles, plates, corridors=None, *, optimization='balanced', metrics=None):
     """Posted signs come straight from OSM tags in the snapshot."""
     meshes, objects, counts = {}, [], Counter()
     for tileid, tile in tiles:
@@ -629,7 +631,9 @@ def road_signs(level, level_id, tiles, plates, corridors=None):
             front, back, shape = plates[key]
             if front not in meshes:
                 name = 'kyiv_signface_' + front.removeprefix('kyiv_sign_')
-                sign_mesh(front, back, shape).write(level / f'art/shapes/{name}.dae', (0, 0, 0), uv_scales=UV)
+                stats = sign_mesh(front, back, shape).write(level / f'art/shapes/{name}.dae', (0, 0, 0), uv_scales=UV, optimization=optimization)
+                if metrics is not None:
+                    metrics.add('sign_assets', stats)
                 meshes[front] = f'/levels/{level_id}/art/shapes/{name}.dae'
             x, y, z = beam_point(sign['position'])
             base = (x, y, z - SIGN_PLATE_HEIGHT)
@@ -1038,7 +1042,18 @@ def deterministic_zip(root, path):
 GROUPS = ('KyivGenerated', 'KyivNavigation', 'KyivProps', 'KyivSignals', 'KyivSky', 'KyivManual')
 
 
-def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True):
+def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True, emit=None, optimization='balanced'):
+    from .optimization import ExportMetrics, simplify_ground
+    if optimization not in ('balanced', 'legacy'):
+        raise ValueError('Unknown BeamNG optimization: '+str(optimization))
+    metrics = ExportMetrics(optimization)
+    def stage_event(stage):
+        metrics.enter(stage)
+        if emit:
+            emit('stage', stage=stage)
+    def write_static(*args, **kwargs):
+        return static_mesh(*args, **kwargs, optimization=optimization, metrics=metrics)
+    stage_event('prepare')
     lift = VERTICAL_OFFSET if lift is None else float(lift)
     if not re.fullmatch('[a-z0-9_]+', mid):
         hint = (' (that looks like a folder: export a world folder with --world)'
@@ -1082,6 +1097,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             spawn_points.append({'objectname': 'spawn_' + poi['id'], 'name': poi['title'],
                                  'translationId': poi['title']})
 
+        stage_event('geometry')
         roads, lanes, location, roadstats, _elevation = road_network(index, net)
         objects += roads
         sig, sigaudit = signals(index, lanes)
@@ -1113,17 +1129,30 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             sources[str(tilefile.relative_to(source_root))] = sha(tilefile)
             tiles.append((tileid, tile))
             origin = (x0 + size / 2, y0 + size / 2, 0)
-            surface, paint = tile_meshes(tile, sidewalks=False)
+            surface, paint = tile_meshes(tile, sidewalks=False, ground=optimization == 'legacy')
+            if optimization != 'legacy':
+                ground_faces, ground_audit = simplify_ground([tuple(beam_point(p) for p in t) for t in tile.get('ground', [])])
+                counts['ground_input_triangles'] += ground_audit['input_triangles']
+                counts['ground_output_triangles'] += ground_audit['output_triangles']
+                ground_mesh = Mesh()
+                for tri in ground_faces:
+                    ground_mesh.tri('kyiv_ground', *tri, up=True)
+                for (ix, iy), part in sorted(ground_mesh.chunks(SURFACE_CELL).items()):
+                    cell_origin = ((ix+.5)*SURFACE_CELL, (iy+.5)*SURFACE_CELL, 0.)
+                    objects.append(write_static(level, level_id, stable_id('kyiv_ground', (tileid,ix,iy)), part, cell_origin, category='ground'))
+                    counts['surface_triangles'] += part.count
+                    counts['surface_chunks'] += 1
+                del ground_faces, ground_mesh
             if paint.count:
-                objects.append(static_mesh(level, level_id, stable_id('kyiv_paint', tileid),
-                                           paint, origin, False))
+                objects.append(write_static(level, level_id, stable_id('kyiv_paint', tileid),
+                                           paint, origin, False, category='markings'))
                 counts['paint_triangles'] += paint.count
                 counts['degenerate_removed'] += paint.dropped
             if surface.count:
                 for (ix, iy), part in sorted(surface.chunks(SURFACE_CELL).items()):
                     cell_origin = ((ix + 0.5) * SURFACE_CELL, (iy + 0.5) * SURFACE_CELL, 0.0)
-                    objects.append(static_mesh(level, level_id, stable_id('kyiv_surface', (tileid, ix, iy)),
-                                               part, cell_origin, True))
+                    objects.append(write_static(level, level_id, stable_id('kyiv_surface', (tileid, ix, iy)),
+                                               part, cell_origin, True, category='surfaces'))
                     counts['surface_triangles'] += part.count
                     counts['surface_chunks'] += 1
                 counts['degenerate_removed'] += surface.dropped
@@ -1135,12 +1164,25 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         from akadem_maps.adapters.beamng.beamng_corridors import bridge_rail_objects, Corridors
         from akadem_maps.adapters.beamng.beamng_curbs import build_sidewalks
         corridors = Corridors(tiles)
+        stage_event('sidewalks')
         print('  continuous low sidewalks', flush=True)
-        walkmesh, curb_audit = build_sidewalks(tiles, corridors.pavement)
-        for (ix, iy), part in sorted(walkmesh.chunks(SURFACE_CELL).items()):
+        walkcollision = Mesh() if optimization != 'legacy' else None
+        walkmesh, curb_audit = build_sidewalks(tiles, corridors.pavement, optimization=optimization, collision=walkcollision)
+        collision_parts = walkcollision.chunks(SURFACE_CELL) if walkcollision is not None else {}
+        del walkcollision
+        # A collision triangle can have a different centroid than its visual
+        # counterpart: attach every collision bucket, including collision-only cells.
+        walk_parts = walkmesh.chunks(SURFACE_CELL)
+        for key in collision_parts:
+            walk_parts.setdefault(key, Mesh())
+        for ix, iy in sorted(walk_parts):
+            part = walk_parts.pop((ix,iy))
             cell_origin = ((ix+.5)*SURFACE_CELL, (iy+.5)*SURFACE_CELL, 0)
-            objects.append(static_mesh(level, level_id, stable_id('kyiv_walk', (ix, iy)),
-                                       part, cell_origin, True))
+            collider = collision_parts.pop((ix,iy), None)
+            # Visual-only cells (bevel slivers whose colliders fall next door) get no collision.
+            objects.append(write_static(level, level_id, stable_id('kyiv_walk', (ix, iy)),
+                                       part, cell_origin, optimization == 'legacy' or collider is not None,
+                                       collision_mesh=collider, category='sidewalks'))
             counts['surface_triangles'] += part.count
             counts['surface_chunks'] += 1
         del walkmesh
@@ -1150,6 +1192,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         print(f'  height audit nodes={height_audit["nodes"]} over_50cm={height_audit["over_50cm"]} '
               f'over_2m={height_audit["over_2m"]} max={height_audit["max_abs_m"]}m', flush=True)
 
+        stage_event('buildings')
         building_items = sorted(building_parts.items())
         print(f'  buildings {len(building_items)}', flush=True)
         # Whole buildings merge into 250 m cells by footprint centre: thousands of
@@ -1177,13 +1220,16 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             counts['facade_' + facade.removeprefix('kyiv_fac_')] += 1
             if index_n % 500 == 0 or index_n == len(building_items):
                 print(f'  buildings {index_n}/{len(building_items)}', flush=True)
-        for (ix, iy), mesh in sorted(building_cells.items()):
+        for ix, iy in sorted(building_cells):
+            mesh = building_cells.pop((ix,iy))
             if not mesh.count:
                 continue
             cell_origin = ((ix + 0.5) * SURFACE_CELL, (iy + 0.5) * SURFACE_CELL, 0.0)
-            objects.append(static_mesh(level, level_id, stable_id('kyiv_buildings', (ix, iy)), mesh, cell_origin))
+            objects.append(write_static(level, level_id, stable_id('kyiv_buildings', (ix, iy)), mesh, cell_origin, category='buildings'))
             counts['building_chunks'] += 1
 
+        del building_parts, building_items, building_cells
+        stage_event('dressing')
         materials = {**surface_materials(), **tree_materials(), **fixture_materials(level, level_id),
                      **panel_facade_materials(level, level_id)}
         # Sign faces are Ukrainian (DSTU) artwork; other regions get no posted signs
@@ -1199,14 +1245,14 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         write_json(level / 'art/kyiv/main.materials.json', materials)
         write_json(level / 'art/forest/managedItemData.json', forest_item_data())
 
-        signobjects, signcounts = road_signs(level, level_id, tiles, plates, corridors)
+        signobjects, signcounts = road_signs(level, level_id, tiles, plates, corridors, optimization=optimization, metrics=metrics)
         objects += signobjects
         counts.update(signcounts)
         lamps = street_lights(roads, corridors, counts)
         objects += lamps
         counts['street_lamps'] = len(lamps)
         objects += fuel_canopies(level, level_id, index.get('pois', []),
-                                 lambda p: corridors.occupied(p, margin=0.6, roads_only=True), counts, corridors)
+                                 lambda p: corridors.occupied(p, margin=0.6, roads_only=True), counts, corridors, optimization=optimization, metrics=metrics)
 
         instances, vegcounts = vegetation(tiles)
         before = len(instances)
@@ -1232,7 +1278,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         objects.append(scene_object('KyivForest', 'Forest', 'MissionGroup'))
 
         head = signal_mesh()
-        head.write(level / 'art/shapes/kyiv_signal_head.dae', (0, 0, 0), uv_scales=UV)
+        head.write(level / 'art/shapes/kyiv_signal_head.dae', (0, 0, 0), uv_scales=UV, optimization=optimization)
         for edge, post, top, clear, heads in signal_masts(sig, lanes, corridors, counts):
             if not clear:
                 corridors.audit.append({'kind': 'signal_mast', 'source': edge, 'position': post,
@@ -1247,7 +1293,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                 beam_box(mast, (post[0], post[1], top), (post[0] + ux * (span + .5), post[1] + uy * (span + .5), top),
                          .12, .12, 'kyiv_metal')
             # A post that found no clear kerb gets no collision rather than a wall on the road.
-            objects.append(static_mesh(level, level_id, stable_id('kyiv_signal_mast', edge), mast,
+            objects.append(write_static(level, level_id, stable_id('kyiv_signal_mast', edge), mast,
                                        post, clear, parent='KyivProps'))
             for s, (x, y, z), (dx, dy) in heads:
                 obj = prop(s['name'], f'/levels/{level_id}/art/shapes/kyiv_signal_head.dae',
@@ -1265,6 +1311,15 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         counts.update({'spawn_points': len(spawn_points), 'nav_lanes': len(lanes), 'signal_instances': len(sig['instances']),
                        'signal_sequences': len(sig['sequences']), 'forest_instances': len(instances),
                        'scene_objects': len(objects)})
+
+        # These stock shapes ship a dedicated Colmesh-1. Visible Mesh Final
+        # unnecessarily feeds all lamp render details to static collision.
+        if optimization != 'legacy':
+            stock_colliders = {PROP_SHAPES[k] for k in ('street_lamp', 'highway_lamp', 'guardrail')}
+            for obj in objects:
+                if obj.get('shapeName') in stock_colliders and obj.get('collisionType') == 'Visible Mesh Final':
+                    obj['collisionType'] = 'Collision Mesh'
+                    counts['stock_collision_mesh_instances'] += 1
 
         for obj in objects:
             shift_object(obj, lift)
@@ -1331,7 +1386,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             if file.exists():
                 attribution += '\n' + file.read_text(encoding='utf8')
         (level / 'ATTRIBUTION.txt').write_text(attribution, encoding='utf8')
-        report = {'format_version': VERSION, 'map': mid, 'level_id': level_id, 'counts': dict(counts),
+        report = {'format_version': VERSION, 'map': mid, 'level_id': level_id, 'counts': dict(counts), 'optimization': optimization,
                   'source_files': sources, 'coordinate_transform': 'BeamNG(x,y,z) = World(x,-z,y+vertical_offset)',
                   'vertical_offset': lift,
                   'sumo_location': location, 'sumo_center_offset': index['offset'],
@@ -1365,10 +1420,13 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                    'note':'Buildings preserved unchanged at user request; conflicts are deferred.'})
         if errors:
             raise ValueError(f'{len(errors)} invalid building footprints: {errors[:3]}')
+        stage_event('validate')
         validate_level(level)
         stage.rename(output)
         if package_zip:
+            stage_event('package')
             deterministic_zip(output, output.parent / (output.name + '.zip'))
+        write_json(output.parent / (output.name + '.performance.json'), metrics.report())
         return report
     except BaseException:
         # Only remove the temporary directory allocated by this invocation.
@@ -1430,6 +1488,7 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--level-id')
     parser.add_argument('--overrides', type=Path)
+    parser.add_argument('--optimization', choices=('balanced', 'legacy'), default='balanced')
     parser.add_argument('--vertical-offset', type=float, default=VERTICAL_OFFSET,
                         help='Raise the whole level by this many metres (0 keeps the snapshot datum)')
     parser.add_argument('--capture-edits', type=Path, metavar='SAVED_LEVEL')
@@ -1450,9 +1509,9 @@ def main():
         if args.vertical_offset != VERTICAL_OFFSET:
             parser.error('--vertical-offset applies to installed map ids, not to --world exports')
         from akadem_maps.adapters.beamng.export import export_world
-        result = export_world(world, args.output, overrides=args.overrides, level_id=args.level_id)
+        result = export_world(world, args.output, overrides=args.overrides, level_id=args.level_id, optimization=args.optimization)
     else:
-        result = export_map(args.map, args.output, args.level_id, args.overrides, lift=args.vertical_offset)
+        result = export_map(args.map, args.output, args.level_id, args.overrides, lift=args.vertical_offset, optimization=args.optimization)
     print(json.dumps(result,
                      ensure_ascii=True, indent=2))
 

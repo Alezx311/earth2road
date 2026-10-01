@@ -8,6 +8,7 @@ signal chosen(id: String)
 signal closed
 
 const LocationPicker = preload("res://scripts/location_picker.gd")
+const BeamngExport = preload("res://scripts/beamng_export.gd")
 const I18n = preload("res://scripts/i18n.gd")
 const NAME_RE := "\"name\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\""
 const Ui = preload("res://scripts/ui_theme.gd")
@@ -105,7 +106,10 @@ func build() -> void:
 	body.add_child(list)
 	map_rows.clear()
 	for m in available():
+		var row := HBoxContainer.new()
+		list.add_child(row)
 		var b := Ui.button(m.name + (tr("   ·   current") if m.id == current else ""), func(): chosen.emit(m.id))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.clip_text = true
@@ -113,7 +117,8 @@ func build() -> void:
 		b.set_meta("search", (m.name + " " + m.id).to_lower())
 		if m.id == current:
 			b.add_theme_color_override("font_color", Ui.ACCENT)
-		list.add_child(b)
+		row.add_child(b)
+		row.add_child(Ui.button("Export to BeamNG…", func(): open_export(m.id, m.name)))
 		map_rows.append(b)
 	var empty := Ui.label("No maps found. Try another search or create a map.", 20, Ui.MUTED, true)
 	empty.name = "Empty"
@@ -133,6 +138,7 @@ func filter_maps(value: String) -> void:
 	for row in map_rows:
 		# Godot's `"" in text` is false, so an empty query must match explicitly.
 		row.visible = needle == "" or needle in str(row.get_meta("search"))
+		row.get_parent().visible = row.visible
 		if row.visible: found += 1
 	list.get_node("Empty").visible = found == 0
 
@@ -140,6 +146,18 @@ func open_picker() -> void:
 	content.visible = false
 	picker = LocationPicker.new()
 	picker.generated.connect(func(id: String): chosen.emit(id))
+	picker.back.connect(func():
+		picker.queue_free()
+		picker = null
+		content.show()
+		search.grab_focus.call_deferred())
+	add_child(picker)
+
+func open_export(id: String, title: String) -> void:
+	content.hide()
+	picker = BeamngExport.new()
+	picker.map_id = id
+	picker.map_title = title
 	picker.back.connect(func():
 		picker.queue_free()
 		picker = null
