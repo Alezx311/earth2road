@@ -8,6 +8,7 @@ The substrate is not the road surface and must never conceal missing road meshes
 import json
 import math
 import struct
+import uuid
 
 
 def write_substrate(level, level_id, bounds, minimum_z):
@@ -34,8 +35,47 @@ def write_substrate(level, level_id, bounds, minimum_z):
 # --- 'terrain' optimization: ground as a native heightmap ---------------------------
 
 SINK = .05            # terrain stays this far below every road/sidewalk/green surface
-GROUND_TEXTURE = '/assets/materials/terrain/grass/groundmesh_grass2/groundmesh_grass_b.color.png'
-GROUND_DETAIL = '/assets/materials/tileable/soil/m_dirt/t_gm_dirt_detail.png'
+# BeamNG 0.39 terrain materials are PBR (base/detail/macro sets, as in the stock levels);
+# the old diffuseMap fields render as a flat default. Textures are the shared game assets.
+GRASS = '/assets/materials/terrain/grass/t_grass_01/t_grass_01_'
+MACRO = '/assets/materials/terrain/grass/t_macro_grass/t_macro_grass_'
+
+
+# Base maps are per-level colour maps in the stock levels (the shared detail and macro
+# sets are grey modulators), so the level gets small flat base maps of its own: the
+# dry-grass albedo of the kyiv_ground mesh, a flat normal, matte roughness, full AO.
+BASE_MAPS = {'b': (118, 112, 78), 'nm': (128, 128, 255), 'r': (235, 235, 235), 'h': (128, 128, 128), 'ao': (255, 255, 255)}
+
+
+BASE_SIZE = 256     # must equal the texture set's baseTexSize, or the game drops the map
+
+
+def flat_png(path, rgb, size=BASE_SIZE):
+    import zlib
+    row = b'\x00'+bytes(rgb)*size
+    def chunk(kind, data):
+        return struct.pack('>I', len(data))+kind+data+struct.pack('>I', zlib.crc32(kind+data) & 0xffffffff)
+    path.write_bytes(b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+                     +chunk(b'IDAT', zlib.compress(row*size, 9))+chunk(b'IEND', b''))
+
+
+def ground_material(name, extent, base):
+    """Grass TerrainMaterial: own flat base maps, shared t_grass_01 detail and t_macro_grass macro."""
+    material = {'name': name, 'internalName': name, 'class': 'TerrainMaterial',
+                'persistentId': str(uuid.uuid5(uuid.NAMESPACE_URL, 'terradrive-terrain/'+name)),
+                'annotation': 'GRASS', 'groundmodelName': 'DIRT',
+                'detailDistances': [0, 0, 50, 70], 'detailDistAtten': [0, .9],
+                'macroDistances': [0, 0, 400, 8000], 'macroDistAtten': [.35, 1], 'detailSize': 2,
+                'baseColorDetailStrength': [.4, 0], 'normalDetailStrength': [.7, .2],
+                'roughnessDetailStrength': [.9, .7], 'baseColorMacroStrength': [.1, .4],
+                'normalMacroStrength': [.4, 1.1], 'roughnessMacroStrength': [.9, .9]}
+    for channel, suffix in (('baseColor', 'b'), ('normal', 'nm'), ('roughness', 'r'), ('height', 'h'), ('ao', 'ao')):
+        material[f'{channel}DetailTex'] = f'{GRASS}{suffix}.png'
+        material[f'{channel}MacroTex'] = f'{MACRO}{suffix}.png'
+        material[f'{channel}MacroTexSize'] = 50
+        material[f'{channel}BaseTex'] = f'{base}_{suffix}.png'
+        material[f'{channel}BaseTexSize'] = extent
+    return material
 
 
 def terrain_grid(bounds, max_size=4096):
@@ -159,14 +199,18 @@ class GroundTerrain:
                          +bytes(self.size*self.size)+struct.pack('<I', 1)+bytes([len(encoded)])+encoded)
         folder = level/'art/terrains'
         folder.mkdir(parents=True, exist_ok=True)
-        (folder/'main.materials.json').write_text(json.dumps({name: {
-            'name': name, 'class': 'TerrainMaterial', 'internalName': name,
-            'diffuseMap': GROUND_TEXTURE, 'diffuseSize': 11, 'detailMap': GROUND_DETAIL,
-            'detailSize': 2, 'detailDistance': 50, 'groundmodelName': 'DIRT'}}, indent=2), encoding='utf8')
+        texture_set = level_id+'_terrain_textures'
+        for suffix, rgb in BASE_MAPS.items():
+            flat_png(folder/f'{name}_base_{suffix}.png', rgb)
+        (folder/'main.materials.json').write_text(json.dumps({
+            name: ground_material(name, self.size*self.square, f'/levels/{level_id}/art/terrains/{name}_base'),
+            texture_set: {'name': texture_set, 'class': 'TerrainMaterialTextureSet',
+                          'baseTexSize': [BASE_SIZE, BASE_SIZE], 'detailTexSize': [1024, 1024], 'macroTexSize': [1024, 1024]}},
+            indent=2), encoding='utf8')
         stats = {'size': self.size, 'square_m': self.square, 'max_height_m': max_height,
                  'step_mm': round(1000*max_height/65536, 3), 'bytes': path.stat().st_size,
                  'ground_triangles': self.ground_triangles, 'cap_triangles': self.cap_triangles}
         obj = dict(name='KyivGroundTerrain', class_='TerrainBlock', terrainFile=f'/levels/{level_id}/ground.ter',
                    position=[self.x0, self.y0, base], squareSize=self.square, maxHeight=max_height,
-                   baseTexSize=1024, lightMapSize=1024, castShadows=True)
+                   materialTextureSet=texture_set, baseTexSize=1024, lightMapSize=1024, castShadows=True)
         return obj, stats
