@@ -125,6 +125,16 @@ class OptimizedGeometry(unittest.TestCase):
             stored = int.from_bytes(payload[5+2*(50*stats['size']+20):5+2*(50*stats['size']+20)+2], 'little')
             self.assertAlmostEqual(obj['position'][2]+stored*obj['maxHeight']/65536, 2.0, delta=.01)
 
+    def test_terrain_clamps_height_spikes(self):
+        terrain = GroundTerrain([0, 0, 200, 200])
+        terrain.add_ground([((0, 0, 1), (200, 0, 1), (200, 200, 3)), ((0, 0, 1), (200, 200, 3), (0, 200, 3))])
+        terrain.add_ground([((50, 50, 900), (51, 50, 900), (50, 51, 900))])    # source spike
+        with tempfile.TemporaryDirectory() as tmp:
+            obj, stats = terrain.write(Path(tmp), 'kyiv_test')
+        self.assertGreater(stats['clamped_cells'], 0)
+        self.assertLessEqual(obj['maxHeight'], 16)
+        self.assertLess(stats['step_mm'], .5)
+
     def test_ground_reduction_keeps_boundary_and_respects_height_bound(self):
         ring = [(math.cos(i*math.tau/6),math.sin(i*math.tau/6),0) for i in range(6)]
         for height, reduced in ((.02,True),(.5,False)):

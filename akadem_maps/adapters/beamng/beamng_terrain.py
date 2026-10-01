@@ -35,6 +35,7 @@ def write_substrate(level, level_id, bounds, minimum_z):
 # --- 'terrain' optimization: ground as a native heightmap ---------------------------
 
 SINK = .05            # terrain stays this far below every road/sidewalk/green surface
+OUTLIER_MARGIN = 5.   # metres kept beyond the 0.01–99.99 % height percentiles
 # BeamNG 0.39 terrain materials are PBR (base/detail/macro sets, as in the stock levels);
 # the old diffuseMap fields render as a flat default. Textures are the shared game assets.
 GRASS = '/assets/materials/terrain/grass/t_grass_01/t_grass_01_'
@@ -187,6 +188,12 @@ class GroundTerrain:
     def write(self, level, level_id):
         import numpy as np
         h = self.heights()
+        # Source spikes (a few cells at −2000 m or +150 m in real snapshots) would stretch
+        # maxHeight and the 16-bit step to centimetres; clamp to the robust range.
+        lo, hi = np.percentile(h, [.01, 99.99])
+        lo, hi = float(lo)-OUTLIER_MARGIN, float(hi)+OUTLIER_MARGIN
+        clamped = int(((h < lo) | (h > hi)).sum())
+        h = np.clip(h, lo, hi)
         base = math.floor(float(h.min()))-1
         top = float(h.max())-base
         max_height = float(max(16, math.ceil(top+1)))
@@ -209,7 +216,8 @@ class GroundTerrain:
             indent=2), encoding='utf8')
         stats = {'size': self.size, 'square_m': self.square, 'max_height_m': max_height,
                  'step_mm': round(1000*max_height/65536, 3), 'bytes': path.stat().st_size,
-                 'ground_triangles': self.ground_triangles, 'cap_triangles': self.cap_triangles}
+                 'ground_triangles': self.ground_triangles, 'cap_triangles': self.cap_triangles,
+                 'clamped_cells': clamped}
         obj = dict(name='KyivGroundTerrain', class_='TerrainBlock', terrainFile=f'/levels/{level_id}/ground.ter',
                    position=[self.x0, self.y0, base], squareSize=self.square, maxHeight=max_height,
                    materialTextureSet=texture_set, baseTexSize=1024, lightMapSize=1024, castShadows=True)
