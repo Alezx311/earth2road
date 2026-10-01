@@ -57,6 +57,43 @@ Livoberezhna 1 km² (`out/livo-compact`, 52 s like balanced):
   Shuliavka 8 × 8 would be ~1.1 GB DAE instead of 3.8 GB; triangle count (and so
   collision/GPU load) is unchanged — that is path B/C.
 
+### Path B — compact kerbs (`beamng_curbs.py`, also under `--optimization compact`)
+
+- No 8 mm bevel: the visual kerb is the collider, so the separate sidewalk Colmesh is gone
+  (`export_map` passes no collision mesh for `compact`; TSStatic uses the visible mesh).
+- Patch outlines are densified to 2 m and then simplified (`simplify_patch` gained
+  `xy_tolerance`; 1 cm XY, unchanged 2 mm Z), so long straight/flat edges keep no 2 m
+  stations; layers are not re-segmentized. Kerb corner arcs: 1 cm sagitta. A ring that
+  simplifies below 3 points keeps the original patch (crashed before the guard).
+- Measured on saved `build_sidewalks` inputs for Livoberezhna (variants, sidewalk tris incl. Colmesh):
+  balanced 183.5 k (25.5 s) → no bevel 71.8 k (14.3 s) → + 1 cm XY with 2 m step 52.0 k →
+  densify-then-simplify 22.8 k (9.6 s).
+- Height check vs balanced on 20 000 random points: median 0.2 mm, p99 19 mm, 2 % > 1 cm,
+  max 1.6 m. The large ones are where two OSM sidewalks overlap at different heights
+  (1.2 / 1.6 m near −8, 89): `vertex()` takes the nearest source triangle, so the height
+  field itself is discontinuous there and neither mesh is "right". Exact-XY variants still
+  reach 0.38 m. Steep top faces (slope > 15 %): balanced 380 m² (mostly the bevel),
+  no-bevel exact 164 m², chosen variant 186 m².
+
+Livoberezhna 1 km², A+B (`out/livo-compact`; A-only kept as `out/livo-compact-a`):
+
+| | balanced | compact A | compact A+B |
+|---|---|---|---|
+| sidewalk tris (visual + Colmesh) | 112 k + 72 k | 108 k + 70 k | 22 k |
+| all generated visual tris | 415 k | 406 k | 220 k |
+| DAE / unpacked level | 80 / 81 MB | 24 / 27 MB | 15 / 19 MB |
+| ZIP | 14.9 MB | 7.6 MB | 5.2 MB |
+| export | 52 s | 52 s | 30 s (sidewalks 14 s) |
+
+- Tests: `test_compact_kerb_is_its_own_collider_and_lighter`; BeamNG suites 55 OK.
+  `tools/export_beamng.py --validate` passes for balanced and compact.
+- Pre-existing, not from this branch: `python -m akadem_maps validate --target beamng` on a
+  `tools/export_beamng.py --map` ZIP fails with "Materials without level prefix" (only the
+  `--world` path namespaces materials); and `.venv` holds a non-editable copy of
+  `akadem_maps`, so `.venv/Scripts/terra-drive` runs stale code (it still rejects licence plates).
+- Now the largest category is road surfaces (120 k tris, 46 % of DAE) — path C.
+- **Not checked in BeamNG**: kerb look without bevel, kerb/wheel collision, load time/RAM.
+
 ## 2026-10-01 — BeamNG geometry optimization (`--optimization balanced|legacy`)
 
 Started by Codex (ran out of quota mid-benchmark), finished by Claude.

@@ -74,6 +74,18 @@ class OptimizedGeometry(unittest.TestCase):
             self.assertEqual(stats['collision_triangles'], 12)
             self.assertEqual(stats['vertices'], 24+8)
 
+    def test_compact_kerb_is_its_own_collider_and_lighter(self):
+        balanced, _ = build_sidewalks([('a', street())], collision=Mesh())
+        compact, audit = build_sidewalks([('a', street())], optimization='compact')
+        self.assertGreater(compact.count, 0)
+        self.assertLess(compact.count, balanced.count)
+        self.assertEqual(audit['collision_triangles'], compact.count)
+        self.assertEqual(audit['unresolved'], [])
+        top = max(v[2] for fs in compact.faces.values() for t in fs for v in t)
+        self.assertLessEqual(top, .04)
+        again, _ = build_sidewalks([('a', street())], optimization='compact')
+        self.assertEqual(dict(again.faces), dict(compact.faces))
+
     def test_ground_reduction_keeps_boundary_and_respects_height_bound(self):
         ring = [(math.cos(i*math.tau/6),math.sin(i*math.tau/6),0) for i in range(6)]
         for height, reduced in ((.02,True),(.5,False)):

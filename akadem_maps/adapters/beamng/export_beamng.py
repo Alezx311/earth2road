@@ -1166,7 +1166,8 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         corridors = Corridors(tiles)
         stage_event('sidewalks')
         print('  continuous low sidewalks', flush=True)
-        walkcollision = Mesh() if optimization != 'legacy' else None
+        # compact kerbs have no bevel, so the visible mesh is the collider.
+        walkcollision = Mesh() if optimization == 'balanced' else None
         walkmesh, curb_audit = build_sidewalks(tiles, corridors.pavement, optimization=optimization, collision=walkcollision)
         collision_parts = walkcollision.chunks(SURFACE_CELL) if walkcollision is not None else {}
         del walkcollision
@@ -1181,7 +1182,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             collider = collision_parts.pop((ix,iy), None)
             # Visual-only cells (bevel slivers whose colliders fall next door) get no collision.
             objects.append(write_static(level, level_id, stable_id('kyiv_walk', (ix, iy)),
-                                       part, cell_origin, optimization == 'legacy' or collider is not None,
+                                       part, cell_origin, optimization != 'balanced' or collider is not None,
                                        collision_mesh=collider, category='sidewalks'))
             counts['surface_triangles'] += part.count
             counts['surface_chunks'] += 1

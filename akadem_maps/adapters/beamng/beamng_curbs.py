@@ -20,6 +20,11 @@ WIDTH = .15
 BEVEL = .008
 MAX_STEP = 2.0
 ARC_ERROR = .002
+# 'compact': no 8 mm bevel (the visual kerb equals its collider), 1 cm arc sagitta on
+# the 15 cm kerb corners, and patch outlines densified to MAX_STEP and then simplified
+# (1 cm XY, 2 mm Z): stations remain where the height profile bends, not every 2 m.
+COMPACT_XY = .01
+COMPACT_ARC_ERROR = .01
 
 
 def arc_segments(radius, error=ARC_ERROR):
@@ -27,12 +32,12 @@ def arc_segments(radius, error=ARC_ERROR):
     return max(1, math.ceil(math.pi / (4 * math.acos(max(-1., 1-error/radius)))))
 
 
-def simplify_patch(patch, height):
+def simplify_patch(patch, height, xy_tolerance=1e-9):
     """Remove collinear XY boundary stations only when their Z profile agrees.
 
     RDP checks every discarded station against its final retained segment, so
-    errors do not accumulate. XY is locked to numerical precision; ramps and
-    lowered crossings retain their height breakpoints.
+    errors do not accumulate. XY moves at most xy_tolerance (numerical precision
+    by default); ramps and lowered crossings retain their height breakpoints.
     """
     import numpy as np
     def ring(coords):
@@ -55,7 +60,7 @@ def simplify_patch(patch, height):
                 part = values[a+1:b]
                 t = np.clip((part[:,:2]-values[a,:2])@delta/length,0,1)
                 projected = values[a]+t[:,None]*(values[b]-values[a])
-                score = np.maximum(np.linalg.norm(part[:,:2]-projected[:,:2],axis=1)/1e-9,
+                score = np.maximum(np.linalg.norm(part[:,:2]-projected[:,:2],axis=1)/xy_tolerance,
                                    np.abs(part[:,2]-projected[:,2])/.002)
                 i = int(np.argmax(score))
                 if score[i] > 1:
@@ -64,8 +69,11 @@ def simplify_patch(patch, height):
             return [points[i] for i in sorted(keep)]
         half = len(coords)//2
         return chain(coords[:half+1])[:-1]+chain(coords[half:]+coords[:1])[:-1]
-    candidate = Polygon(ring(patch.exterior.coords), [ring(r.coords) for r in patch.interiors])
-    if not candidate.is_valid or candidate.is_empty or patch.symmetric_difference(candidate).area > 1e-7:
+    rings = [ring(patch.exterior.coords)]+[ring(r.coords) for r in patch.interiors]
+    if any(len(r) < 3 for r in rings):
+        return patch
+    candidate = Polygon(rings[0], rings[1:])
+    if not candidate.is_valid or candidate.is_empty or patch.symmetric_difference(candidate).area > max(1e-7, xy_tolerance*patch.length):
         return patch
     return candidate
 
@@ -199,22 +207,31 @@ def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=
                 cache[xy] = (x, y, base+lift)
                 return cache[xy]
 
+            compact = optimization == 'compact'
             if optimization != 'legacy':
-                patch = simplify_patch(patch, vertex)
-            inner = patch.buffer(-WIDTH, join_style='round', quad_segs=16 if optimization == 'legacy' else arc_segments(WIDTH))
-            bevel_inner = patch.buffer(-BEVEL, join_style='round', quad_segs=16 if optimization == 'legacy' else arc_segments(BEVEL))
-            curb_top = bevel_inner.difference(inner)
-            bevel = patch.difference(bevel_inner)
-
-            layers = [(mesh, inner, 'kyiv_concrete', False),
-                      (mesh, curb_top, 'kyiv_curb', False),
-                      (mesh, bevel, 'kyiv_curb', True)]
+                # compact: densify first, so the 2 mm height check (not the 2 m step)
+                # decides which stations along long edges remain.
+                patch = (simplify_patch(shapely.segmentize(patch, MAX_STEP), vertex, COMPACT_XY) if compact
+                         else simplify_patch(patch, vertex))
+            inner = patch.buffer(-WIDTH, join_style='round', quad_segs=16 if optimization == 'legacy' else
+                                 arc_segments(WIDTH, COMPACT_ARC_ERROR if compact else ARC_ERROR))
+            if compact:
+                layers = [(mesh, inner, 'kyiv_concrete', False),
+                          (mesh, patch.difference(inner), 'kyiv_curb', False)]
+            else:
+                bevel_inner = patch.buffer(-BEVEL, join_style='round', quad_segs=16 if optimization == 'legacy' else arc_segments(BEVEL))
+                curb_top = bevel_inner.difference(inner)
+                bevel = patch.difference(bevel_inner)
+                layers = [(mesh, inner, 'kyiv_concrete', False),
+                          (mesh, curb_top, 'kyiv_curb', False),
+                          (mesh, bevel, 'kyiv_curb', True)]
             if collision is not None:
                 layers += [(collision, inner, 'kyiv_concrete', False),
                            (collision, patch.difference(inner), 'kyiv_curb', False)]
             for target, geom, material, lip in layers:
                 for pg in polygons(geom):
-                    pg = shapely.segmentize(pg, MAX_STEP)
+                    if not compact:
+                        pg = shapely.segmentize(pg, MAX_STEP)
                     for tri in shapely.constrained_delaunay_triangles(pg).geoms:
                         pts = list(tri.exterior.coords)[:3]
                         # Bevel height rises with inward distance over 8 mm.
@@ -227,7 +244,7 @@ def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=
                             vertices.append(v)
                         target.tri(material, *vertices, up=True)
             for ring in [patch.exterior, *patch.interiors]:
-                points = list(shapely.segmentize(ring, MAX_STEP).coords)
+                points = list((ring if compact else shapely.segmentize(ring, MAX_STEP)).coords)
                 for a, b in zip(points, points[1:]):
                     va, vb = vertex(*a), vertex(*b)
                     mid = tuple((va[k]+vb[k])/2 for k in range(3))
@@ -242,8 +259,9 @@ def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=
                     cb = crossing_index.nearest((b[0], b[1], zb), distance=1.5)
                     ha = HEIGHT*(min(1, max(0, ca[0]-.25)) if ca else 1)
                     hb = HEIGHT*(min(1, max(0, cb[0]-.25)) if cb else 1)
-                    va = (a[0], a[1], za+max(0, ha-BEVEL))
-                    vb = (b[0], b[1], zb+max(0, hb-BEVEL))
+                    bevel_drop = 0 if compact else BEVEL
+                    va = (a[0], a[1], za+max(0, ha-bevel_drop))
+                    vb = (b[0], b[1], zb+max(0, hb-bevel_drop))
                     ba, bb = (a[0], a[1], za), (b[0], b[1], zb)
                     mesh.tri('kyiv_curb', ba, bb, vb)
                     mesh.tri('kyiv_curb', ba, vb, va)
@@ -255,5 +273,5 @@ def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=
                     audit['curb_length_m'] += math.dist(a, b)
     audit['triangles'] = mesh.count
     audit['collision_triangles'] = collision.count if collision is not None else mesh.count
-    audit['arc_error_m'] = ARC_ERROR if optimization != 'legacy' else None
+    audit['arc_error_m'] = {'legacy': None, 'compact': COMPACT_ARC_ERROR}.get(optimization, ARC_ERROR)
     return mesh, audit
