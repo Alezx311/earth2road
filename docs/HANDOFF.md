@@ -1,5 +1,40 @@
 # TerraDrive handoff
 
+## 2026-10-01 — `export_optimize`: profile of a 1 × 1 km map (Livoberezhna)
+
+Goal: a BeamNG level for a whole Kyiv district. `kyiv_shuliavka` (8 × 8 km, 3.8 GB DAE,
+13.5 M triangles) does not load on a 32 GB machine.
+
+- Map `kyiv_livoberezhna_1km` (`tools/generate_map.py --lat 50.4515 --lon 30.5983 --size-km 1`,
+  ~1.5 min). Exports `out/livo-balanced` (52 s, ZIP 14.9 MB) and `out/livo-legacy` (47 s, 13.4 MB).
+- New `tools/beamng_profile.py <export> --area-km2 N [--json]`: per category, material,
+  flat/vertical faces, triangles < 1 cm², DAE text bytes per attribute, scene objects.
+
+Balanced, 1 km² (density is close to Shuliavka: 80 vs 59 MB DAE per km²):
+
+| category | tris | verts | col tris | DAE MB |
+|---|---|---|---|---|
+| sidewalks | 112 k | 244 k | 72 k | 34.7 |
+| surfaces | 120 k | 319 k | (visible) | 27.4 |
+| ground | 37 k | 104 k | (visible) | 8.8 |
+| markings | 33 k | 86 k | 0 | 7.6 |
+| buildings | 7 k | 12 k | (visible) | 1.3 |
+
+Findings:
+1. **Kerb over-tessellation.** `kyiv_curb` is 97.5 k triangles for 3.3 k m², of which
+   57 k are under 1 cm² (the 8 mm bevel ring and 14 cm kerb top are CDT-triangulated along
+   every patch boundary). Concrete is 14 k triangles for 15 k m². The sidewalk stage takes 35 of 52 s.
+2. **Vertices are hardly shared** (2.2–2.8 vertices per triangle) because every face has
+   its own flat normal at 6 decimals. Unique positions at 1 mm are 30–35 % of the written
+   vertices on surfaces/ground/sidewalks. Positions, normals and UVs are 90 % of DAE text.
+3. Ground is 37 k triangles (8.8 MB/km²): a candidate for a native TerrainBlock heightmap.
+4. Scene per km²: 942 TSStatic, 377 DecalRoad (4.7 k nodes), 2.6 k forest instances.
+
+Three paths to test in order, each measured with the profiler on this map:
+A. COLLADA writer: shared smooth normals on flat surfaces + mm/3-decimal positions.
+B. Kerb rebuild: a boundary strip (top + face quads per segment) instead of CDT rings and bevel.
+C. Ground → TerrainBlock heightmap (then markings/surface decimation if still needed).
+
 ## 2026-10-01 — BeamNG geometry optimization (`--optimization balanced|legacy`)
 
 Started by Codex (ran out of quota mid-benchmark), finished by Claude.
