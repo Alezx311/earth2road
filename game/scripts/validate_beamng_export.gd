@@ -67,6 +67,24 @@ func run() -> void:
 		var exporter: Control = menu.picker
 		check(exporter.map_id == "tiny", "selected map forwarded")
 		check(exporter.start_button.has_focus(), "export starts with keyboard focus")
+		check(exporter.mode_menu.item_count == exporter.MODES.size(), "all optimization modes listed")
+		var notes := {}
+		for i in exporter.MODES.size():
+			exporter.mode_menu.select(i)
+			exporter.mode_menu.item_selected.emit(i)
+			check(exporter.optimization() == exporter.MODES[i][0], "mode %d maps to its value" % i)
+			check(exporter.mode_note.text != "", "mode %d has a note" % i)
+			notes[exporter.mode_note.text] = true
+		check(notes.size() == exporter.MODES.size(), "every mode has its own note")
+		if locale == "uk":
+			check(exporter.mode_menu.get_item_text(0).begins_with("A+B+C: усі"), "mode names translated")
+			check(exporter.mode_note.text.begins_with("Земля"), "mode note translated")
+		exporter.mode_menu.select(0)
+		exporter.mode_menu.item_selected.emit(0)
+		exporter.set_busy(true)
+		check(exporter.mode_menu.disabled, "mode locked while exporting")
+		exporter.set_busy(false)
+		check(not exporter.mode_menu.disabled, "mode unlocked after export")
 		await snap("export")
 		exporter.browse.pressed.emit()
 		await settle()
@@ -105,6 +123,8 @@ func run() -> void:
 		await settle()
 		var exporter: Control = menu.picker
 		exporter.destination.text = ProjectSettings.globalize_path("res://../logs/qa-beamng-ui/Експорт карт")
+		exporter.mode_menu.select(0)
+		exporter.mode_menu.item_selected.emit(0)
 		exporter.start_export()
 		check(exporter.pid > 0, "real exporter starts")
 		var first_pid: int = exporter.pid
@@ -112,6 +132,10 @@ func run() -> void:
 		check(exporter.pid == first_pid, "duplicate start blocked")
 		await finish(exporter)
 		check(exporter.terminal.get("event") == "result", "real tiny export completes")
+		check(exporter.terminal.get("optimization") == "compact", "selected optimization used by the exporter")
+		var saved := ConfigFile.new()
+		saved.load("user://settings.cfg")
+		check(saved.get_value("beamng", "optimization", "") == "compact", "optimization remembered")
 		check(FileAccess.file_exists(exporter.zip_path), "ZIP published")
 		print("BEAMNG_GUI_ZIP: ", exporter.zip_path)
 		await snap("success")

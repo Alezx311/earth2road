@@ -40,7 +40,9 @@ To export a map to BeamNG.drive, open **Maps (M)** and click **Export to BeamNGâ
 the map. Choose a folder and click **Export ZIP**. The window shows the current stage and
 supports cancellation; when done, use **Open folder** or **Copy ZIP path**. Each export
 gets a new subfolder, preserving earlier ZIPs. Install the ZIP manually in BeamNG's mods
-folder. The game remembers your output folder; BeamNG does not need to be installed to export.
+folder. Pick an **Optimization** mode (each has a note in the window; **A+B+C** is meant for
+maps of several kilometres, **Original** is the reference). The game remembers your output
+folder and mode; BeamNG does not need to be installed to export.
 
 Everything below is for the command line: scripted builds, exports and development.
 
@@ -108,6 +110,11 @@ installed map ID such as `tiny`, not a path.
 `--optimization balanced` (default) shares identical vertices in the DAE files, merges flat
 ground (â‰¤5 cm height error, tile edges kept exact) and gives sidewalks a simplified collision
 mesh without the curb bevel. `--optimization legacy` writes the previous unoptimized geometry.
+Further features join with `+`: `balanced+writer` (A: 1 mm coordinates and smoothed normals,
+~70 % smaller DAE), `balanced+kerbs` (B: kerbs without the bevel, the visible mesh is the
+collider), `balanced+terrain` (C: ground as a native TerrainBlock heightmap); `compact` is
+all three. `tools/beamng_bench.py` compares ZIPs in the game (load time, memory, FPS,
+side-by-side screenshots) in isolated BeamNG profiles.
 Per-category measurements: `reports/performance.json` (`--map`: `<output>.performance.json`).
 
 Output: the level ZIP, `artifact.json` (SHA-256, version), `acceptance.json` (status

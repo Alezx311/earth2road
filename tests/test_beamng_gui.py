@@ -48,6 +48,23 @@ class GuiExportTests(unittest.TestCase):
                 info = json.loads(archive.read('levels/kyiv_test/info.json'))
                 self.assertEqual(info['title'], 'Test')
 
+    def test_optimization_mode_is_applied_and_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture(root)
+            result = gui.export_installed('test', root/'out', Events(), root=root, optimization='writer+kerbs+terrain')
+            self.assertEqual(result['optimization'], 'compact')
+            artifact = json.loads((Path(result['output'])/'artifact.json').read_text())
+            self.assertEqual(artifact['optimization'], 'compact')
+            metrics = json.loads((Path(result['output'])/'reports/performance.json').read_text())
+            self.assertEqual(metrics['optimization'], 'compact')
+            self.assertIn('terrain', metrics['categories'])
+            validate_export(Path(result['output']))
+            with zipfile.ZipFile(result['zip']) as archive:
+                self.assertTrue(any(n.endswith('/ground.ter') for n in archive.namelist()))
+            with self.assertRaises(ValueError):
+                gui.export_installed('test', root/'out', Events(), root=root, optimization='fast')
+
     def test_missing_data_and_hash_mismatch_publish_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

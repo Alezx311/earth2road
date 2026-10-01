@@ -24,6 +24,7 @@ def export_installed(mid, destination, events, *, root=ROOT, optimization='balan
     """Publish one fresh run directory only after its ZIP passes validation."""
     if not re.fullmatch('[a-z0-9_]+', mid):
         raise ValueError('Invalid map id')
+    optimization = optimization_mode(optimization)
     root = Path(root).resolve()
     source = root/'game/data'/mid
     net = root/'data/build'/mid/'network.net.xml'
@@ -60,8 +61,10 @@ def export_installed(mid, destination, events, *, root=ROOT, optimization='balan
         events.emit('stage', stage='validate_zip')
         validate_export(stage/zip_name)
         write_json(stage/'artifact.json', {'map': mid, 'level_id': report['level_id'],
-                   'zip': zip_name, 'sha256': sha256(stage/zip_name), 'runtime_verified': False})
-    return {'id': mid, 'output': str(output), 'zip': str(output/zip_name), 'runtime_verified': False}
+                   'zip': zip_name, 'sha256': sha256(stage/zip_name), 'optimization': optimization,
+                   'runtime_verified': False})
+    return {'id': mid, 'output': str(output), 'zip': str(output/zip_name), 'optimization': optimization,
+            'runtime_verified': False}
 
 
 def main(argv=None):

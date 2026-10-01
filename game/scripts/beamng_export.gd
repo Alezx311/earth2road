@@ -12,6 +12,20 @@ const STAGES := {
 	"validate": "Checking the level…", "package": "Creating ZIP…",
 	"validate_zip": "Checking ZIP…"
 }
+## BeamNG optimization modes (tools/export_beamng_gui.py --optimization) with their notes.
+## Measured on a 1 km² Kyiv map; see docs/HANDOFF.md (export_optimize).
+const MODES := [
+	["compact", "A+B+C: all optimizations (large maps)",
+		"Smallest level and fastest first load: compact files, light kerbs and native terrain ground. Recommended for maps of several kilometres."],
+	["balanced", "Original",
+		"Reference export with full kerb detail and mesh ground. Largest files; large maps may not load."],
+	["balanced+writer", "A: compact files",
+		"Same geometry, 1 mm coordinates and smoothed shading: about 70% smaller model files."],
+	["balanced+kerbs", "B: light kerbs",
+		"Kerbs without the small bevel and with simpler outlines: about 88% fewer sidewalk triangles."],
+	["balanced+terrain", "C: terrain ground",
+		"Ground becomes a native BeamNG terrain under the roads instead of meshes; grass extends past the map edge."],
+]
 var map_id := ""
 var map_title := ""
 var pid := -1
@@ -26,6 +40,8 @@ var poll_clock := 0.0
 var zip_path := ""
 var destination: LineEdit
 var browse: Button
+var mode_menu: OptionButton
+var mode_note: Label
 var start_button: Button
 var back_button: Button
 var open_button: Button
@@ -68,6 +84,19 @@ func _ready() -> void:
 	chooser.dir_selected.connect(func(path: String): destination.text = path)
 	add_child(chooser)
 	body.add_child(Ui.label("Each export gets a new folder. Previous ZIPs are kept.", 18, Ui.MUTED, true))
+	body.add_child(Ui.label("Optimization", 20))
+	mode_menu = OptionButton.new()
+	mode_menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for mode in MODES:
+		mode_menu.add_item("")
+	var saved := str(settings.get_value("beamng", "optimization", "balanced"))
+	mode_menu.select(maxi(0, MODES.map(func(m): return m[0]).find(saved)))
+	mode_menu.item_selected.connect(func(_i): update_mode_note())
+	body.add_child(mode_menu)
+	mode_note = Ui.label("", 18, Ui.MUTED, true)
+	mode_note.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	body.add_child(mode_note)
+	translate_modes()
 	status = Ui.label("Ready to export", 20, Ui.MUTED, true)
 	body.add_child(status)
 	activity = ProgressBar.new()
@@ -98,6 +127,24 @@ func _ready() -> void:
 	modal.footer.add_child(start_button)
 	start_button.grab_focus.call_deferred()
 
+func optimization() -> String:
+	return MODES[mode_menu.selected][0]
+
+func update_mode_note() -> void:
+	mode_note.text = tr(MODES[mode_menu.selected][2])
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and mode_menu:
+		translate_modes()
+
+## OptionButton items are formatted once, so they are refreshed when the language changes.
+func translate_modes() -> void:
+	mode_menu.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	for i in MODES.size():
+		mode_menu.set_item_text(i, tr(MODES[i][1]))
+	mode_menu.select(mode_menu.selected)
+	update_mode_note()
+
 func choose_folder() -> void:
 	chooser.current_dir = destination.text if DirAccess.dir_exists_absolute(destination.text) else Picker.project_root()
 	chooser.popup_centered_ratio(0.8)
@@ -105,6 +152,7 @@ func choose_folder() -> void:
 func set_busy(busy: bool) -> void:
 	destination.editable = not busy
 	browse.disabled = busy
+	mode_menu.disabled = busy
 	start_button.disabled = busy
 	activity.visible = busy
 	back_button.text = "Cancel" if busy else "Back"
@@ -126,6 +174,7 @@ func start_export() -> void:
 	var settings := ConfigFile.new()
 	settings.load(SETTINGS)
 	settings.set_value("beamng", "destination", destination.text)
+	settings.set_value("beamng", "optimization", optimization())
 	settings.save(SETTINGS)
 	events_path = root + "/logs/beamng_%d_%d.jsonl" % [OS.get_process_id(), Time.get_ticks_usec()]
 	cancel_path = events_path + ".cancel"
@@ -139,7 +188,9 @@ func start_export() -> void:
 	details.text = events_path + ".log"
 	pid = OS.create_process(python, PackedStringArray([root + "/tools/export_beamng_gui.py",
 		"--map", map_id, "--destination", destination.text, "--events", events_path,
-		"--log", events_path + ".log", "--parent-pid", str(OS.get_process_id()), "--cancel-file", cancel_path]), false)
+		"--log", events_path + ".log", "--parent-pid", str(OS.get_process_id()), "--cancel-file", cancel_path,
+		"--optimization", optimization()]), false)
+	details.text += "\n" + tr("Optimization") + ": " + optimization()
 	if pid <= 0:
 		pid = -1
 		status.text = tr("Could not start the exporter. Check technical details.")
