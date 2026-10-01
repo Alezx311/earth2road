@@ -37,6 +37,43 @@ class OptimizedGeometry(unittest.TestCase):
             mesh.write(new)
             self.assertEqual(first,new.read_bytes())
 
+    def test_compact_shares_smooth_vertices_and_keeps_creases(self):
+        mesh = Mesh()
+        # Gently folded 4×4 grid (≈3° between neighbours), a sharp box and slivers.
+        for i in range(4):
+            for j in range(4):
+                z = lambda x, y: .05*((x+y) % 2)
+                a, b, c, d = (i,j), (i+1,j), (i+1,j+1), (i,j+1)
+                mesh.tri('grid', *[(x, y, z(x, y)) for x, y in (a, b, c)])
+                mesh.tri('grid', *[(x, y, z(x, y)) for x, y in (a, c, d)])
+        mesh.box((10, 10, 1), (2, 2, 2), 'stone')
+        mesh.tri('stone', (0, 0, 0), (.0004, 0, 0), (0, 1, 0))    # collapses at 1 mm
+        with tempfile.TemporaryDirectory() as tmp:
+            old, new = Path(tmp)/'old.dae', Path(tmp)/'new.dae'
+            base = mesh.write(old)
+            stats = mesh.write(new, optimization='compact')
+            self.assertEqual(stats['triangles'], mesh.count-1)
+            self.assertEqual(stats['vertices'], 25+24)    # grid: one per position; box: 4 per face
+            self.assertLess(stats['bytes'], base['bytes'])
+            grid_old, stone_old = expanded(old)
+            grid_new, stone_new = expanded(new)
+            self.assertEqual([tuple(round(c, 3) for c in v[0]) for v in grid_old],
+                             [v[0] for v in grid_new])
+            for v in stone_new:    # box normals stay axis-aligned
+                self.assertEqual(sorted(abs(c) for c in v[1]), [0, 0, 1])
+            first = new.read_bytes()
+            mesh.write(new, optimization='compact')
+            self.assertEqual(first, new.read_bytes())
+
+    def test_compact_collision_is_keyed_by_position(self):
+        visual, collider = Mesh(), Mesh()
+        visual.box((0, 0, 0), (2, 2, 2), 'stone')
+        collider.box((0, 0, 0), (2, 2, 2), 'stone')
+        with tempfile.TemporaryDirectory() as tmp:
+            stats = visual.write(Path(tmp)/'c.dae', optimization='compact', collision=collider)
+            self.assertEqual(stats['collision_triangles'], 12)
+            self.assertEqual(stats['vertices'], 24+8)
+
     def test_ground_reduction_keeps_boundary_and_respects_height_bound(self):
         ring = [(math.cos(i*math.tau/6),math.sin(i*math.tau/6),0) for i in range(6)]
         for height, reduced in ((.02,True),(.5,False)):

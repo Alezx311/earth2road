@@ -35,6 +35,28 @@ A. COLLADA writer: shared smooth normals on flat surfaces + mm/3-decimal positio
 B. Kerb rebuild: a boundary strip (top + face quads per segment) instead of CDT rings and bevel.
 C. Ground → TerrainBlock heightmap (then markings/surface decimation if still needed).
 
+### Path A — `--optimization compact` (COLLADA writer)
+
+Same geometry as `balanced`; only `Mesh.write` changes (`_compact_geometry` in
+`beamng_geometry.py`): positions rounded to 1 mm, normals smoothed across faces within
+30° (`CREASE_DEG`; kerb/wall edges stay sharp), UVs at 4 decimals in the vertex key,
+shortest number text, triangles collapsing at 1 mm dropped, Colmesh keyed by position only.
+`balanced` stays the default until checked in BeamNG.
+
+Livoberezhna 1 km² (`out/livo-compact`, 52 s like balanced):
+
+| | balanced | compact |
+|---|---|---|
+| visual triangles | 415 k | 406 k (sidewalk slivers) |
+| vertices | 767 k | 300 k (−61 %) |
+| DAE / unpacked level | 80 MB / 81 MB | 24 MB / 27 MB (−70 %) |
+| ZIP | 14.9 MB | 7.6 MB (−49 %) |
+
+- Tests: 2 new in `test_beamng_optimization`; BeamNG suites 54 OK.
+- **Not checked in BeamNG**: shading of smoothed normals, load time/RAM. Extrapolated
+  Shuliavka 8 × 8 would be ~1.1 GB DAE instead of 3.8 GB; triangle count (and so
+  collision/GPU load) is unchanged — that is path B/C.
+
 ## 2026-10-01 — BeamNG geometry optimization (`--optimization balanced|legacy`)
 
 Started by Codex (ran out of quota mid-benchmark), finished by Claude.

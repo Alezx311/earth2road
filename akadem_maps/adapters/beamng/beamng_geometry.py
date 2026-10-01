@@ -9,6 +9,79 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 
+OPTIMIZATIONS = ('compact', 'balanced', 'legacy')
+CREASE_DEG = 30    # faces meeting at a smaller angle share a smoothed vertex normal
+_CREASE_COS = math.cos(math.radians(CREASE_DEG))
+
+
+def fmt_compact(v, digits=3):
+    """Shortest fixed-point text: 1.500 → 1.5, 2.000 → 2."""
+    text = f'{v:.{digits}f}'.rstrip('0').rstrip('.')
+    return '0' if text in ('-0', '') else text
+
+
+def _compact_geometry(faces, explicit, scale, origin, collision):
+    """Indexed arrays for one material: (pos, normal, uv), indices, triangle count.
+
+    Positions are rounded to 1 mm relative to origin. Around each position, face
+    normals within CREASE_DEG of an area-weighted group share that group's normal,
+    so flat and gently curved surfaces share vertices while kerb and wall edges
+    stay sharp. UVs (4 decimals) remain part of the key, so texture seams are kept.
+    Triangles that are zero-area or collapse at 1 mm are dropped. Collision
+    geometry is keyed by position only; its normal/UV arrays are placeholders.
+    """
+    ox, oy, oz = origin
+    corners = []    # per kept face: (pos keys, raw normal, face uv)
+    groups = defaultdict(list)    # pos key -> [[sx, sy, sz], ...]
+    for i, tri in enumerate(faces):
+        keys = tuple((round(p[0]-ox, 3), round(p[1]-oy, 3), round(p[2]-oz, 3)) for p in tri)
+        if keys[0] == keys[1] or keys[1] == keys[2] or keys[0] == keys[2]:
+            continue
+        c = cross(sub(tri[1], tri[0]), sub(tri[2], tri[0]))
+        if c[0]*c[0]+c[1]*c[1]+c[2]*c[2] < 1e-14:
+            continue
+        n = normal(c)
+        fixed = explicit[i] if i < len(explicit) else None
+        if fixed:
+            uvs = fixed
+        elif abs(n[2]) < .5:
+            side = abs(n[0]) < abs(n[1])
+            uvs = [((p[0] if side else p[1])*scale, p[2]*scale) for p in tri]
+        else:
+            uvs = [(p[0]*scale, p[1]*scale) for p in tri]
+        slots = []
+        for key in keys:
+            if collision:
+                slots.append(0)
+                continue
+            options = groups[key]
+            for g, acc in enumerate(options):
+                length = math.sqrt(acc[0]*acc[0]+acc[1]*acc[1]+acc[2]*acc[2])
+                if (acc[0]*n[0]+acc[1]*n[1]+acc[2]*n[2]) >= _CREASE_COS*length:
+                    acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2]
+                    slots.append(g)
+                    break
+            else:
+                slots.append(len(options))
+                options.append([c[0], c[1], c[2]])
+        corners.append((keys, slots, uvs))
+    values = [array('d'), array('d'), array('d')]
+    indices, lookup = array('I'), {}
+    for keys, slots, uvs in corners:
+        for key, slot, (u, v) in zip(keys, slots, uvs):
+            full = key if collision else (key, slot, round(u, 4), round(v, 4))
+            idx = lookup.get(full)
+            if idx is None:
+                idx = lookup[full] = len(lookup)
+                values[0].extend(key)
+                if collision:
+                    values[1].extend((0., 0., 1.)); values[2].extend((0., 0.))
+                else:
+                    values[1].extend(normal(groups[key][slot])); values[2].extend((round(u, 4), round(v, 4)))
+            indices.append(idx)
+    return values, indices, len(corners)
+
+
 def beam_point(p):
     return (float(p[0]), -float(p[2]), float(p[1]))
 
@@ -192,9 +265,13 @@ class Mesh:
         The key uses the same six decimals as the legacy writer, so indexing cannot
         alter exported shading, texture seams or coordinates. Work is bounded to
         one material at a time. Optional Colmesh nodes use triangle collisions.
+        'compact' rounds positions to 1 mm and smooths normals across faces within
+        CREASE_DEG (see _compact_geometry); zero-area triangles are dropped.
         """
-        if optimization not in ('balanced', 'legacy'):
+        if optimization not in OPTIMIZATIONS:
             raise ValueError('Unknown BeamNG optimization: '+str(optimization))
+        compact = optimization == 'compact'
+        triangle_count = collision_count = 0
         if optimization == 'legacy':
             self._write_legacy(path, origin, uv_scales)
             return {'triangles': self.count, 'vertices': self.count*3,
@@ -214,6 +291,17 @@ class Mesh:
                     if i:
                         out.write(' ')
                     out.write(' '.join(fmt(v) for v in values[i:i+4096]))
+            def emit_geometry(gid, mat, values, indices, count, fmts):
+                line(f'<geometry id="{gid}" name="{gid}"><mesh>')
+                for (label, stride, params), data, fmt in zip((('pos',3,'XYZ'),('normal',3,'XYZ'),('uv',2,'ST')), values, fmts):
+                    sid = f'{gid}-{label}'
+                    out.write(f'<source id="{sid}"><float_array id="{sid}-array" count="{len(data)}">')
+                    numbers(data, fmt)
+                    line(f'</float_array><technique_common><accessor source="#{sid}-array" count="{len(data)//stride}" stride="{stride}">'+''.join(f'<param name="{p}" type="float"/>' for p in params)+'</accessor></technique_common></source>')
+                line(f'<vertices id="{gid}-verts"><input semantic="POSITION" source="#{gid}-pos"/></vertices>')
+                out.write(f'<triangles count="{count}" material="{mat}"><input semantic="VERTEX" source="#{gid}-verts" offset="0"/><input semantic="NORMAL" source="#{gid}-normal" offset="0"/><input semantic="TEXCOORD" source="#{gid}-uv" offset="0" set="0"/><p>')
+                numbers(indices, str)
+                line('</p></triangles></mesh></geometry>')
             line('<?xml version="1.0" encoding="utf-8"?>')
             line('<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">')
             line('<asset><created>2026-09-21T00:00:00Z</created><modified>2026-09-21T00:00:00Z</modified><unit name="meter" meter="1"/><up_axis>Z_UP</up_axis></asset>')
@@ -232,10 +320,20 @@ class Mesh:
                     gid = f'g{len(nodes)}'
                     name = f'Colmesh{len(nodes)}-1' if is_collision else f'part{len(nodes)}_a600'
                     nodes.append((gid, name, mat))
-                    values = [array('d'), array('d'), array('d')]
-                    indices, lookup = array('I'), {}
                     explicit = mesh.uvs[mat]
                     scale = uv_scales.get(mat, 1.)
+                    if compact:
+                        values, indices, written = _compact_geometry(faces, explicit, scale, origin, is_collision)
+                        vertex_count += len(values[0])//3
+                        triangle_count += 0 if is_collision else written
+                        collision_count += written if is_collision else 0
+                        if written:
+                            emit_geometry(gid, mat, values, indices, written, (fmt_compact, fmt_compact, lambda v: fmt_compact(v, 4)))
+                        else:
+                            nodes.pop()
+                        continue
+                    values = [array('d'), array('d'), array('d')]
+                    indices, lookup = array('I'), {}
                     ox, oy, oz = origin
                     for i, tri in enumerate(faces):
                         n = normal(cross(sub(tri[1],tri[0]), sub(tri[2],tri[0])))
@@ -260,23 +358,16 @@ class Mesh:
                             indices.append(idx)
                     vertex_count += len(lookup)
                     del lookup
-                    line(f'<geometry id="{gid}" name="{gid}"><mesh>')
-                    for (label, stride, params), data in zip((('pos',3,'XYZ'),('normal',3,'XYZ'),('uv',2,'ST')), values):
-                        sid = f'{gid}-{label}'
-                        out.write(f'<source id="{sid}"><float_array id="{sid}-array" count="{len(data)}">')
-                        numbers(data, lambda v: f'{v:.6f}')
-                        line(f'</float_array><technique_common><accessor source="#{sid}-array" count="{len(data)//stride}" stride="{stride}">'+''.join(f'<param name="{p}" type="float"/>' for p in params)+'</accessor></technique_common></source>')
-                    line(f'<vertices id="{gid}-verts"><input semantic="POSITION" source="#{gid}-pos"/></vertices>')
-                    out.write(f'<triangles count="{len(faces)}" material="{mat}"><input semantic="VERTEX" source="#{gid}-verts" offset="0"/><input semantic="NORMAL" source="#{gid}-normal" offset="0"/><input semantic="TEXCOORD" source="#{gid}-uv" offset="0" set="0"/><p>')
-                    numbers(indices, str)
-                    line('</p></triangles></mesh></geometry>')
+                    emit_geometry(gid, mat, values, indices, len(faces), (lambda v: f'{v:.6f}',)*3)
             line('</library_geometries><library_visual_scenes><visual_scene id="Scene"><node id="base00" name="base00"><node id="start01" name="start01">')
             for gid, name, mat in nodes:
                 line(f'<node id="node{gid}" name="{name}"><instance_geometry url="#{gid}"><bind_material><technique_common><instance_material symbol="{mat}" target="#{mat}"/></technique_common></bind_material></instance_geometry></node>')
             line('</node></node></visual_scene></library_visual_scenes><scene><instance_visual_scene url="#Scene"/></scene></COLLADA>')
-        return {'triangles': self.count, 'vertices': vertex_count,
-                'collision_triangles': collision.count if collision is not None else 0,
-                'bytes': path.stat().st_size}
+        if not compact:
+            triangle_count = self.count
+            collision_count = collision.count if collision is not None else 0
+        return {'triangles': triangle_count, 'vertices': vertex_count,
+                'collision_triangles': collision_count, 'bytes': path.stat().st_size}
 
     def _write_legacy(self,path,origin=(0,0,0),uv_scales=None):
         """One material submesh per geometry; normals and UVs explicit. Z_UP retained.

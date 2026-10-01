@@ -25,7 +25,7 @@ from akadem_maps.adapters.beamng.beamng_assets import (DRAWN_FACADES, FOREST_ITE
                            PROP_SHAPES, STREET_TREES, WOOD_TREES, building_style,
                            forest_files, forest_item_data, surface_materials, tree_materials,
                            uv_scales)
-from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point, cross, dashed, normal, sub, triangulate
+from akadem_maps.adapters.beamng.beamng_geometry import OPTIMIZATIONS, Mesh, beam_point, cross, dashed, normal, sub, triangulate
 from akadem_maps.adapters.beamng.beamng_network import road_height_audit, road_network, signals, stable_id
 from akadem_maps.adapters.beamng.beamng_terrain import write_substrate
 
@@ -1044,7 +1044,7 @@ GROUPS = ('KyivGenerated', 'KyivNavigation', 'KyivProps', 'KyivSignals', 'KyivSk
 
 def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True, emit=None, optimization='balanced'):
     from .optimization import ExportMetrics, simplify_ground
-    if optimization not in ('balanced', 'legacy'):
+    if optimization not in OPTIMIZATIONS:
         raise ValueError('Unknown BeamNG optimization: '+str(optimization))
     metrics = ExportMetrics(optimization)
     def stage_event(stage):
@@ -1488,7 +1488,7 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--level-id')
     parser.add_argument('--overrides', type=Path)
-    parser.add_argument('--optimization', choices=('balanced', 'legacy'), default='balanced')
+    parser.add_argument('--optimization', choices=('compact', 'balanced', 'legacy'), default='balanced')
     parser.add_argument('--vertical-offset', type=float, default=VERTICAL_OFFSET,
                         help='Raise the whole level by this many metres (0 keeps the snapshot datum)')
     parser.add_argument('--capture-edits', type=Path, metavar='SAVED_LEVEL')

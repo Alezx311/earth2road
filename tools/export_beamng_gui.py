@@ -71,7 +71,7 @@ def main(argv=None):
     parser.add_argument('--log', type=Path, required=True)
     parser.add_argument('--parent-pid', type=int, required=True)
     parser.add_argument('--cancel-file', type=Path, required=True)
-    parser.add_argument('--optimization', choices=('balanced', 'legacy'), default='balanced')
+    parser.add_argument('--optimization', choices=('compact', 'balanced', 'legacy'), default='balanced')
     args = parser.parse_args(argv)
     args.log.parent.mkdir(parents=True, exist_ok=True)
     watcher = None
