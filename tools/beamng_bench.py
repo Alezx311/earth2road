@@ -203,8 +203,9 @@ def sheets(results, cam, out):
             x, y = (k % cols)*w, (k//cols)*h
             if img:
                 sheet.paste(img.resize((w, h)), (x, y))
-            fps = (results[name].get('warm') or results[name]['cold'])['views'].get(v['name'], {}).get('fps')
-            label = f"{name}  {fps:.0f} fps" if fps else f'{name}  (no shot)'
+            # Best FPS over the runs: outside load (other GPU work) only ever lowers it.
+            fps = max((r['views'].get(v['name'], {}).get('fps', 0) for r in results[name].values()), default=0)
+            label = f"{name}  best {fps:.0f} fps" if fps else f'{name}  (no shot)'
             draw.rectangle([x, y, x+12+draw.textlength(label, font=font)+12, y+40], fill=(0, 0, 0))
             draw.text((x+12, y+6), label, fill=(255, 255, 255), font=font)
         path = out / f"compare-{v['name']}.jpg"

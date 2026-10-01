@@ -135,6 +135,42 @@ Livoberezhna 1 km², A+B (`out/livo-compact`; A-only kept as `out/livo-compact-a
 Full suite `python -m unittest discover -s tests`: 337 run, OK (1 skipped), 377 s (`logs/export-optimize-unittest.log`).
 Static collision = TSStatic Colmesh or visible mesh (markings excluded). C gains little
 at 1 km (ground is 11 % of DAE here) but on Shuliavka ground was 1.65 M triangles.
+
+### In-game benchmark of the variants (BeamNG.drive 0.39, RTX 2070 SUPER, 1920×1080 Normal)
+
+`tools/beamng_bench.py` + `tools/beamng_bench.lua`: each ZIP in an isolated profile under
+`out/bench/<run>/` (never the user's BeamNG profile), launched cold (fresh `.cdae` cache) then
+warm; load time is the game's own `Level loaded in …` line; memory = private bytes of the game
+process; per view: 4 s streaming, screenshot, 4 s frame times. Same six cameras for every variant
+(spawn, signal, street, kerb close-up on an at-grade sidewalk, low overview at +160 m, overview).
+Final sheets and table: `out/bench/livo-final/` (`compare-<view>.jpg`, `results.md`).
+
+| variant | level load cold s | level load warm s | private MB at load (warm) | best FPS (6 views) |
+|---|---|---|---|---|
+| 0 balanced | 13.1 / 11.0 | 6.9 / 5.7 | 3033–3277 | 177–212 |
+| A writer | 11.6 / 9.6 / 9.8 | 7.0 / 5.7 / 5.8 | 2891–3085 | 179–210 |
+| B kerbs | 11.1 / 13.3 | 6.7 / 5.9 | 3091–3152 | 163–198 |
+| C terrain | 12.2 / 11.1 | 5.8 / 6.3 | 3138–3324 | 163–200 |
+| A+B+C | 9.1 / 9.1 | 5.9 / 5.8 | 3163–3238 | 166–206 |
+
+- At 1 km² the map is too small to separate the variants: the game's own ~3 GB dominates
+  memory, warm loads are 5.7–7.0 s for all, FPS is GPU-bound at 160–210 everywhere. Only the
+  cold load (DAE → .cdae conversion) shows a consistent gain: A+B+C 9.1 s in both runs vs
+  11–13 s. The real test is 8 × 8 (balanced vs compact).
+- FPS noise: in several runs FPS fell to 2–15 for 3–4 minutes spanning consecutive game
+  processes and any variant (e.g. end of A cold → all of A warm → start of B cold), then
+  recovered mid-run. Not caused by a variant (A alone re-measured at 173–210 fps). Hence
+  "best per view over all runs"; GPU utilisation log `logs/bench-livo2-gpu.csv` (≈100 % throughout,
+  so it does not identify the other load).
+- One game crash: balanced warm in run 2, C++ crash 0.3 s after the level loaded
+  (`out/bench/livo2/livo_0_balanced/warm/beamng.log`); the same run passed in run 1.
+- Fixed during the benchmark: the terrain material was the old `diffuseMap` form and rendered
+  flat grey/beige in 0.39 — now PBR (shared `t_grass_01` detail, `t_macro_grass` macro, own 256²
+  flat base maps; base maps must equal the texture set's `baseTexSize`, otherwise the game logs
+  "dont have required size" and drops them → near-black ground). Cameras: the old low
+  overview sat 8 m above an 83 m roof; the kerb view now targets an at-grade sidewalk.
+- Visible in C/A+B+C: the terrain continues past the map as a flat plain to the 2048 m grid
+  edge, and the source-data spike near (−420, 118) shows as a thin vertical needle.
  (`--optimization balanced|legacy`)
 
 Started by Codex (ran out of quota mid-benchmark), finished by Claude.
