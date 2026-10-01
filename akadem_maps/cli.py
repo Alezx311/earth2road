@@ -11,6 +11,7 @@ import sys
 import traceback
 from . import __version__
 from .context import read_json
+from .adapters.beamng.beamng_geometry import optimization_mode
 
 class Events:
     def __init__(self, destination):
@@ -55,7 +56,7 @@ def parser():
     e.add_argument('--world',type=Path,required=True);e.add_argument('--output',type=Path,required=True)
     e.add_argument('--overrides',type=Path);e.add_argument('--offline',action='store_true')
     e.add_argument('--level-id')
-    e.add_argument('--optimization', choices=('compact', 'balanced', 'legacy'), default='balanced', help='BeamNG geometry optimization')
+    e.add_argument('--optimization', type=optimization_mode, default='balanced', help='BeamNG geometry: legacy, balanced, compact, or balanced+writer/kerbs/terrain')
     i=sub.add_parser('install',help='Copy a Godot export into a game checkout (explicit, never implicit)')
     i.add_argument('--target',choices=('godot',),required=True)
     i.add_argument('--export',type=Path,required=True);i.add_argument('--root',type=Path,default=Path.cwd())

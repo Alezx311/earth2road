@@ -47,7 +47,7 @@ Livoberezhna 1 km² (`out/livo-compact`, 52 s like balanced):
 
 | | balanced | compact |
 |---|---|---|
-| visual triangles | 415 k | 406 k (sidewalk slivers) |
+| visual triangles | 310 k | 306 k (sidewalk slivers) |
 | vertices | 767 k | 300 k (−61 %) |
 | DAE / unpacked level | 80 MB / 81 MB | 24 MB / 27 MB (−70 %) |
 | ZIP | 14.9 MB | 7.6 MB (−49 %) |
@@ -80,7 +80,7 @@ Livoberezhna 1 km², A+B (`out/livo-compact`; A-only kept as `out/livo-compact-a
 | | balanced | compact A | compact A+B |
 |---|---|---|---|
 | sidewalk tris (visual + Colmesh) | 112 k + 72 k | 108 k + 70 k | 22 k |
-| all generated visual tris | 415 k | 406 k | 220 k |
+| all generated visual tris | 310 k | 306 k | 220 k |
 | DAE / unpacked level | 80 / 81 MB | 24 / 27 MB | 15 / 19 MB |
 | ZIP | 14.9 MB | 7.6 MB | 5.2 MB |
 | export | 52 s | 52 s | 30 s (sidewalks 14 s) |
@@ -94,7 +94,48 @@ Livoberezhna 1 km², A+B (`out/livo-compact`; A-only kept as `out/livo-compact-a
 - Now the largest category is road surfaces (120 k tris, 46 % of DAE) — path C.
 - **Not checked in BeamNG**: kerb look without bevel, kerb/wheel collision, load time/RAM.
 
-## 2026-10-01 — BeamNG geometry optimization (`--optimization balanced|legacy`)
+### Separate variants: `--optimization balanced+writer|kerbs|terrain`
+
+`--optimization` now composes features with `+` (`optimization_mode`/`features` in
+`beamng_geometry.py`): `writer` (A), `kerbs` (B), `terrain` (C); `compact` = all three.
+`balanced` (default) and `legacy` are unchanged. Accepted by `terra-drive export`,
+`tools/export_beamng.py` and `tools/export_beamng_gui.py`.
+
+### Path C — `terrain`: ground as a native TerrainBlock (`GroundTerrain`, `beamng_terrain.py`)
+
+- Tile ground triangles are rasterised (vectorised numpy, batched by span) into a
+  power-of-two heightmap from the bounds' min corner: 1 m cells up to 4096 cells, then
+  stretched cells (`terrain_grid`: 8.3 km → 4096 × 2.25 m). Holes (roads, buildings) are
+  filled from their edges; beyond the data the edge repeats.
+- Every other surface mesh (roads, junctions, parking, greens, sidewalks) is a cap: within
+  one cell of a cap the terrain is pulled 5 cm (`SINK`) below its lowest point. Heights are
+  quantised with floor(). It replaces the ground meshes and the low substrate
+  (`ground.ter`, `KyivGroundTerrain`); grass + dirt detail TerrainMaterial (11 m / 2 m).
+- Livoberezhna: 2048² at 1 m, 1.8 s. Measured against the balanced meshes' vertices:
+  never above any road/sidewalk/green vertex (max −0.05 m); vs ground vertices median
+  −6 cm (most ground vertices border roads), p99 +5 mm, 0.15 % more than 2 cm above.
+- Source data defect, also in balanced: ground/road vertices at −174…+66 m near (−420, 118)
+  and a building at −126 m; they set maxHeight 227 m (3.5 mm steps).
+- Expected look issue to check in game: a shallow trench (≤ 1 cell wide) along road and
+  sidewalk edges where the terrain dips under the mesh.
+- Failed experiment: a Python edit written with the cp1251 default emptied
+  `beamng_terrain.py` and put cp1251 dashes in `beamng_geometry.py`; both restored, all
+  touched files checked as UTF-8. Use `encoding='utf-8'` for scripted edits on this machine.
+
+### All variants, Livoberezhna 1 km² (`out/livo-variants/livo_<variant>.zip`, distinct level IDs)
+
+| variant | visible tris | vertices | static collision tris | DAE MB | .ter MB | level MB | ZIP MB |
+|---|---|---|---|---|---|---|---|
+| 0 balanced (reference) | 310 k | 767 k | 237 k | 80.1 | — | 83.3 | 14.8 |
+| A writer | 306 k | 301 k | 235 k | 24.0 | — | 27.2 | 7.6 |
+| B kerbs | 221 k | 582 k | 188 k | 50.4 | — | 53.6 | 9.1 |
+| C terrain | 273 k | 663 k | 200 k + terrain | 71.3 | 12.6 | 87.0 | 14.5 |
+| A+B+C compact | 184 k | 177 k | 150 k + terrain | 12.6 | 12.6 | 28.3 | 5.5 |
+
+Full suite `python -m unittest discover -s tests`: 337 run, OK (1 skipped), 377 s (`logs/export-optimize-unittest.log`).
+Static collision = TSStatic Colmesh or visible mesh (markings excluded). C gains little
+at 1 km (ground is 11 % of DAE here) but on Shuliavka ground was 1.65 M triangles.
+ (`--optimization balanced|legacy`)
 
 Started by Codex (ran out of quota mid-benchmark), finished by Claude.
 

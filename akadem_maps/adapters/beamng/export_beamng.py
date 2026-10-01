@@ -17,6 +17,7 @@ import shutil
 import struct
 import tempfile
 import uuid
+import time
 import zipfile
 import zlib
 from shapely.geometry import Point, Polygon
@@ -25,9 +26,9 @@ from akadem_maps.adapters.beamng.beamng_assets import (DRAWN_FACADES, FOREST_ITE
                            PROP_SHAPES, STREET_TREES, WOOD_TREES, building_style,
                            forest_files, forest_item_data, surface_materials, tree_materials,
                            uv_scales)
-from akadem_maps.adapters.beamng.beamng_geometry import OPTIMIZATIONS, Mesh, beam_point, cross, dashed, normal, sub, triangulate
+from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point, features, optimization_mode, cross, dashed, normal, sub, triangulate
 from akadem_maps.adapters.beamng.beamng_network import road_height_audit, road_network, signals, stable_id
-from akadem_maps.adapters.beamng.beamng_terrain import write_substrate
+from akadem_maps.adapters.beamng.beamng_terrain import GroundTerrain, write_substrate
 
 ROOT = Path(__file__).resolve().parents[3]
 VERSION = 2
@@ -1044,8 +1045,8 @@ GROUPS = ('KyivGenerated', 'KyivNavigation', 'KyivProps', 'KyivSignals', 'KyivSk
 
 def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True, emit=None, optimization='balanced'):
     from .optimization import ExportMetrics, simplify_ground
-    if optimization not in OPTIMIZATIONS:
-        raise ValueError('Unknown BeamNG optimization: '+str(optimization))
+    optimization = optimization_mode(optimization)
+    feature = features(optimization)
     metrics = ExportMetrics(optimization)
     def stage_event(stage):
         metrics.enter(stage)
@@ -1113,10 +1114,13 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                   max(p[0] for p in points) + 150, max(p[1] for p in points) + 150]
         size = index['tile_size']
         objects += sky_objects(visible_distance(bounds))
-        substrate = write_substrate(level,level_id,bounds,min(p[2] for p in points))
-        substrate_class = substrate.pop('class_')
-        substrate_name = substrate.pop('name')
-        objects.append(scene_object(substrate_name,substrate_class,'KyivGenerated',**substrate))
+        # 'terrain': the ground heightmap replaces both the ground meshes and the low substrate.
+        terrain = GroundTerrain(bounds) if 'terrain' in feature else None
+        if terrain is None:
+            substrate = write_substrate(level,level_id,bounds,min(p[2] for p in points))
+            substrate_class = substrate.pop('class_')
+            substrate_name = substrate.pop('name')
+            objects.append(scene_object(substrate_name,substrate_class,'KyivGenerated',**substrate))
         errors, building_parts, tiles = [], defaultdict(list), []
         tile_ids = sorted(index['tiles'].items())
         print(f'export {mid}: {len(roads)} DecalRoad, {len(tile_ids)} source tiles', flush=True)
@@ -1130,7 +1134,10 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             tiles.append((tileid, tile))
             origin = (x0 + size / 2, y0 + size / 2, 0)
             surface, paint = tile_meshes(tile, sidewalks=False, ground=optimization == 'legacy')
-            if optimization != 'legacy':
+            if terrain is not None:
+                terrain.add_ground(beam_point(p) for t in tile.get('ground', []) for p in t)
+                terrain.add_cap(p for faces in surface.faces.values() for t in faces for p in t)
+            elif optimization != 'legacy':
                 ground_faces, ground_audit = simplify_ground([tuple(beam_point(p) for p in t) for t in tile.get('ground', [])])
                 counts['ground_input_triangles'] += ground_audit['input_triangles']
                 counts['ground_output_triangles'] += ground_audit['output_triangles']
@@ -1167,8 +1174,18 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         stage_event('sidewalks')
         print('  continuous low sidewalks', flush=True)
         # compact kerbs have no bevel, so the visible mesh is the collider.
-        walkcollision = Mesh() if optimization == 'balanced' else None
+        walkcollision = Mesh() if optimization != 'legacy' and 'kerbs' not in feature else None
         walkmesh, curb_audit = build_sidewalks(tiles, corridors.pavement, optimization=optimization, collision=walkcollision)
+        if terrain is not None:
+            started = time.perf_counter()
+            terrain.add_cap(p for faces in walkmesh.faces.values() for t in faces for p in t)
+            terrain_object, terrain_stats = terrain.write(level, level_id)
+            terrain_stats['seconds'] = round(time.perf_counter()-started, 2)
+            del terrain
+            metrics.add('terrain', {'triangles': 0, 'vertices': 0, 'bytes': terrain_stats['bytes']}, False)
+            objects.append(scene_object(terrain_object.pop('name'), terrain_object.pop('class_'), 'KyivGenerated', **terrain_object))
+            counts['terrain_cells'] = terrain_stats['size']**2
+            print(f'  ground terrain {terrain_stats}', flush=True)
         collision_parts = walkcollision.chunks(SURFACE_CELL) if walkcollision is not None else {}
         del walkcollision
         # A collision triangle can have a different centroid than its visual
@@ -1182,7 +1199,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             collider = collision_parts.pop((ix,iy), None)
             # Visual-only cells (bevel slivers whose colliders fall next door) get no collision.
             objects.append(write_static(level, level_id, stable_id('kyiv_walk', (ix, iy)),
-                                       part, cell_origin, optimization != 'balanced' or collider is not None,
+                                       part, cell_origin, optimization == 'legacy' or 'kerbs' in feature or collider is not None,
                                        collision_mesh=collider, category='sidewalks'))
             counts['surface_triangles'] += part.count
             counts['surface_chunks'] += 1
@@ -1489,7 +1506,8 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--level-id')
     parser.add_argument('--overrides', type=Path)
-    parser.add_argument('--optimization', choices=('compact', 'balanced', 'legacy'), default='balanced')
+    parser.add_argument('--optimization', type=optimization_mode, default='balanced',
+                        help='legacy, balanced, compact, or balanced+writer/kerbs/terrain (joined with +)')
     parser.add_argument('--vertical-offset', type=float, default=VERTICAL_OFFSET,
                         help='Raise the whole level by this many metres (0 keeps the snapshot datum)')
     parser.add_argument('--capture-edits', type=Path, metavar='SAVED_LEVEL')

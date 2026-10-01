@@ -9,7 +9,40 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 
-OPTIMIZATIONS = ('compact', 'balanced', 'legacy')
+# Optimization modes: 'legacy', 'balanced' (the reference), or balanced plus any of the
+# independent features joined with '+'; 'compact' is all of them.
+#   writer  — compact COLLADA text: 1 mm positions, smoothed normals (Mesh.write)
+#   kerbs   — kerbs without bevel, visible mesh as collider, simplified outlines (beamng_curbs)
+#   terrain — ground as a native TerrainBlock heightmap instead of meshes (beamng_terrain)
+FEATURES = ('writer', 'kerbs', 'terrain')
+
+
+def optimization_mode(value):
+    """Canonical name: 'legacy', 'balanced', 'compact' or 'balanced+<features>'."""
+    parts = [p for p in str(value).strip().lower().split('+') if p]
+    if parts == ['legacy']:
+        return 'legacy'
+    chosen = set()
+    for part in parts:
+        if part == 'compact':
+            chosen.update(FEATURES)
+        elif part in FEATURES:
+            chosen.add(part)
+        elif part != 'balanced':
+            raise ValueError(f'Unknown BeamNG optimization: {value!r} (legacy, balanced, compact or balanced+'
+                             + '+'.join(FEATURES) + ')')
+    if not parts:
+        raise ValueError('Empty BeamNG optimization')
+    if chosen == set(FEATURES):
+        return 'compact'
+    return '+'.join(['balanced', *(f for f in FEATURES if f in chosen)])
+
+
+def features(value):
+    mode = optimization_mode(value)
+    return frozenset(FEATURES) if mode == 'compact' else frozenset(mode.split('+')[1:])
+
+
 CREASE_DEG = 30    # faces meeting at a smaller angle share a smoothed vertex normal
 _CREASE_COS = math.cos(math.radians(CREASE_DEG))
 
@@ -265,12 +298,11 @@ class Mesh:
         The key uses the same six decimals as the legacy writer, so indexing cannot
         alter exported shading, texture seams or coordinates. Work is bounded to
         one material at a time. Optional Colmesh nodes use triangle collisions.
-        'compact' rounds positions to 1 mm and smooths normals across faces within
+        The 'writer' feature rounds positions to 1 mm and smooths normals across faces within
         CREASE_DEG (see _compact_geometry); zero-area triangles are dropped.
         """
-        if optimization not in OPTIMIZATIONS:
-            raise ValueError('Unknown BeamNG optimization: '+str(optimization))
-        compact = optimization == 'compact'
+        optimization = optimization_mode(optimization)
+        compact = 'writer' in features(optimization)
         triangle_count = collision_count = 0
         if optimization == 'legacy':
             self._write_legacy(path, origin, uv_scales)

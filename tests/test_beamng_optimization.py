@@ -4,7 +4,8 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
-from akadem_maps.adapters.beamng.beamng_geometry import Mesh
+from akadem_maps.adapters.beamng.beamng_geometry import Mesh, features, optimization_mode
+from akadem_maps.adapters.beamng.beamng_terrain import GroundTerrain, terrain_grid
 from akadem_maps.adapters.beamng.optimization import simplify_ground
 from akadem_maps.adapters.beamng.beamng_curbs import arc_segments, build_sidewalks
 from tests.test_beamng_curbs import street
@@ -85,6 +86,44 @@ class OptimizedGeometry(unittest.TestCase):
         self.assertLessEqual(top, .04)
         again, _ = build_sidewalks([('a', street())], optimization='compact')
         self.assertEqual(dict(again.faces), dict(compact.faces))
+
+    def test_optimization_modes_compose(self):
+        self.assertEqual(optimization_mode('writer'), 'balanced+writer')
+        self.assertEqual(optimization_mode('terrain+kerbs'), 'balanced+kerbs+terrain')
+        self.assertEqual(optimization_mode('writer+kerbs+terrain'), 'compact')
+        self.assertEqual(features('compact'), frozenset(('writer', 'kerbs', 'terrain')))
+        self.assertEqual(features('balanced'), frozenset())
+        with self.assertRaises(ValueError):
+            optimization_mode('legacy+writer')
+        with self.assertRaises(ValueError):
+            optimization_mode('fast')
+
+    def test_terrain_grid_sizes(self):
+        self.assertEqual(terrain_grid([0, 0, 1300, 900]), (1.0, 2048))
+        self.assertEqual(terrain_grid([0, 0, 8300, 8300]), (2.25, 4096))
+
+    def test_ground_terrain_follows_ground_and_stays_under_caps(self):
+        terrain = GroundTerrain([0, 0, 100, 100])
+        # Ground: a 1:10 slope over the square; road: a strip x 40..60 at ground height.
+        g = lambda x, y: x/10
+        for x0, x1 in ((0, 40), (60, 100)):
+            terrain.add_ground([((x0, 0, g(x0, 0)), (x1, 0, g(x1, 0)), (x1, 100, g(x1, 100))),
+                                ((x0, 0, g(x0, 0)), (x1, 100, g(x1, 100)), (x0, 100, g(x0, 100)))])
+        terrain.add_cap([((40, 0, 4), (60, 0, 6), (60, 100, 6)), ((40, 0, 4), (60, 100, 6), (40, 100, 4))])
+        h = terrain.heights()
+        self.assertAlmostEqual(float(h[50, 20]), 2.0, places=4)       # plain ground
+        self.assertAlmostEqual(float(h[50, 80]), 8.0, places=4)
+        for i in range(39, 62):                                         # road ± one cell
+            road = min(max(i, 40), 60)/10
+            self.assertLessEqual(float(h[50, i]), road-.05+1e-5)
+        with tempfile.TemporaryDirectory() as tmp:
+            obj, stats = terrain.write(Path(tmp), 'kyiv_test')
+            payload = (Path(tmp)/'ground.ter').read_bytes()
+            self.assertEqual(payload[0], 9)
+            self.assertEqual(len(payload), 5+stats['size']**2*3+4+1+len('kyiv_test_ground'))
+            self.assertEqual(obj['position'][:2], [0.0, 0.0])
+            stored = int.from_bytes(payload[5+2*(50*stats['size']+20):5+2*(50*stats['size']+20)+2], 'little')
+            self.assertAlmostEqual(obj['position'][2]+stored*obj['maxHeight']/65536, 2.0, delta=.01)
 
     def test_ground_reduction_keeps_boundary_and_respects_height_bound(self):
         ring = [(math.cos(i*math.tau/6),math.sin(i*math.tau/6),0) for i in range(6)]

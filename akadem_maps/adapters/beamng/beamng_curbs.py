@@ -12,7 +12,7 @@ from shapely.geometry import Point, Polygon
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
 
-from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point
+from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point, features
 from akadem_maps.adapters.beamng.beamng_pavement import Pavement, polygons
 
 HEIGHT = .035
@@ -20,7 +20,7 @@ WIDTH = .15
 BEVEL = .008
 MAX_STEP = 2.0
 ARC_ERROR = .002
-# 'compact': no 8 mm bevel (the visual kerb equals its collider), 1 cm arc sagitta on
+# 'kerbs' feature: no 8 mm bevel (the visual kerb equals its collider), 1 cm arc sagitta on
 # the 15 cm kerb corners, and patch outlines densified to MAX_STEP and then simplified
 # (1 cm XY, 2 mm Z): stations remain where the height profile bends, not every 2 m.
 COMPACT_XY = .01
@@ -91,6 +91,7 @@ def _walk_sources(tiles):
 
 def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=None):
     tiles = list(tiles)
+    kerb_features = features(optimization)
     pavement = pavement or Pavement.from_tiles(tiles)
     crossings = []
     for _, tile in tiles:
@@ -207,7 +208,7 @@ def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=
                 cache[xy] = (x, y, base+lift)
                 return cache[xy]
 
-            compact = optimization == 'compact'
+            compact = 'kerbs' in kerb_features
             if optimization != 'legacy':
                 # compact: densify first, so the 2 mm height check (not the 2 m step)
                 # decides which stations along long edges remain.
@@ -273,5 +274,5 @@ def build_sidewalks(tiles, pavement=None, *, optimization='balanced', collision=
                     audit['curb_length_m'] += math.dist(a, b)
     audit['triangles'] = mesh.count
     audit['collision_triangles'] = collision.count if collision is not None else mesh.count
-    audit['arc_error_m'] = {'legacy': None, 'compact': COMPACT_ARC_ERROR}.get(optimization, ARC_ERROR)
+    audit['arc_error_m'] = None if optimization == 'legacy' else COMPACT_ARC_ERROR if 'kerbs' in kerb_features else ARC_ERROR
     return mesh, audit

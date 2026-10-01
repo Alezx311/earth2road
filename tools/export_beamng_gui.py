@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 from akadem_maps.cli import Events
 from akadem_maps.context import atomic_directory, read_json, sha256, write_json
 from akadem_maps.adapters.beamng.export import validate_export
+from akadem_maps.adapters.beamng.beamng_geometry import optimization_mode
 from akadem_maps.adapters.beamng.export_beamng import export_map, deterministic_zip
 
 
@@ -71,7 +72,7 @@ def main(argv=None):
     parser.add_argument('--log', type=Path, required=True)
     parser.add_argument('--parent-pid', type=int, required=True)
     parser.add_argument('--cancel-file', type=Path, required=True)
-    parser.add_argument('--optimization', choices=('compact', 'balanced', 'legacy'), default='balanced')
+    parser.add_argument('--optimization', type=optimization_mode, default='balanced', help='legacy, balanced, compact, or balanced+writer/kerbs/terrain')
     args = parser.parse_args(argv)
     args.log.parent.mkdir(parents=True, exist_ok=True)
     watcher = None
