@@ -1,4 +1,8 @@
-# TerraDrive — генератор карт (публічна beta, у роботі)
+# Earth2Road — генератор карт (публічна beta, у роботі)
+
+Раніше — TerraDrive. Наявні карти, налаштування, `TerraDrive.cmd` та команди
+`terra-drive` і `akadem-maps` залишаються сумісними. Для оновлення наявної інсталяції
+запустіть setup ще раз.
 
 [English version](README.md)
 
@@ -15,7 +19,7 @@
 Потрібні Python 3.11+ (перевірено 3.14), `curl` та інтернет для першого запуску.
 
 **Windows без терміналу:** завантажте репозиторій (Code → Download ZIP), розпакуйте й двічі
-клацніть **`TerraDrive.cmd`**. Перший запуск усе встановить (якщо Python немає, запропонує
+клацніть **`Earth2Road.cmd`**. Перший запуск усе встановить (якщо Python немає, запропонує
 встановити його через winget); наступні запуски одразу відкривають гру.
 
 Або з терміналу:
@@ -49,12 +53,12 @@
 
 ```bash
 python -m pip install -c requirements.lock ".[generator]"               # з копії репозиторію; на PyPI ще не опубліковано
-terra-drive doctor                        # перевіряє numpy, shapely, pyproj, osmium, SUMO netconvert
+earth2road doctor                        # перевіряє numpy, shapely, pyproj, osmium, SUMO netconvert
 ```
 
-`setup.ps1` / `setup.sh` (і `TerraDrive.cmd`) ставлять CLI у локальний `.venv`, а не в `PATH`,
-тож просто `terra-drive` там «не знайдено». Використовуйте `.\.venv\Scripts\terra-drive`
-(Linux/macOS: `.venv/bin/terra-drive`), спершу активуйте venv (`.\.venv\Scripts\Activate.ps1`,
+`setup.ps1` / `setup.sh` (і `Earth2Road.cmd`) ставлять CLI у локальний `.venv`, а не в `PATH`,
+тож просто `earth2road` там «не знайдено». Використовуйте `.\.venv\Scripts\earth2road`
+(Linux/macOS: `.venv/bin/earth2road`), спершу активуйте venv (`.\.venv\Scripts\Activate.ps1`,
 `source .venv/bin/activate`) або запускайте `python -m akadem_maps` з Python цього venv.
 
 Гравцеві експортованої BeamNG-карти потрібен лише BeamNG.drive — без Python.
@@ -62,11 +66,11 @@ terra-drive doctor                        # перевіряє numpy, shapely, p
 ## Швидкий старт — повністю офлайн-приклад
 
 ```bash
-terra-drive build  --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output out/world
-terra-drive validate --target world  --input out/world
-terra-drive export --target beamng --world out/world --output out/beamng
-terra-drive validate --target beamng --input out/beamng
-terra-drive export --target godot  --world out/world --output out/godot --offline
+earth2road build  --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output out/world
+earth2road validate --target world  --input out/world
+earth2road export --target beamng --world out/world --output out/beamng
+earth2road validate --target beamng --input out/beamng
+earth2road export --target godot  --world out/world --output out/godot --offline
 ```
 
 `examples/tiny` — синтетична сітка 3×3 вулиці з пласким рельєфом (MIT), це не дані OSM.
@@ -74,7 +78,7 @@ terra-drive export --target godot  --world out/world --output out/godot --offlin
 ## Власна ділянка (bbox)
 
 ```bash
-terra-drive build --bbox WEST SOUTH EAST NORTH --id my_area --name "Моя ділянка" --output out/my_area
+earth2road build --bbox WEST SOUTH EAST NORTH --id my_area --name "Моя ділянка" --output out/my_area
 ```
 
 - Координати в градусах; `west < east`, `south < north`. Перетин антимеридіана не підтримується.
@@ -92,10 +96,10 @@ SIGTERM, код 130, нічого не публікується). Повторн
 ## Експорт у BeamNG
 
 ```bash
-terra-drive export --target beamng --world out/my_area --output out/my_area_beamng [--level-id my_level]
+earth2road export --target beamng --world out/my_area --output out/my_area_beamng [--level-id my_level]
 ```
 
-`--world` — тека світу: `--output` команди `terra-drive build` або `out/generated/<id>` для карти,
+`--world` — тека світу: `--output` команди `earth2road build` або `out/generated/<id>` для карти,
 створеної в грі (M → New map). Тека `--output` ще не повинна існувати. ID рівня може містити лише
 малі латинські літери, цифри та `_`; типово це `kyiv_<ID карти>`. `tools/export_beamng.py
 --world <тека> --output <тека>` робить те саме для старих скриптів; його `--map` приймає ID
@@ -123,9 +127,9 @@ DAE ~на 70 % менші), `balanced+kerbs` (B: бордюри без фаск�
 ### Збереження правок World Editor
 
 ```bash
-terra-drive capture --target beamng --level "%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\levels\<level_id>" \
+earth2road capture --target beamng --level "%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\levels\<level_id>" \
                     --export out/my_area_beamng --output my_edits.json
-terra-drive export --target beamng --world out/my_area_v2 --output out/my_area_beamng_v2 --overrides my_edits.json
+earth2road export --target beamng --world out/my_area_v2 --output out/my_area_beamng_v2 --overrides my_edits.json
 ```
 
 Зберігаються лише об'єкти сцени (не змінені меші, рельєф чи світлофори). Якщо змінений вами
@@ -134,8 +138,8 @@ terra-drive export --target beamng --world out/my_area_v2 --output out/my_area_b
 ## Експорт у Godot
 
 ```bash
-terra-drive export  --target godot --world out/my_area --output out/my_area_godot
-terra-drive install --target godot --export out/my_area_godot --root . [--replace] [--activate]
+earth2road export  --target godot --world out/my_area --output out/my_area_godot
+earth2road install --target godot --export out/my_area_godot --root . [--replace] [--activate]
 ```
 
 Встановлення не перезаписує наявну карту без `--replace` (стара копія йде в `.cache/replaced/`)
@@ -158,7 +162,7 @@ terra-drive install --target godot --export out/my_area_godot --root . [--replac
 
 ## Повідомлення про помилку
 
-Створіть issue з командою, JSONL-файлом `--events`, виводом `terra-drive doctor`, ОС і версією
+Створіть issue з командою, JSONL-файлом `--events`, виводом `earth2road doctor`, ОС і версією
 BeamNG, а для проблем карти — ID рівня, координатами або скриншотом. Не прикладайте OSM-витяги
 більші за кілька МБ — хешів з `inputs/manifest.json` досить, щоб їх ідентифікувати.
 
@@ -171,7 +175,7 @@ BeamNG, а для проблем карти — ID рівня, координа�
 
 ## Development
 
-The distribution and CLI are `terra-drive`; `akadem-maps`, the `akadem_maps` Python API,
+The distribution and CLI are `earth2road`; `terra-drive` and `akadem-maps` aliases, the `akadem_maps` Python API,
 `AKADEM_*` environment variables and existing map IDs remain compatible.
 See [CONTRIBUTING](CONTRIBUTING.md), [game setup](docs/GAME.md),
 [validation results](docs/VALIDATION.md) and [third-party notices](THIRD_PARTY_NOTICES.md).

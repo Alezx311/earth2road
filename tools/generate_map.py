@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build, export and install a Godot map around a point anywhere on Earth.
 
-A thin wrapper over the existing pipeline (terra-drive build --bbox → export godot →
+A thin wrapper over the existing pipeline (earth2road build --bbox → export godot →
 install --activate) for the in-game location picker (game/scripts/location_picker.gd)
 and for the command line:
 

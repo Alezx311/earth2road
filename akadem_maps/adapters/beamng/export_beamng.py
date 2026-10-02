@@ -1501,8 +1501,8 @@ def main():
     parser.add_argument('--map', default='focus_metro_mcd',
                         help='Installed map id (game/data/<id>); a world folder path is treated as --world')
     parser.add_argument('--world', type=Path,
-                        help='World folder from `terra-drive build` or the in-game generator (out/generated/<id>); '
-                             'writes the same installable ZIP as `terra-drive export --target beamng`')
+                        help='World folder from `earth2road build` or the in-game generator (out/generated/<id>); '
+                             'writes the same installable ZIP as `earth2road export --target beamng`')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--level-id')
     parser.add_argument('--overrides', type=Path)

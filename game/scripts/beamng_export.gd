@@ -166,7 +166,7 @@ func start_export() -> void:
 	var root := Picker.project_root()
 	var python := root + ("/.venv/Scripts/python.exe" if OS.get_name() == "Windows" else "/.venv/bin/python")
 	if not FileAccess.file_exists(python):
-		status.text = tr("Python environment missing. Run TerraDrive setup and retry.")
+		status.text = tr("Python environment missing. Run Earth2Road setup and retry.")
 		return
 	if DirAccess.make_dir_recursive_absolute(root + "/logs") != OK:
 		status.text = tr("Could not write export logs. Check folder permissions.")

@@ -1,7 +1,10 @@
 config_version=5
 
 [application]
-config/name="TerraDrive"
+config/name="Earth2Road"
+; Preserve pre-rename settings (Godot defaults to app_userdata/<project name>).
+config/use_custom_user_dir=true
+config/custom_user_dir_name="Godot/app_userdata/TerraDrive"
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 

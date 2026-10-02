@@ -50,7 +50,7 @@ class DownloadFeedbackTests(unittest.TestCase):
                 self.assertEqual(json.loads((world/'sources.json').read_text())['source'], url+'/ok')
                 self.assertEqual([event for event, _ in events], ['download', 'warning', 'download'])
                 self.assertIn('504', events[1][1]['message'])
-                self.assertTrue(all(agent.startswith('TerraDrive/') for _, agent in requests))
+                self.assertTrue(all(agent.startswith('Earth2Road/') for _, agent in requests))
                 self.assertEqual([path for path, _ in requests], ['/busy']*3 + ['/ok'])
                 self.assertFalse((raw/'test.osm.part').exists())
         finally:

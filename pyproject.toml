@@ -3,14 +3,14 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "terra-drive"
+name = "earth2road"
 version = "0.1.0b1"
 description = "Reproducible OSM world packages with Godot and BeamNG adapters"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
-authors = [{name = "TerraDrive contributors"}]
+authors = [{name = "Earth2Road contributors"}]
 dependencies = []
 
 [project.optional-dependencies]
@@ -19,6 +19,7 @@ traffic = ["libsumo==1.27.1", "traci==1.27.1", "websockets==15.0.1"]
 
 [project.scripts]
 terra-drive = "akadem_maps.cli:main"
+earth2road = "akadem_maps.cli:main"
 akadem-maps = "akadem_maps.cli:main"
 
 [tool.setuptools.packages.find]

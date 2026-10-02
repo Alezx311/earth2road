@@ -1,4 +1,4 @@
-# Windows setup for TerraDrive (Godot + SUMO). Does not regenerate maps.
+# Windows setup for Earth2Road (Godot + SUMO). Does not regenerate maps.
 # Installs the offline example map when no map exists yet. Linux: ./setup.sh
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
@@ -25,6 +25,10 @@ $venvPy = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $venvPy)) {
     throw "venv python missing at $venvPy"
 }
+# Remove the old distribution first: its RECORD owns the same akadem_maps files
+# and CLI aliases, so uninstalling it after installing Earth2Road would delete them.
+& $venvPy -m pip uninstall -y terra-drive
+if ($LASTEXITCODE -ne 0) { throw "Old distribution cleanup failed" }
 & $venvPy -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 
@@ -54,7 +58,7 @@ $env:APPDATA = $savedAppData
 # A fresh checkout has no maps (game/data/ is not in Git): install the offline example so
 # start.ps1 works right away. Skipped when any map is already installed.
 if (-not (Test-Path -LiteralPath 'game\data\active_map')) {
-    $cli = Join-Path $PSScriptRoot '.venv\Scripts\terra-drive.exe'
+    $cli = Join-Path $PSScriptRoot '.venv\Scripts\earth2road.exe'
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     & $cli build --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output "out/tiny-world-$stamp"
     if ($LASTEXITCODE -ne 0) { throw "Example map build failed" }
@@ -66,5 +70,5 @@ if (-not (Test-Path -LiteralPath 'game\data\active_map')) {
 
 Write-Host "Setup done. Run .\start.ps1 (the offline example map 'tiny' is installed if no other map was)."
 Write-Host "To rebuild a map: .\.venv\Scripts\python.exe tools\prepare.py --config config\<id>.json --install [--replace] [--activate]"
-Write-Host "BeamNG ZIP of a map: .\.venv\Scripts\terra-drive export --target beamng --world out\generated\<id> --output out\<id>_beamng"
+Write-Host "BeamNG ZIP of a map: .\.venv\Scripts\earth2road export --target beamng --world out\generated\<id> --output out\<id>_beamng"
 Write-Host "New map anywhere: .\start.ps1 --generate LAT LON [--size KM] [--name NAME], or M -> New map in the game."

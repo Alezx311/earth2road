@@ -48,7 +48,7 @@ def export_installed(mid, destination, events, *, root=ROOT, optimization='balan
         info = read_json(level/'info.json')
         index = read_json(source/'index.json')
         info['title'] = index.get('name', mid)
-        info['description'] = ('Exported from TerraDrive. Signal timings and generated scenery are synthetic. '
+        info['description'] = ('Exported from Earth2Road. Signal timings and generated scenery are synthetic. '
                                + index.get('attribution', ''))
         write_json(level/'info.json', info)
         reports = stage/'reports'

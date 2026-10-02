@@ -48,7 +48,7 @@ const UK := {
 	"ZIP ready: %s": "ZIP готовий: %s",
 	"Export cancelled": "Експорт скасовано",
 	"Choose an absolute output folder path.": "Оберіть повний шлях до папки збереження.",
-	"Python environment missing. Run TerraDrive setup and retry.": "Середовище Python відсутнє. Запустіть налаштування TerraDrive та повторіть.",
+	"Python environment missing. Run Earth2Road setup and retry.": "Середовище Python відсутнє. Запустіть налаштування Earth2Road та повторіть.",
 	"Could not write export logs. Check folder permissions.": "Не вдалося записати журнал експорту. Перевірте права доступу до папки.",
 	"Could not start the exporter. Check technical details.": "Не вдалося запустити експорт. Перегляньте технічні подробиці.",
 	"Export failed. Check technical details and retry.": "Експорт не вдався. Перегляньте технічні подробиці та повторіть.",

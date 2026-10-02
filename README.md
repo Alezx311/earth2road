@@ -1,4 +1,7 @@
-# TerraDrive — map generator (public beta, in progress)
+# Earth2Road — map generator (public beta, in progress)
+
+Formerly TerraDrive. Existing maps, settings, `TerraDrive.cmd`, `terra-drive` and
+`akadem-maps` commands remain compatible. Run setup once to update an existing installation.
 
 [Українська версія](README.uk.md)
 
@@ -18,7 +21,7 @@ dressing are derived or synthetic, never measured data — every record says whi
 You need Python 3.11+ (3.14 is validated), `curl` and internet for the first setup.
 
 **Windows, no terminal:** download the repository (Code → Download ZIP), unpack it and
-double-click **`TerraDrive.cmd`**. The first run installs everything (it offers to install
+double-click **`Earth2Road.cmd`**. The first run installs everything (it offers to install
 Python with winget if it is missing); later runs start the game straight away.
 
 Or from a terminal:
@@ -53,12 +56,12 @@ unpinned compatible dependencies. Windows is locally validated; Linux has a CI j
 
 ```bash
 python -m pip install -c requirements.lock ".[generator]"               # from a checkout; not published on PyPI yet
-terra-drive doctor                        # checks numpy, shapely, pyproj, osmium, SUMO netconvert
+earth2road doctor                        # checks numpy, shapely, pyproj, osmium, SUMO netconvert
 ```
 
-`setup.ps1` / `setup.sh` (and `TerraDrive.cmd`) install the CLI into the local `.venv`, not onto
-`PATH`, so a plain `terra-drive` is "not found" there. Use `.\.venv\Scripts\terra-drive`
-(Linux/macOS: `.venv/bin/terra-drive`), activate the venv first (`.\.venv\Scripts\Activate.ps1`,
+`setup.ps1` / `setup.sh` (and `Earth2Road.cmd`) install the CLI into the local `.venv`, not onto
+`PATH`, so a plain `earth2road` is "not found" there. Use `.\.venv\Scripts\earth2road`
+(Linux/macOS: `.venv/bin/earth2road`), activate the venv first (`.\.venv\Scripts\Activate.ps1`,
 `source .venv/bin/activate`), or run `python -m akadem_maps` with the venv's Python.
 
 Players of an exported BeamNG map need only BeamNG.drive — no Python.
@@ -66,11 +69,11 @@ Players of an exported BeamNG map need only BeamNG.drive — no Python.
 ## Quick start — fully offline example
 
 ```bash
-terra-drive build  --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output out/world
-terra-drive validate --target world  --input out/world
-terra-drive export --target beamng --world out/world --output out/beamng
-terra-drive validate --target beamng --input out/beamng
-terra-drive export --target godot  --world out/world --output out/godot --offline
+earth2road build  --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output out/world
+earth2road validate --target world  --input out/world
+earth2road export --target beamng --world out/world --output out/beamng
+earth2road validate --target beamng --input out/beamng
+earth2road export --target godot  --world out/world --output out/godot --offline
 ```
 
 `examples/tiny` is a synthetic 3×3 street grid with a flat DEM (MIT); it is not OSM data.
@@ -78,7 +81,7 @@ terra-drive export --target godot  --world out/world --output out/godot --offlin
 ## Your own area (bbox)
 
 ```bash
-terra-drive build --bbox WEST SOUTH EAST NORTH --id my_area --name "My area" --output out/my_area
+earth2road build --bbox WEST SOUTH EAST NORTH --id my_area --name "My area" --output out/my_area
 ```
 
 - Coordinates in degrees; `west < east`, `south < north`. The antimeridian is not supported.
@@ -98,10 +101,10 @@ recorded inputs with `--inputs <world>/inputs --offline` for identical network a
 ## BeamNG export
 
 ```bash
-terra-drive export --target beamng --world out/my_area --output out/my_area_beamng [--level-id my_level]
+earth2road export --target beamng --world out/my_area --output out/my_area_beamng [--level-id my_level]
 ```
 
-`--world` is a world folder: the `--output` of `terra-drive build`, or `out/generated/<id>` for a
+`--world` is a world folder: the `--output` of `earth2road build`, or `out/generated/<id>` for a
 map made in the game (M → New map). `--output` must not exist yet. A level ID may contain only
 lowercase letters, digits and `_`; by default it is `kyiv_<map id>`. `tools/export_beamng.py
 --world <folder> --output <folder>` does the same for older scripts; its `--map` takes an
@@ -130,9 +133,9 @@ by path, and every own resource is prefixed with the level ID.
 ### Keeping World Editor changes
 
 ```bash
-terra-drive capture --target beamng --level "%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\levels\<level_id>" \
+earth2road capture --target beamng --level "%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\levels\<level_id>" \
                     --export out/my_area_beamng --output my_edits.json
-terra-drive export --target beamng --world out/my_area_v2 --output out/my_area_beamng_v2 --overrides my_edits.json
+earth2road export --target beamng --world out/my_area_v2 --output out/my_area_beamng_v2 --overrides my_edits.json
 ```
 
 Only scene objects are captured (not edited meshes, terrain or signals). If an edited object
@@ -141,8 +144,8 @@ changed in the new build, the export stops and names the conflicts instead of gu
 ## Godot export
 
 ```bash
-terra-drive export  --target godot --world out/my_area --output out/my_area_godot
-terra-drive install --target godot --export out/my_area_godot --root . [--replace] [--activate]
+earth2road export  --target godot --world out/my_area --output out/my_area_godot
+earth2road install --target godot --export out/my_area_godot --root . [--replace] [--activate]
 ```
 
 Install never overwrites an installed map unless `--replace` (the old copy goes to
@@ -167,7 +170,7 @@ Human-readable log goes to stderr.
 
 ## Reporting a bug
 
-Open an issue with: the command line, the `--events` JSONL file, `terra-drive doctor` output,
+Open an issue with: the command line, the `--events` JSONL file, `earth2road doctor` output,
 OS and BeamNG version, and for map problems the level ID, coordinates or screenshot. Do not
 attach downloaded OSM extracts larger than a few MB — the world's `inputs/manifest.json` hashes
 are enough to identify them.
@@ -181,7 +184,7 @@ world format: [docs/WORLD_FORMAT.md](docs/WORLD_FORMAT.md).
 
 ## Development
 
-The distribution and CLI are `terra-drive`; `akadem-maps`, the `akadem_maps` Python API,
+The distribution and CLI are `earth2road`; `terra-drive` and `akadem-maps` aliases, the `akadem_maps` Python API,
 `AKADEM_*` environment variables and existing map IDs remain compatible.
 See [CONTRIBUTING](CONTRIBUTING.md), [game setup](docs/GAME.md),
 [validation results](docs/VALIDATION.md) and [third-party notices](THIRD_PARTY_NOTICES.md).

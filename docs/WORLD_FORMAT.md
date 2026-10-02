@@ -1,6 +1,6 @@
 # World format v2 and adapter API
 
-A **world** is an engine-neutral, self-verifying folder produced by `terra-drive build`.
+A **world** is an engine-neutral, self-verifying folder produced by `earth2road build`.
 Adapters (`export --target godot|beamng`) only read it; they never modify it.
 
 ## Layout

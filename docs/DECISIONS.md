@@ -1,7 +1,9 @@
 # Decisions
 
-- Public project/distribution/CLI: TerraDrive / `terra-drive`. Keep `akadem-maps` as a CLI alias,
-  `akadem_maps` imports and `AKADEM_*` settings for compatibility with existing workflows.
+- Public project/distribution/CLI/repository: Earth2Road / `earth2road`
+  (github.com/Alezx311/earth2road; the GitHub repository was renamed from `terra-drive`).
+  Keep `terra-drive` and `akadem-maps` as CLI aliases, `akadem_maps` imports and `AKADEM_*`
+  settings for compatibility with existing workflows.
 - One engine-neutral world feeds the Godot and BeamNG adapters. Exports do not mutate inputs.
 - New builds/exports require fresh output directories. Map replacement requires an explicit
   flag and preserves a backup. Activation is a separate explicit action.

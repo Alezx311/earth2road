@@ -25,7 +25,7 @@ func _ready() -> void:
 	rows.add_child(top)
 	var brand := PanelContainer.new()
 	brand.add_theme_stylebox_override("panel", Ui.style(Ui.BG, 16))
-	brand.add_child(Ui.label("TERRA / DRIVE", 24, Ui.ACCENT))
+	brand.add_child(Ui.label("EARTH2ROAD", 24, Ui.ACCENT))
 	top.add_child(brand)
 	top.add_child(Ui.expand())
 	for item in [["maps", "Maps · M"], ["pause", "Pause · P"], ["camera", "Camera · C"],

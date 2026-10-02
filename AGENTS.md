@@ -1,4 +1,4 @@
-# TerraDrive — contributor and agent entry point
+# Earth2Road — contributor and agent entry point
 
 1. Inspect `git status --short`; preserve other work. Do not spawn agents unless requested.
 2. Read `docs/HANDOFF.md`, `docs/PLAN.md`, `docs/DECISIONS.md` and `docs/VALIDATION.md`.

@@ -1,4 +1,4 @@
-name: Validate TerraDrive
+name: Validate Earth2Road
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -50,7 +50,7 @@ jobs:
         shell: python
         run: |
           import pathlib, subprocess, sys
-          wheel = next(pathlib.Path('dist').glob('terra_drive-*.whl'))
+          wheel = next(pathlib.Path('dist').glob('earth2road-*.whl'))
           subprocess.run([sys.executable, '-m', 'pip', 'install', '--force-reinstall', '--no-deps', str(wheel)], check=True)
       - name: Installed wheel offline build, both exports and installation
         run: python tools/ci_offline.py

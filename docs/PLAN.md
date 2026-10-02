@@ -1,4 +1,4 @@
-# TerraDrive scope
+# Earth2Road scope
 
 One standalone repository contains the Python world generator, Godot driving game,
 SUMO traffic bridge and BeamNG.drive exporter. The bundled offline fixture is synthetic.

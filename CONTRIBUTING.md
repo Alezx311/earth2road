@@ -1,4 +1,4 @@
-# Contributing to TerraDrive
+# Contributing to Earth2Road
 
 Use Python 3.14 for the pinned validation environment. The generator metadata allows
 Python 3.11+, but the complete lock file and runtime acceptance were tested with 3.14.

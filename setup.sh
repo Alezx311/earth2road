@@ -4,6 +4,8 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 mkdir -p .tools .cache logs
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo 'Python 3.11+ is required (3.14 is the pinned, validated version).'; exit 1; }
 python3 -m venv .venv
+# The old distribution owns the same files; uninstall it BEFORE the replacement.
+.venv/bin/python -m pip uninstall -y terra-drive
 .venv/bin/python -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
 source tools/godot.sh
 if [[ ! -x "$godot" ]]; then
@@ -26,11 +28,11 @@ XDG_DATA_HOME="$PWD/.cache/data" XDG_CONFIG_HOME="$PWD/.cache/config" "$godot" -
 # start.sh works right away. Skipped when any map is already installed.
 if [[ ! -f game/data/active_map ]]; then
   stamp=$(date +%Y%m%d-%H%M%S)
-  .venv/bin/terra-drive build --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output "out/tiny-world-$stamp"
-  .venv/bin/terra-drive export --target godot --world "out/tiny-world-$stamp" --output "out/tiny-godot-$stamp" --offline
-  .venv/bin/terra-drive install --target godot --export "out/tiny-godot-$stamp" --root . --activate
+  .venv/bin/earth2road build --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output "out/tiny-world-$stamp"
+  .venv/bin/earth2road export --target godot --world "out/tiny-world-$stamp" --output "out/tiny-godot-$stamp" --offline
+  .venv/bin/earth2road install --target godot --export "out/tiny-godot-$stamp" --root . --activate
 fi
-echo "TerraDrive setup complete. Run ./start.sh (the offline example map 'tiny' is installed if no other map was)."
-echo 'BeamNG ZIP of a map: .venv/bin/terra-drive export --target beamng --world out/generated/<id> --output out/<id>_beamng'
+echo "Earth2Road setup complete. Run ./start.sh (the offline example map 'tiny' is installed if no other map was)."
+echo 'BeamNG ZIP of a map: .venv/bin/earth2road export --target beamng --world out/generated/<id> --output out/<id>_beamng'
 echo 'Rebuild a map: .venv/bin/python tools/prepare.py --config config/<id>.json --install [--replace] [--activate]'
 echo 'New map anywhere: ./start.sh --generate LAT LON [--size KM] [--name NAME], or M → New map in the game.'

@@ -23,7 +23,7 @@ var list: VBoxContainer
 var map_rows: Array[Button] = []
 var query := ""
 
-## Top-level "name" in the key-sorted, indented index.json that terra-drive export writes.
+## Top-level "name" in the key-sorted, indented index.json that earth2road export writes.
 const SORTED_NAME := "\n  \"name\": \""
 const SCAN_CHUNK := 1 << 20
 

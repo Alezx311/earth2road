@@ -40,7 +40,7 @@ def user_agent():
     """Overpass (overpass-api.de) answers 406 to the default Python-urllib/curl agents, and
     the OSM tile/terrain usage policies ask for an identifying one."""
     from akadem_maps import __version__
-    return f'TerraDrive/{__version__} (OpenStreetMap map generator for a driving sandbox)'
+    return f'Earth2Road/{__version__} (OpenStreetMap map generator for a driving sandbox)'
 
 def download(url, path, form=None, max_time=180):
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -37,7 +37,7 @@ def doctor():
     return {'version':__version__,'python':sys.version.split()[0],'checks':checks,'ok':all(checks.values()),'install':'pip install ".[generator]" (from a checkout)'}
 
 def parser():
-    p=argparse.ArgumentParser(prog='terra-drive')
+    p=argparse.ArgumentParser(prog='earth2road')
     p.add_argument('--version',action='version',version=__version__)
     sub=p.add_subparsers(dest='command',required=True)
     d=sub.add_parser('doctor')

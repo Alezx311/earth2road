@@ -21,7 +21,7 @@ signal back
 const TILE := 256
 const TILE_URL := "https://tile.openstreetmap.org/%d/%d/%d.png"
 const SEARCH_URL := "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=%s"
-const USER_AGENT := "User-Agent: TerraDrive-map-picker/1.0 (open-source driving sandbox; Godot)"
+const USER_AGENT := "User-Agent: Earth2Road-map-picker/1.0 (open-source driving sandbox; Godot)"
 const TILE_CACHE := "user://tile_cache"
 const MAX_DOWNLOADS := 4
 const MAX_TEXTURES := 400
