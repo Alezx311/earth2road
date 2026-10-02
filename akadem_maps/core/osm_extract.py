@@ -35,31 +35,54 @@ def extract(pbf, out, bbox, polygon=None):
         in_polygon = contains(polygon)
         inside = lambda loc: in_box(loc) and in_polygon(loc.lon, loc.lat)
     t = time.monotonic()
-    ways, relations, member_ways, member_nodes = set(), set(), set(), set()
+    ways, relations, member_nodes, inside_nodes = set(), set(), set(), set()
+    relation_members, relevant = {}, set()
+    print(f'Reading local OSM package {Path(pbf).name}; first extraction may take several minutes', flush=True)
+    # Locations are cached natively before the filter. Only tagged nodes need Python
+    # callbacks; relation-only via nodes can be looked up in that native cache.
+    processor = osmium.FileProcessor(str(pbf)).with_locations().with_filter(
+        osmium.filter.EmptyTagFilter().enable_for(osmium.osm.NODE))
     # Pass 1 (node locations): ways touching the bbox; relations with a member inside.
-    for obj in osmium.FileProcessor(str(pbf)).with_locations():
+    for obj in processor:
         if obj.is_node():
-            if obj.tags and poi(obj.tags) and inside(obj.location):
-                member_nodes.add(obj.id)
+            if inside(obj.location):
+                inside_nodes.add(obj.id)
+                if obj.tags and poi(obj.tags):
+                    member_nodes.add(obj.id)
         elif obj.is_way():
             if any(inside(nd.location) for nd in obj.nodes):
                 ways.add(obj.id)
         elif obj.is_relation():
-            if obj.tags.get('type') not in ('restriction', 'multipolygon'):
-                continue
-            hit = False
-            for m in obj.members:
-                if (m.type == 'w' and m.ref in ways):
-                    hit = True
-                    break
-            if hit:
-                relations.add(obj.id)
-                for m in obj.members:
-                    if m.type == 'w':
-                        member_ways.add(m.ref)
-                    elif m.type == 'n':
-                        member_nodes.add(m.ref)
-    ways |= member_ways
+            relation_members[obj.id] = [(m.type, m.ref) for m in obj.members]
+            if obj.tags.get('type') in ('restriction', 'multipolygon'):
+                relevant.add(obj.id)
+                for member in obj.members:
+                    if member.type == 'n':
+                        try:
+                            if inside(processor.node_location_storage.get(member.ref)):
+                                inside_nodes.add(member.ref)
+                        except KeyError:
+                            pass  # Reference validation below reports a selected missing member.
+    # Seed by original spatial hits (including via-node restrictions), then include
+    # nested parent relations regardless of file order. Complete all descendants.
+    changed = True
+    while changed:
+        hits = {rid for rid, members in relation_members.items() if rid in relevant and any(
+            (kind == 'w' and ref in ways) or (kind == 'n' and ref in inside_nodes)
+            or (kind == 'r' and ref in relations) for kind, ref in members)}
+        changed = bool(hits - relations)
+        relations |= hits
+    pending = list(relations)
+    while pending:
+        rid = pending.pop()
+        for kind, ref in relation_members.get(rid, []):
+            if kind == 'w':
+                ways.add(ref)
+            elif kind == 'n':
+                member_nodes.add(ref)
+            elif kind == 'r' and ref not in relations:
+                relations.add(ref)
+                pending.append(ref)
     print(f'pass 1: {len(ways)} ways, {len(relations)} relations ({time.monotonic()-t:.0f} s)', flush=True)
     # Pass 2: nodes of the selected ways.
     nodes = set(member_nodes)
@@ -68,11 +91,17 @@ def extract(pbf, out, bbox, polygon=None):
     print(f'pass 2: {len(nodes)} nodes ({time.monotonic()-t:.0f} s)', flush=True)
     # Pass 3: write in file order (nodes, ways, relations).
     tmp = Path(str(out) + '.part')
+    tmp.parent.mkdir(parents=True, exist_ok=True)
     with osmium.SimpleWriter(osmium.io.File(str(tmp), 'osm'), overwrite=True) as writer:
         for kind, ids, add in ((osmium.osm.NODE, nodes, writer.add_node), (osmium.osm.WAY, ways, writer.add_way), (osmium.osm.RELATION, relations, writer.add_relation)):
             for obj in osmium.FileProcessor(str(pbf), kind).with_filter(osmium.filter.IdFilter(ids)):
                 add(obj)
-    tmp.replace(out)
+    from akadem_maps.sources import validate_osm
+    try:
+        validate_osm(tmp, require_roads=False)
+        tmp.replace(out)
+    finally:
+        tmp.unlink(missing_ok=True)
     print(f'written {out} ({time.monotonic()-t:.0f} s)', flush=True)
     return {'ways': len(ways), 'relations': len(relations), 'nodes': len(nodes)}
 

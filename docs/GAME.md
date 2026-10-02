@@ -33,7 +33,15 @@ or generate one around any point on Earth:
 - From the shell: `.\start.ps1 --generate 49.8419 24.0316 --size 1.5 --name "Lviv centre"`
   (Linux: `./start.sh --generate ...`), or `tools/generate_map.py` directly.
 
-Generation downloads OSM data (Overpass, with mirror fallback) and terrain tiles. A 0.6 km
+The **Map data** controls offer Auto/Offline modes, saved territories, local PBF
+selection, separate OSM/terrain readiness and **Prepare area offline**. Preparation
+does not install a map. **Find regional package** shows a Geofabrik package and its
+size; downloading is a separate button press. **Import local PBF…** asks for the
+coverage guaranteed by its provider. Refresh preserves the previous snapshot.
+Offline mode disables online search and background-tile requests; coordinates and
+saved areas remain usable. See [CLI](CLI.md) for equivalent commands and cache rules.
+
+Generation reuses verified snapshots and local packages before Overpass, and caches terrain tiles. A 0.6 km
 square took about 40 s; larger areas take minutes. Areas outside Ukraine build as
 `experimental`, without posted road signs. The progress log is `logs/generate.log`.
 Generation may require network access, several GB of memory and tens of minutes.

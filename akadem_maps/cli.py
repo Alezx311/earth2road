@@ -28,11 +28,12 @@ class Events:
             self.stream.close()
 
 def doctor():
-    from .runtime import sumo_binary
+    from .runtime import sumo_binary, check_sumo
     checks={name:importlib.util.find_spec(name) is not None for name in ('numpy','shapely','PIL','pyproj','sumolib','osmium','requests')}
     try:
         checks['netconvert']=str(sumo_binary('netconvert'))
-    except FileNotFoundError:
+        checks['sumo_version']=check_sumo('netconvert', 'duarouter')
+    except (FileNotFoundError, RuntimeError):
         checks['netconvert']=False
     return {'version':__version__,'python':sys.version.split()[0],'checks':checks,'ok':all(checks.values()),'install':'pip install ".[generator]" (from a checkout)'}
 
@@ -51,6 +52,21 @@ def parser():
     b.add_argument('--cache',type=Path,help='Directory containing raw OSM and terrain inputs')
     b.add_argument('--inputs',type=Path,help='Prepared input bundle with manifest.json')
     b.add_argument('--offline',action='store_true')
+    b.add_argument('--mode', choices=('auto','offline'), default='auto')
+    b.add_argument('--package', help='registered local PBF package ID')
+    b.add_argument('--refresh', action='store_true')
+    data=sub.add_parser('data', help='Inspect, prepare, import or explicitly download offline data')
+    data.add_argument('action', choices=('status','prepare','suggest','download','import'))
+    data.add_argument('--bbox', nargs=4, type=float, required=True)
+    data.add_argument('--name', default='Saved area')
+    data.add_argument('--cache', type=Path, required=True)
+    data.add_argument('--offline', action='store_true')
+    data.add_argument('--refresh', action='store_true')
+    data.add_argument('--package')
+    data.add_argument('--pbf', type=Path)
+    data.add_argument('--coverage', nargs=4, type=float)
+    data.add_argument('--offer', type=Path)
+    data.add_argument('--accept-bytes', type=int)
     e=sub.add_parser('export')
     e.add_argument('--target',choices=('godot','beamng'),required=True)
     e.add_argument('--world',type=Path,required=True);e.add_argument('--output',type=Path,required=True)
@@ -69,7 +85,7 @@ def parser():
     c.add_argument('--output',type=Path,required=True)
     v=sub.add_parser('validate')
     v.add_argument('--target',choices=('world','beamng'),required=True);v.add_argument('--input',type=Path,required=True)
-    for cmd in (d,b,e,i,c,v):
+    for cmd in (d,b,data,e,i,c,v):
         cmd.add_argument('--events',help='JSONL file or - for stdout; human log goes to stderr')
     return p
 
@@ -95,9 +111,17 @@ def main(argv=None):
                 config_root=args.config.resolve().parent if args.config else Path.cwd()
                 if config_root.name=='config':
                     config_root=config_root.parent
-                build_world(cfg,args.output,config_root=config_root,cache=args.cache,inputs=args.inputs,offline=args.offline,emit=events.emit)
+                build_world(cfg,args.output,config_root=config_root,cache=args.cache,inputs=args.inputs,offline=args.offline,
+                            mode=args.mode,package=args.package,refresh=args.refresh,emit=events.emit)
                 return 0
-            if args.command=='export':
+            if args.command=='data':
+                from .data import data_action
+                from .world import validate_config
+                cfg=validate_config({'id':'saved_area','name':args.name,'bbox':args.bbox})
+                result=data_action(args.action,cfg,args.cache,offline=args.offline,refresh=args.refresh,
+                                   package=args.package,pbf=args.pbf,bounds=args.coverage,offer=args.offer,
+                                   accepted_bytes=args.accept_bytes,emit=events.emit)
+            elif args.command=='export':
                 if args.target=='godot':
                     from .adapters.godot.export import export_world
                     result=export_world(args.world,args.output,offline=args.offline)
@@ -128,7 +152,8 @@ def main(argv=None):
     except Exception as exc:
         if os.environ.get('AKADEM_MAPS_TRACEBACK'):
             traceback.print_exc()
-        events.emit('error',code=type(exc).__name__,message=str(exc))
+        from .errors import error_code
+        events.emit('error',code=error_code(exc),message=str(exc))
         return 1
     finally:
         signal.signal(signal.SIGTERM,previous)

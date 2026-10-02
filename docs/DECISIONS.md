@@ -12,3 +12,11 @@
   snapshots, personal notes, local QA profiles and binaries are excluded.
 - Road layout may be observed; DEM smoothing, assumed structure heights, facade styles,
   demand and signal timings are derived/synthetic. They are not measured traffic or surveyed geometry.
+- Source snapshots are immutable and keyed by spatial coverage plus selection rules,
+  independently of map IDs. Only verified complete coverage may serve another area.
+  Local PBF packages precede Overpass; country downloads require a separate explicit
+  action with a displayed size. Imported coverage is a user's declaration, never
+  inferred from a filename or object envelope. Snapshots have no automatic expiry.
+- Offline preparation includes OSM and DEM. Prepared source availability is separate
+  from online name search/map backgrounds and from successful road geometry/runtime
+  acceptance. Antimeridian-crossing maps remain unsupported.

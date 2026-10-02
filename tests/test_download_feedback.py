@@ -25,7 +25,8 @@ class DownloadFeedbackTests(unittest.TestCase):
                 self.send_response(504 if self.path == '/busy' else 200)
                 self.end_headers()
                 if self.path != '/busy':
-                    self.wfile.write(b'<osm><way id="1"><tag k="highway" v="residential"/></way></osm>')
+                    self.wfile.write(b'<osm><node id="1" lat="50" lon="30"/><node id="2" lat="50.01" lon="30"/>'
+                                     b'<way id="1"><nd ref="1"/><nd ref="2"/><tag k="highway" v="residential"/></way></osm>')
 
             def log_message(self, *args):
                 pass
@@ -51,7 +52,7 @@ class DownloadFeedbackTests(unittest.TestCase):
                 self.assertEqual([event for event, _ in events], ['download', 'warning', 'download'])
                 self.assertIn('504', events[1][1]['message'])
                 self.assertTrue(all(agent.startswith('Earth2Road/') for _, agent in requests))
-                self.assertEqual([path for path, _ in requests], ['/busy']*3 + ['/ok'])
+                self.assertEqual([path for path, _ in requests], ['/busy', '/ok'])
                 self.assertFalse((raw/'test.osm.part').exists())
         finally:
             server.shutdown()
@@ -64,5 +65,5 @@ class DownloadFeedbackTests(unittest.TestCase):
             with patch('urllib.request.urlopen', side_effect=TimeoutError('timed out')) as request, patch('time.sleep'):
                 with self.assertRaises(TimeoutError):
                     download('http://127.0.0.1/unreachable', dest, max_time=0.05)
-            self.assertEqual(request.call_count, 3)
+            self.assertEqual(request.call_count, 1)
             self.assertFalse(dest.exists())

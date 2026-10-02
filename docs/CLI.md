@@ -113,3 +113,60 @@ Add `--events FILE` (or `--events -` for stdout) to any command: one JSON object
 Informational records may appear in between: `download` (`url`, and for Overpass a
 browser-openable `query_url`) and `warning` (`message`, e.g. a busy server and the next mirror).
 Human-readable log goes to stderr.
+# Local sources and offline areas
+
+`build --mode auto` (the default) uses a verified area snapshot, then a registered
+local PBF that completely covers the area, then Overpass. `--mode offline` and the
+existing `--offline` flag prohibit source downloads. `--package ID` selects a local
+package when extraction is needed. `--refresh` obtains a new snapshot and preserves
+previous revisions; it cannot be combined with offline mode or `--inputs`.
+
+The same cache directory must be used for preparation and generation. Map IDs and
+world v2/input-bundle formats remain unchanged. Existing map-specific `.osm` files
+and `--inputs` still work, but old files without coverage metadata are not offered
+as general area coverage. Snapshots do not expire automatically. Refreshing with a
+local package uses that package's data date; import/download a newer package to
+update it. Cache revisions are immutable and include coverage, selection version,
+source, timestamp and SHA-256; corrupted entries are ignored. Smaller areas can be
+cut from a verified containing snapshot without network access.
+
+```powershell
+# Report OSM and terrain readiness separately (no network requests).
+python -m akadem_maps data status --bbox 30.326487 50.444434 30.382933 50.480608 --cache out/generated/.akadem-inputs --events -
+
+# Prepare OSM and DEM tiles; does not build, install or activate a map.
+python -m akadem_maps data prepare --bbox 30.326487 50.444434 30.382933 50.480608 --name Bilychi --cache out/generated/.akadem-inputs
+
+# A different map ID reuses the same verified sources.
+python -m akadem_maps build --bbox 30.326487 50.444434 30.382933 50.480608 --id bilychy_offline --name Bilychi --cache out/generated/.akadem-inputs --mode offline --output out/bilychy-offline
+
+# Import a local PBF. These bounds are a declaration of actual provider coverage,
+# not an arbitrary rectangle around the objects or the map you want to generate.
+python -m akadem_maps data import --bbox 30.34 50.45 30.36 50.47 --cache out/generated/.akadem-inputs --pbf downloads/my-city.osm.pbf --coverage 30.2 50.3 30.7 50.7
+
+# Query Geofabrik coverage and report package name, byte size and offer path.
+python -m akadem_maps data suggest --bbox 30.34 50.45 30.36 50.47 --cache out/generated/.akadem-inputs --events -
+```
+
+Download a suggested package only with a separate explicit action:
+`data download --bbox WEST SOUTH EAST NORTH --cache CACHE --offer OFFER_PATH --accept-bytes BYTES`.
+Use the offer path and exact byte count from `suggest`. A changed size, checksum or
+invalid PBF fails without registering the download. No country download happens
+implicitly in `auto` mode. The Geofabrik polygon, including holes and borders, must
+cover the entire rectangle. External/BBBike PBF files use the same import command;
+their coverage is explicitly user-declared and recorded as such.
+
+The picker wrapper also accepts `--mode`, `--offline`, `--cache`, `--package`,
+`--refresh` and `--action prepare|status|suggest|download|import`. Normal generation
+still builds, exports, installs a new unique ID, and activates it. Preparation
+records complete way envelopes outside the rectangle as well as the rectangle's
+DEM tiles, because road profiles sample those nodes. Map backgrounds and name
+search are optional online services; coordinates and saved areas work offline.
+
+SUMO is checked before generation. Diagnostics survive failed atomic builds in
+`OUTPUT.logs/`; the picker also keeps JSONL events and a human log under `logs/`.
+Error codes distinguish `sumo`, `network`, `offline_missing`, `source_invalid`,
+`no_roads` and `cancelled`. Overpass attempts share a 180-second network budget,
+honor per-host `Retry-After`, and validate XML/remarks/references before publication.
+An existing dated `geofabrik` config remains an explicit source declaration with
+its own checksum/corridor rules, for compatibility.

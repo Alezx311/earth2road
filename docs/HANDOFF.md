@@ -1,5 +1,40 @@
 # Earth2Road handoff
 
+## 2026-10-02 — local sources and offline preparation
+
+- SUMO resolves native eclipse-sumo binaries before pip wrappers; `doctor` exercises
+  netconvert and duarouter. Both report 1.27.1 after checkout relocation.
+- Added verified area/selection-keyed OSM snapshots, recursive relation validation,
+  local PBF registry, Geofabrik coverage catalog/explicit size-confirmed downloads,
+  and OSM + DEM preparation/readiness. Picker and CLI share source actions.
+- PBF scan initially passed an unsupported bare SimpleHandler to osmium.apply; now uses
+  a native filter. Invalid PBF header rejection avoids a native Windows handle leak.
+  Old tests expected three per-host retries and a way without nodes; fixtures corrected.
+- Godot editor import and the graphical picker harness (`DATA_PICKER_OK`) passed outside
+  the sandbox; the sandbox could not create Godot AppData directories.
+- Existing Ukraine PBF checked against its recorded Geofabrik MD5 and registered with the
+  catalog polygon (SHA-256 1340de17a955…, 878444553 bytes). Fetching the dated remote MD5
+  timed out twice; no replacement PBF downloaded.
+- Fixed: files moved out of `tempfile.TemporaryDirectory` kept its owner-only ACL
+  (Python 3.13+ maps mkdtemp's 0o700 to an ACL on Windows). Ten DEM tiles prepared by the
+  Codex sandbox user in `out/generated/.akadem-inputs/terrain/12/239[1-4]/` are unreadable
+  and undeletable for the normal account; status reported them missing. Cache staging now
+  uses `context.scratch_directory` (plain mkdir, inherited ACL); regression test
+  `CacheAclTests`. The owner removed those ten files as administrator.
+- Fixed: a snapshot/package with `coverage: null` raised AttributeError from shapely
+  instead of being skipped. Restored the corrupted `©` in sources.json license text.
+- Acceptance (fresh cache `out/generated/.akadem-inputs-acceptance`, verified Bilychi
+  snapshot copied in): `prepare` online fetched 17 DEM tiles, no Overpass/PBF use;
+  `status --offline` ready, 0 missing; `generate --offline` build/export/install exit 0,
+  111 tiles, 17082 lanes, 135 verified files, zero download events; `validate world` OK.
+- Runtime on Bilychi: drive 5/6 — `stop_line` failed (car left the spawn lane onto
+  pavement at the junction, min speed 3.4 km/h). Surface 11 missing of 5957 probes.
+  Control on previously accepted `kyiv_shuliavka` with the same tools: drive 6/6, surface
+  9 missing of 11608 — the surface gap predates this work; Bilychi's spawn junction is a
+  map geometry issue, not a source issue. Neither is certified.
+- Full suite: 363 tests OK, 1 skipped. Logs: `logs/source-claude-unittest-final.log`,
+  `logs/bilychy-*-claude.*`, `logs/bilychy-check-*.log`, `logs/shuliavka-check-*-control.log`.
+
 ## 2026-10-02 — Earth2Road branding and presentation
 
 - Brand/distribution/CLI/launcher: Earth2Road / `earth2road` / `Earth2Road.cmd` only; the
@@ -38,6 +73,10 @@
 - GitHub repository renamed to `Alezx311/earth2road` (origin updated); docs, the Reddit
   draft and the download README point there. Not done: public posting and release
   publication; the Reddit draft still needs the release URL.
+- Reddit draft now has per-map stats for the ten Ukrainian 4 km squares and points at
+  `out/reddit-ua/<id>/shots/ua-oblique.png`. Counts come from each map's `sources.json`,
+  `audit.json` and non-internal SUMO lane lengths. Copy with images:
+  `out/reddit-ua/POST.uk.md`. Not posted.
 
 ## 2026-10-01 — `export_optimize`: profile of a 1 × 1 km map (Livoberezhna)
 

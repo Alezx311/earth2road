@@ -8,6 +8,7 @@ Callers must not hard-code any of these layouts.
 import os
 import shutil
 import sys
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,14 +48,12 @@ def venv_python():
 def _sumo_home_bins():
     try:
         import sumo
-        home = Path(getattr(sumo, 'SUMO_HOME', '') or '')
+        home = getattr(sumo, 'SUMO_HOME', None)
     except Exception:
-        home = Path()
-    if not home:
-        env = os.environ.get('SUMO_HOME')
-        home = Path(env) if env else Path()
-    if home and (home / 'bin').is_dir():
-        yield home / 'bin'
+        home = None
+    for value in (home, os.environ.get('SUMO_HOME')):
+        if value and (Path(value) / 'bin').is_dir():
+            yield Path(value) / 'bin'
 
 
 def sumo_binary(name):
@@ -62,10 +61,12 @@ def sumo_binary(name):
     exe = name + ('.exe' if os.name == 'nt' else '')
     candidates = []
     bindir = venv_bin_dir()
-    if bindir is not None:
-        candidates.extend((bindir / exe, bindir / name))
+    # pip's Windows launchers embed an absolute Python path and break on relocation.
+    # eclipse-sumo ships the actual executables (and adjacent DLLs) in SUMO_HOME/bin.
     for folder in _sumo_home_bins():
         candidates.extend((folder / exe, folder / name))
+    if bindir is not None:
+        candidates.extend((bindir / exe, bindir / name))
     found = shutil.which(exe) or shutil.which(name)
     if found:
         candidates.append(Path(found))
@@ -76,6 +77,23 @@ def sumo_binary(name):
         f'{name} not found. Install eclipse-sumo==1.27.1 into .venv '
         f'(looked in {bindir or ROOT / ".venv"}).'
     )
+
+
+def check_sumo(*names):
+    """Exercise the executable before spending time obtaining data."""
+    from .errors import ToolError
+    versions = {}
+    for name in names or ('netconvert',):
+        try:
+            path = sumo_binary(name)
+            result = subprocess.run([str(path), '--version'], capture_output=True,
+                                    text=True, errors='replace', timeout=15)
+            if result.returncode or not result.stdout.strip():
+                raise RuntimeError((result.stdout + result.stderr).strip() or f'exit {result.returncode}')
+            versions[name] = result.stdout.splitlines()[0]
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            raise ToolError(f'SUMO {name} cannot start: {exc}. Repair the SUMO installation.') from exc
+    return versions
 
 
 def godot_names():

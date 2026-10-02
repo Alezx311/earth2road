@@ -268,7 +268,7 @@ class WorldContractTests(unittest.TestCase):
     def test_empty_incomplete_download_and_offline_inputs(self):
         from akadem_maps.core.prepare import fetch
         raw=self.root/'raw-errors';raw.mkdir()
-        cfg=validate_config({**self.cfg,'id':'empty'})
+        cfg=validate_config({**self.cfg,'id':'empty','source_kind':'osm'})
         ctx=BuildContext(self.root/'fetch',raw,self.root,True)
         with self.assertRaisesRegex(FileNotFoundError,'Offline input'):
             fetch(cfg,ctx)
@@ -284,7 +284,7 @@ class WorldContractTests(unittest.TestCase):
     def test_overpass_mirrors_report_each_failure(self):
         from akadem_maps.core.prepare import fetch
         raw=self.root/'raw-mirrors';raw.mkdir()
-        cfg=validate_config({**self.cfg,'id':'busy','overpass':'https://a.example/api/interpreter',
+        cfg=validate_config({**self.cfg,'id':'busy','source_kind':'osm','overpass':'https://a.example/api/interpreter',
                              'overpass_mirrors':['https://b.example/api/interpreter'],'overpass_maxsize':268435456})
         seen=[]
         ctx=BuildContext(self.root/'mirrors',raw,self.root,False,emit=lambda event,**data:seen.append((event,data)))

@@ -64,6 +64,23 @@ def _remove_abandoned_stages(output):
             owner.unlink(missing_ok=True)
 
 @contextmanager
+def scratch_directory(parent, prefix='tmp-'):
+    """Temporary directory for files that are later moved into a shared cache.
+
+    tempfile.mkdtemp uses mode 0o700, which Python 3.13+ on Windows turns into an
+    owner-only ACL; a file renamed out of it keeps that ACL and other accounts (or a
+    sandbox user) cannot read the cache. A plain mkdir inherits the parent's ACL.
+    """
+    parent = Path(parent)
+    parent.mkdir(parents=True, exist_ok=True)
+    path = parent / (prefix + uuid.uuid4().hex)
+    path.mkdir()
+    try:
+        yield str(path)
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+@contextmanager
 def atomic_directory(output):
     output = Path(output).resolve()
     if output.exists():
@@ -95,6 +112,7 @@ class BuildContext:
     config_inputs: dict = field(default_factory=dict)
     expected: dict = field(default_factory=dict)
     emit: object = None
+    diagnostics: Path | None = None
     _last_progress: float = 0.0
 
     def progress(self, stage, fraction):
@@ -141,3 +159,12 @@ class BuildContext:
             download(url, path, form, max_time)
         except Exception as exc:
             raise RuntimeError(f'Download failed for {url}: {exc}') from exc
+
+    def preserve_log(self, path):
+        """Keep tool diagnostics outside an atomic stage, including on failure."""
+        if not self.diagnostics:
+            return Path(path)
+        self.diagnostics.mkdir(parents=True, exist_ok=True)
+        dest = self.diagnostics / Path(path).name
+        shutil.copy2(path, dest)
+        return dest

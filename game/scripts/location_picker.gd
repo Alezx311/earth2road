@@ -38,7 +38,8 @@ const SIDE_W := 536.0
 ## the raw phase/stage stays in the technical details.
 const STAGE_TEXT := {
 	"start": "Starting the generator…",
-	"sources": "Downloading map data…",
+	"sources": "Reading the map data…",
+	"local_extract": "Extracting local map data…",
 	"geometry": "Reading the map data…",
 	"terrain": "Shaping the terrain…",
 	"network": "Building the road network…",
@@ -90,6 +91,18 @@ var details: Label
 var details_button: Button
 var search_status: Label
 var had_error := false
+var source_mode: OptionButton
+var local_package: OptionButton
+var saved_area: OptionButton
+var readiness: Label
+var refresh_source: CheckBox
+var source_buttons: Array[Button] = []
+var download_package_button: Button
+var package_offer: Dictionary = {}
+var active_action := "generate"
+var source_check_at := -1
+var import_path := ""
+var import_bounds: LineEdit
 
 # Generator process
 var pid := -1
@@ -193,6 +206,9 @@ func build_side() -> void:
 	size_slider.value = size_km
 	size_slider.value_changed.connect(func(v):
 		size_km = v
+		source_check_at = Time.get_ticks_msec() + 700
+		package_offer.clear()
+		if download_package_button: download_package_button.visible = false
 		update_size()
 		view.queue_redraw())
 	box.add_child(size_slider)
@@ -206,6 +222,53 @@ func build_side() -> void:
 	signs_box.add_theme_font_size_override("font_size", 18)
 	box.add_child(signs_box)
 	box.add_child(Ui.label("Downloads OpenStreetMap data and terrain. Areas outside Ukraine build without road signs.", 18, Ui.MUTED, true))
+	box.add_child(HSeparator.new())
+	box.add_child(Ui.label("Map data", 24))
+	source_mode = OptionButton.new()
+	source_mode.add_item(tr("Auto: cache → local package → internet"))
+	source_mode.add_item(tr("Offline: local data only"))
+	source_mode.item_selected.connect(func(_i):
+		if source_mode.selected == 1:
+			search_request.cancel_request()
+			queue.clear()
+			for request in loading.values():
+				request.cancel_request()
+				request.queue_free()
+			loading.clear()
+			refresh_source.button_pressed = false
+		update_size()
+		view.queue_redraw())
+	box.add_child(source_mode)
+	saved_area = OptionButton.new()
+	saved_area.add_item(tr("Saved offline areas"))
+	saved_area.item_selected.connect(func(index):
+		if index == 0: return
+		var area: Dictionary = saved_area.get_item_metadata(index)
+		var b: Array = area["bbox"]
+		size_km = clampf((float(b[3])-float(b[1]))*KM_PER_DEG_LAT, MIN_SIZE_KM, MAX_SIZE_KM)
+		size_slider.set_value_no_signal(size_km)
+		name_edit.text = str(area["name"])
+		select(Vector2((float(b[0])+float(b[2]))/2.0, (float(b[1])+float(b[3]))/2.0), true))
+	box.add_child(saved_area)
+	local_package = OptionButton.new()
+	local_package.add_item(tr("Choose local package automatically"))
+	box.add_child(local_package)
+	readiness = Ui.label("Check local OSM and terrain readiness", 18, Ui.MUTED, true)
+	box.add_child(readiness)
+	for item in [["Check local data", "status"], ["Prepare area offline", "prepare"], ["Find regional package", "suggest"]]:
+		var action: String = item[1]
+		var button := Ui.button(item[0], func(): start_data_action(action))
+		source_buttons.append(button)
+		box.add_child(button)
+	download_package_button = Ui.button("Download package", func(): start_data_action("download"))
+	download_package_button.visible = false
+	box.add_child(download_package_button)
+	var import_button := Ui.button("Import local PBF…", choose_pbf)
+	source_buttons.append(import_button)
+	box.add_child(import_button)
+	refresh_source = CheckBox.new()
+	refresh_source.text = "Refresh snapshot (keep previous version)"
+	box.add_child(refresh_source)
 	details_button = Ui.button("Technical details", func(): details.visible = not details.visible)
 	details_button.toggle_mode = true
 	box.add_child(details_button)
@@ -231,6 +294,7 @@ func build_side() -> void:
 	generate_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_child(generate_button)
 	update_size()
+	source_check_at = Time.get_ticks_msec() + 500
 
 func _input(event: InputEvent) -> void:
 	Ui.trap_focus(self, event)
@@ -331,6 +395,8 @@ func cached_tile(key: String) -> Texture2D:
 	return tex
 
 func request_tile(key: String) -> void:
+	if source_mode != null and source_mode.selected == 1:
+		return
 	if loading.has(key) or failed.has(key) or key in queue:
 		return
 	queue.append(key)
@@ -423,10 +489,15 @@ func zoom_at(p: Vector2, step: int) -> void:
 	view.queue_redraw()
 
 func select(lonlat: Vector2, recenter: bool) -> void:
+	var changed := not selected.is_equal_approx(lonlat)
 	selected = Vector2(wrapf(lonlat.x, -180.0, 180.0), clampf(lonlat.y, -84.9, 84.9))
 	if recenter:
 		center = selected
 	sync_fields()
+	source_check_at = Time.get_ticks_msec() + 700
+	if changed:
+		package_offer.clear()
+		if download_package_button: download_package_button.visible = false
 	view.queue_redraw()
 
 func sync_fields() -> void:
@@ -463,11 +534,22 @@ func update_size() -> void:
 		size_slider.editable = pid < 0
 		signs_box.disabled = pid >= 0
 		generate_button.disabled = pid >= 0 or b[0] < -180.0 or b[2] > 180.0 or b[1] <= -85.0 or b[3] >= 85.0
+	if source_mode:
+		source_mode.disabled = pid >= 0
+		local_package.disabled = pid >= 0
+		saved_area.disabled = pid >= 0
+		refresh_source.disabled = pid >= 0 or source_mode.selected == 1
+		for button in source_buttons: button.disabled = pid >= 0
+		source_buttons[2].disabled = pid >= 0 or source_mode.selected == 1
+		download_package_button.disabled = pid >= 0 or source_mode.selected == 1
 
 # --- Search -----------------------------------------------------------------------
 
 func run_search() -> void:
 	if pid >= 0: return
+	if source_mode.selected == 1:
+		set_search_status(tr("Offline: use coordinates or a saved area"))
+		return
 	var q := search.text.strip_edges()
 	if q == "":
 		return
@@ -519,9 +601,15 @@ static func project_root() -> String:
 	return ProjectSettings.globalize_path("res://").trim_suffix("/").get_base_dir()
 
 func start_generation() -> void:
+	start_data_action("generate")
+
+func start_data_action(action: String) -> void:
 	if pid >= 0:
 		return
+	var accepted_offer := package_offer.duplicate()
 	if not apply_coords(): return
+	active_action = action
+	source_check_at = -1
 	var root := project_root()
 	var python := root + ("/.venv/Scripts/python.exe" if OS.get_name() == "Windows" else "/.venv/bin/python")
 	if not FileAccess.file_exists(python):
@@ -540,6 +628,21 @@ func start_generation() -> void:
 		"--region-profile", "ukraine" if signs_box.button_pressed else "experimental",
 		"--events", events_path, "--log", events_path + ".log", "--exit-with-parent",
 		"--parent-pid", str(OS.get_process_id()), "--cancel-file", cancel_path])
+	args.append_array(["--action", action, "--mode", "offline" if source_mode.selected == 1 else "auto"])
+	if local_package.selected > 0:
+		args.append_array(["--package", str(local_package.get_item_metadata(local_package.selected))])
+	if refresh_source.button_pressed and action in ["generate", "prepare"]:
+		args.append("--refresh")
+	if action == "download":
+		if accepted_offer.is_empty(): return
+		args.append_array(["--offer", str(accepted_offer["offer"]), "--accept-bytes", str(accepted_offer["bytes"])])
+	if action == "import":
+		var values := import_bounds.text.replace(",", " ").split(" ", false)
+		if values.size() != 4:
+			status.text = tr("Enter coverage: west south east north")
+			return
+		args.append_array(["--pbf", import_path, "--coverage"])
+		args.append_array(values)
 	var map_name := name_edit.text.strip_edges()
 	if map_name != "":
 		args.append_array(["--name", map_name])
@@ -581,6 +684,8 @@ func back_or_cancel() -> void:
 		back.emit()
 
 func _process(delta: float) -> void:
+	if pid < 0 and source_check_at >= 0 and Time.get_ticks_msec() >= source_check_at:
+		start_data_action("status")
 	if pid < 0 or finished:
 		return
 	poll_clock += delta
@@ -621,15 +726,21 @@ func read_events() -> void:
 			"download":
 				var url := str(record.get("url", ""))
 				technical(url)
-				status.text = tr("Downloading OpenStreetMap data from %s…") % url.get_slice("/", 2)
+				status.text = tr("Downloading terrain…") if record.get("source") == "terrain" else tr("Downloading OpenStreetMap data from %s…") % url.get_slice("/", 2)
 				print("Map generator: downloading from %s" % url)
 				if record.has("query_url"):
 					print("  to check by hand, open: %s" % record["query_url"])
+			"source":
+				status.text = tr("Extracting local map data…")
+				technical(str(record.get("name", "")))
 			"warning":
 				technical(str(record.get("message", "")))
 				status.text = tr("Server busy. Trying another source…")
 				print("Map generator: %s" % record.get("message", ""))
 			"result":
+				if active_action != "generate":
+					data_result(record)
+					continue
 				finished = true
 				pid = -1
 				progress.value = 1.0
@@ -640,16 +751,82 @@ func read_events() -> void:
 				printerr("Map generator failed: %s (log: %s.log)" % [message, events_path])
 				technical(message)
 				had_error = record.get("code", "") != "cancelled"
-				fail(error_text(message) if had_error else tr("Generation cancelled"))
+				fail(error_text(message, str(record.get("code", ""))) if had_error else tr("Generation cancelled"))
 	lines_seen = lines.size()
 
 ## Network failures suggest the connection; anything else (e.g. no drivable roads in the
 ## area) suggests another area. The raw message stays in the technical details.
-func error_text(message: String) -> String:
+func error_text(message: String, code: String = "") -> String:
+	if code == "sumo":
+		return tr("SUMO could not run. Repair the installation; see the saved log.")
+	if code == "offline_missing":
+		return tr("Local data is missing or damaged. Prepare this area while online.")
+	if code == "source_invalid":
+		return tr("The data is incomplete or does not cover this area. Check the package or refresh.")
+	if code == "no_roads":
+		return tr("Could not build this area. Move it or make it larger, then retry.")
 	var lower := message.to_lower()
 	if "download" in lower or "urlopen" in lower or "http" in lower or "timed out" in lower:
 		return tr("Could not build the map. Check your connection and retry.")
-	return tr("Could not build this area. Move it or make it larger, then retry.")
+	return tr("Could not finish. See the saved log in Technical details.")
+
+func choose_pbf() -> void:
+	var dialog := FileDialog.new()
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.filters = PackedStringArray(["*.pbf ; OSM PBF"])
+	add_child(dialog)
+	dialog.file_selected.connect(func(path):
+		import_path = path
+		var declaration := ConfirmationDialog.new()
+		declaration.title = tr("Declare package coverage")
+		declaration.dialog_text = tr("Enter the coverage guaranteed by the provider (west south east north). This is not inferred from the file name.")
+		import_bounds = LineEdit.new()
+		import_bounds.placeholder_text = "west south east north"
+		declaration.add_child(import_bounds)
+		add_child(declaration)
+		declaration.confirmed.connect(func(): start_data_action("import"); declaration.queue_free())
+		declaration.canceled.connect(declaration.queue_free)
+		declaration.popup_centered(Vector2i(620, 230))
+		dialog.queue_free())
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered_ratio(0.7)
+
+func data_result(record: Dictionary) -> void:
+	fail(tr("Local data updated"))
+	had_error = false
+	match active_action:
+		"status":
+			readiness.text = tr("OSM: %s · Terrain: %s") % [tr("ready") if record.get("osm_ready") else tr("missing"), tr("ready") if record.get("terrain_ready") else tr("missing")]
+			var selected_package := ""
+			if local_package.selected > 0: selected_package = str(local_package.get_item_metadata(local_package.selected))
+			local_package.clear()
+			local_package.add_item(tr("Choose local package automatically"))
+			for package in record.get("covering_packages", []):
+				local_package.add_item(str(package["name"]))
+				var index := local_package.item_count - 1
+				local_package.set_item_metadata(index, package["id"])
+				if str(package["id"]) == selected_package: local_package.select(index)
+			saved_area.clear()
+			saved_area.add_item(tr("Saved offline areas"))
+			for area in record.get("areas", []):
+				saved_area.add_item(str(area["name"]))
+				saved_area.set_item_metadata(saved_area.item_count - 1, area)
+			status.text = tr("Select an area, then Generate")
+		"suggest":
+			package_offer = record
+			if record.get("bytes") != null:
+				download_package_button.text = tr("Download %s (%.1f MB)") % [record["name"], float(record["bytes"])/1000000.0]
+				download_package_button.visible = true
+				status.text = tr("Package found. Download only if you need it.")
+			else:
+				status.text = tr("Package size unavailable. Try again later.")
+		"prepare":
+			refresh_source.button_pressed = false
+			readiness.text = tr("OSM: ready · Terrain: ready")
+			source_check_at = Time.get_ticks_msec() + 700
+		_:
+			source_check_at = Time.get_ticks_msec() + 700
 
 static func stage_text(phase: String, stage: String) -> String:
 	if STAGE_TEXT.has(stage):

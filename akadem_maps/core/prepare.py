@@ -19,7 +19,7 @@ from shapely.ops import unary_union
 
 from akadem_maps.core import scene
 from akadem_maps import world_format as layout
-from akadem_maps.context import BuildContext, contained, read_json, sha256
+from akadem_maps.context import BuildContext, contained, read_json, scratch_directory, sha256
 from akadem_maps import runtime
 from akadem_maps.core import signs as road_signs
 from akadem_maps.core import visual_tags
@@ -43,40 +43,9 @@ def user_agent():
     return f'Earth2Road/{__version__} (OpenStreetMap map generator for a driving sandbox)'
 
 def download(url, path, form=None, max_time=180):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    import os
-    if os.name == 'nt':
-        # Windows curl's Schannel can fail with SEC_E_NO_CREDENTIALS in a
-        # noninteractive session; Python TLS uses the installed trust store.
-        import urllib.request
-        import urllib.parse
-        import shutil
-        import time
-        data = urllib.parse.urlencode({'data':form}).encode() if form else None
-        for attempt in range(3):
-            try:
-                request = urllib.request.Request(url, data=data, headers={'User-Agent': user_agent()})
-                with urllib.request.urlopen(request, timeout=max_time) as response:
-                    with Path(str(path)+'.part').open('wb') as out:
-                        shutil.copyfileobj(response,out)
-                Path(str(path)+'.part').replace(path)
-                return
-            except Exception as exc:
-                # HTTPError owns a response stream even when urlopen did not enter
-                # the context manager. Close it before retrying another mirror.
-                if hasattr(exc, 'close'):
-                    exc.close()
-                if attempt == 2: raise
-                time.sleep(1)
-    # -sS: no progress meter (it went straight to the game's terminal), errors only; they are
-    # captured and become the exception message.
-    args = ['curl', '-sSfL', '--retry', '2', '--max-time', str(max_time), '-A', user_agent(), url, '-o', str(path)+'.part']
-    if form:
-        args.extend(['--data-urlencode', 'data='+form])
-    done = subprocess.run(args, capture_output=True, text=True)
-    if done.returncode:
-        raise RuntimeError(curl_error(done.returncode, done.stderr, max_time))
-    Path(str(path)+'.part').replace(path)
+    from akadem_maps.network import download as bounded_download
+    return bounded_download(url, path, form, max_time)
+
 
 def curl_error(returncode, stderr, max_time):
     """A short reason for a failed curl run: 'HTTP 504', 'timed out after 240 s', …"""
@@ -90,75 +59,53 @@ def curl_error(returncode, stderr, max_time):
     return lines[-1] if lines else f'curl exit {returncode}'
 
 def fetch(cfg, context):
+    from shapely.geometry import mapping
+    from akadem_maps import sources
+    from akadem_maps.errors import SourceError
     BUILD, RAW = context.build, context.raw
-    map_area = corridor.area(cfg, context=context)   # a corridor also fills cfg['bbox'] with its bounds
-    w,s,e,n = cfg['bbox']
-    # A focus config may reuse the district snapshot; netconvert and the scene clip to its bbox.
-    dest = RAW / cfg.get('osm_file', f"{cfg['id']}.osm")
-    geofabrik = cfg.get('geofabrik')
-    area_stamp=dest.with_suffix(dest.suffix+'.area.json')
-    expected_area=corridor.area_digest(cfg, context=context)
-    known_area=None
-    if area_stamp.exists():
-        known_area=json.loads(area_stamp.read_text(encoding='utf8')).get('digest')
-    elif expected_area and (BUILD/'sources.json').exists():
-        previous=json.loads((BUILD/'sources.json').read_text(encoding='utf8')).get('config',{})
-        if previous.get('corridor') and previous.get('geofabrik'):
-            known_area=corridor.spec_digest(previous['corridor'],previous['geofabrik']['md5'])
-    stale=expected_area is not None and known_area!=expected_area
-    if (not dest.exists() or stale) and geofabrik:
-        # Large areas: cut from a dated Geofabrik extract (Overpass times out on them).
-        pbf = RAW / 'geofabrik' / geofabrik['url'].rsplit('/', 1)[1]
-        if not pbf.exists():
-            context.download(geofabrik['url'], pbf, max_time=3600)
-        digest = hashlib.md5(pbf.read_bytes()).hexdigest()
-        if digest != geofabrik['md5']:
-            raise RuntimeError(f'{pbf.name}: md5 {digest} != {geofabrik["md5"]}')
-        from akadem_maps.core import osm_extract
-        osm_extract.extract(pbf, dest, cfg['bbox'], map_area if corridor.shaped(cfg) else None)
-        if expected_area:
-            write_json(area_stamp,{'digest':expected_area})
-    overpass_used = cfg.get('overpass')
-    if not dest.exists():
-        timeout = int(cfg.get('overpass_timeout', 120))
-        # maxsize is the RAM the server reserves for the query; a busy server turns large
-        # reservations away (504/429) while it still admits small ones. Small areas can ask
-        # for less (tools/generate_map.py: 256 MiB covers a dense 5 km city square).
-        maxsize = int(cfg.get('overpass_maxsize', 1073741824))
-        q = f'[out:xml][timeout:{timeout}][maxsize:{maxsize}];(way({s},{w},{n},{e});relation["type"="restriction"]({s},{w},{n},{e});relation["type"="multipolygon"]({s},{w},{n},{e}););(._;>;);out body;'
-        # Public Overpass servers are often overloaded (504/429): optional mirrors are tried in
-        # order. The OSM data is the same; the manifest records which server answered.
-        urls = [cfg['overpass']] + [u for u in cfg.get('overpass_mirrors', []) if u != cfg['overpass']]
-        failures = []
-        for i, url in enumerate(urls):
-            # Overpass answers the same query as GET ?data=…: that link can be opened in a
-            # browser to check a failing server by hand.
-            context.notify('download', source='overpass', url=url,
-                           query_url=url+'?'+urllib.parse.urlencode({'data': q}))
-            try:
-                context.download(url, dest, q, max_time=timeout+120)
-                overpass_used = url
-                break
-            except RuntimeError as exc:
-                failures.append(f'{urllib.parse.urlsplit(url).hostname}: {exc.__cause__ or exc}')
-                if i == len(urls) - 1:
-                    raise RuntimeError(f'Could not download OpenStreetMap data from Overpass ({"; ".join(failures)}). '
-                                       'The public Overpass servers are often overloaded (HTTP 504/429); '
-                                       'try again in a few minutes.') from exc
-                context.notify('warning', message=f'{failures[-1]}; trying {urllib.parse.urlsplit(urls[i+1]).hostname}')
+    RAW.mkdir(parents=True, exist_ok=True)
+    map_area = corridor.area(cfg, context=context)
+    # Preserve explicitly configured dated Geofabrik/corridor builds. They carry
+    # their own checksum and area digest; they never grant universal coverage.
+    if cfg.get('geofabrik'):
+        geofabrik = cfg['geofabrik']
+        dest = contained(RAW, cfg.get('osm_file', cfg['id'] + '.osm'))
+        stamp = dest.with_suffix(dest.suffix + '.area.json')
+        expected = corridor.area_digest(cfg, context=context)
+        known = read_json(stamp).get('digest') if stamp.exists() else None
+        if not dest.exists() or (expected and known != expected) or cfg.get('refresh'):
+            pbf = RAW / 'geofabrik' / geofabrik['url'].rsplit('/', 1)[1]
+            if not pbf.exists():
+                context.download(geofabrik['url'], pbf, max_time=3600)
+            digest = hashlib.md5()
+            with pbf.open('rb') as stream:
+                for block in iter(lambda: stream.read(1024*1024), b''):
+                    digest.update(block)
+            if digest.hexdigest() != geofabrik['md5']:
+                raise SourceError(f'{pbf.name}: checksum mismatch')
+            from akadem_maps.core import osm_extract
+            with scratch_directory(RAW) as tmp:
+                cut = Path(tmp)/'source.osm'
+                osm_extract.extract(pbf, cut, cfg['bbox'], map_area if corridor.shaped(cfg) else None)
+                sources.validate_osm(cut)
+                cut.replace(dest)
+            if expected:
+                write_json(stamp, {'digest': expected})
+        meta = {'source': geofabrik['url'], 'created_at': None, 'coverage': None}
+    else:
+        dest, meta = sources.acquire(cfg, context, mapping(map_area))
+    root = sources.validate_osm(dest)
     context.record_input(dest)
-    root = ET.parse(dest).getroot()
-    if root.tag != 'osm':
-        raise ValueError('Input is not an OSM XML document')
-    if root.find('remark') is not None:
-        raise RuntimeError('Overpass returned incomplete data: '+root.findtext('remark'))
-    if not any(drivable({t.get('k'): t.get('v') for t in w.findall('tag')}) for w in root.findall('way')):
-        raise ValueError('OSM input has no suitable passenger roads')
-    if root.find('remark') is not None:
-        raise RuntimeError('Overpass returned incomplete data: '+root.findtext('remark'))
-    manifest = {'osm_sha256': hashlib.sha256(dest.read_bytes()).hexdigest(), 'download_checked_at': datetime.now(timezone.utc).isoformat(), 'config': cfg, 'source': cfg['geofabrik']['url'] if cfg.get('geofabrik') else overpass_used, 'bbox': cfg['bbox'], 'osm_timestamp': (root.find('meta').attrib if root.find('meta') is not None else {}), 'license': 'ODbL-1.0; © OpenStreetMap contributors'}
+    if dest.name == 'source.osm' and (dest.parent/'snapshot.json').exists():
+        context.record_input(dest.parent/'snapshot.json')
+    # Pin the exact input in exported bundles, preserving --inputs/--offline replay.
+    cfg['osm_file'] = dest.relative_to(RAW).as_posix()
+    manifest = {'osm_sha256': sha256(dest), 'download_checked_at': meta.get('created_at'),
+                'config': cfg, 'source': meta['source'], 'bbox': cfg['bbox'],
+                'coverage': meta.get('coverage'), 'selection': meta.get('selection'),
+                'osm_timestamp': root.find('meta').attrib if root.find('meta') is not None else {},
+                'license': 'ODbL-1.0; © OpenStreetMap contributors'}
     write_json(BUILD/'sources.json', manifest)
-    # Tracked snapshot is the default district; other maps keep theirs under data/build/<id>/.
     return root
 
 class Terrain:
@@ -174,10 +121,10 @@ class Terrain:
         tx,ty = int(x),int(y)
         key = (tx,ty)
         if key not in self.images:
-            path = self.context.raw / f'terrain/{self.zoom}/{tx}/{ty}.png'
-            if not path.exists():
-                self.context.download(f'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{self.zoom}/{tx}/{ty}.png', path)
-            self.images[key] = Image.open(path).convert('RGB')
+            from akadem_maps.offline import ensure_tile
+            path = ensure_tile(self.context, f'terrain/{self.zoom}/{tx}/{ty}.png')
+            with Image.open(path) as img:
+                self.images[key] = img.convert('RGB')
             self.used.add(path.relative_to(self.context.raw).as_posix())
             self.context.record_input(path)
         # Bilinear within tile; DEM resolution is far coarser than road features.
@@ -850,10 +797,21 @@ def build(cfg, root, context):
     if corridor.shaped(cfg):
         # Edges partly inside the polygon are kept; the rest of the bbox is dropped.
         cmd[cmd.index('--keep-edges.in-geo-boundary')+1] = corridor.geo_boundary(map_area)
-    with (BUILD/'netconvert.log').open('w') as log:
-        cmd[cmd.index('--type-files')+1] = str(type_file)
-        cmd[cmd.index('--geometry.max-segment-length')+1] = '5'
-        subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, check=True)
+    from akadem_maps.errors import ToolError, NoRoads
+    log_path = BUILD/'netconvert.log'
+    try:
+        with log_path.open('w', encoding='utf-8') as log:
+            cmd[cmd.index('--type-files')+1] = str(type_file)
+            cmd[cmd.index('--geometry.max-segment-length')+1] = '5'
+            subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, check=True)
+    except (subprocess.CalledProcessError, OSError) as exc:
+        saved = context.preserve_log(log_path)
+        tail = log_path.read_text(encoding='utf-8', errors='replace')[-5000:]
+        error = NoRoads if 'No edges loaded' in tail else ToolError
+        raise error(f'SUMO netconvert failed. Log: {saved}\n{tail}') from exc
+    finally:
+        if log_path.exists():
+            context.preserve_log(log_path)
     # SUMO records wall clock and absolute temporary paths in an XML comment.
     # Remove only comments so the same inputs have stable network/geometry hashes.
     import re

@@ -206,10 +206,21 @@ def route(trips, name, context):
     for tid, a, b in trips:
         ET.SubElement(root, 'trip', id=tid, depart='0', attrib={'from': a, 'to': b})
     ET.ElementTree(root).write(trip_file, encoding='utf-8', xml_declaration=True)
-    subprocess.run([str(runtime.sumo_binary('duarouter')), '-n', str(BUILD / 'network.net.xml'), '--route-files', str(trip_file),
+    command = [str(runtime.sumo_binary('duarouter')), '-n', str(BUILD / 'network.net.xml'), '--route-files', str(trip_file),
                     '-o', str(out), '--ignore-errors', '--no-warnings', '--no-step-log', '--routing-threads', '8',
-                    '--departlane', 'best', '--remove-loops'],
-                   check=True, stdout=subprocess.DEVNULL)
+                    '--departlane', 'best', '--remove-loops']
+    log_path = BUILD / f'{name}.duarouter.log'
+    try:
+        with log_path.open('w', encoding='utf8') as log:
+            subprocess.run(command, check=True, stdout=log, stderr=subprocess.STDOUT)
+    except (subprocess.CalledProcessError, OSError) as exc:
+        from akadem_maps.errors import ToolError
+        saved = context.preserve_log(log_path)
+        tail = log_path.read_text(encoding='utf8', errors='replace')[-5000:]
+        raise ToolError(f'SUMO duarouter failed. Log: {saved}\n{tail}') from exc
+    finally:
+        if log_path.exists():
+            context.preserve_log(log_path)
     routes = {}
     for v in ET.parse(out).getroot().iter('vehicle'):
         edges = v.find('route').attrib['edges'].split()

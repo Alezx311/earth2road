@@ -94,8 +94,21 @@ def validate_world(folder):
         read_json(folder/'tiles'/f'{name}.json')
     return {'id':manifest['id'], 'tiles':len(index['tiles']), 'lanes':len(index['lanes']), 'verified_files':len(manifest['files'])}
 
-def build_world(config, output, *, config_root=None, cache=None, inputs=None, offline=False, emit=lambda *a,**k: None):
+def build_world(config, output, *, config_root=None, cache=None, inputs=None, offline=False,
+                mode='auto', package=None, refresh=False, emit=lambda *a,**k: None):
     cfg = validate_config(copy.deepcopy(config))
+    if mode not in ('auto', 'offline'):
+        raise ValueError('Source mode must be auto or offline')
+    offline = offline or mode == 'offline'
+    refresh = refresh or cfg.get('refresh', False)
+    if refresh and (offline or inputs):
+        raise ValueError('Refreshing needs online source mode without --inputs')
+    if package:
+        cfg['package'] = package
+    if refresh:
+        cfg['refresh'] = True
+    from .runtime import check_sumo
+    check_sumo('netconvert')
     output = Path(output).resolve()
     raw = Path(cache).resolve() if cache else output.parent/'.akadem-inputs'
     resource_root, expected = RESOURCES, {}
@@ -107,7 +120,8 @@ def build_world(config, output, *, config_root=None, cache=None, inputs=None, of
         raw, resource_root, config_root = inputs/'raw', inputs/'resources', inputs/'config_root'
         expected = {p[4:]:h for p,h in lock['files'].items() if p.startswith('raw/')}
     with atomic_directory(output) as stage:
-        context = BuildContext(stage, raw, config_root, offline, resource_root, expected=expected, emit=emit)
+        context = BuildContext(stage, raw, config_root, offline, resource_root, expected=expected,
+                               emit=emit, diagnostics=output.parent/(output.name+'.logs'))
         if inputs and (inputs/'corridor.geojson').exists():
             shutil.copy2(inputs/'corridor.geojson', stage/'corridor.geojson')
         elif (raw/(cfg['id']+'.corridor.geojson')).exists():
@@ -116,6 +130,7 @@ def build_world(config, output, *, config_root=None, cache=None, inputs=None, of
         from .core import prepare, corridor
         emit('stage', stage='sources', progress=0)
         source = prepare.fetch(cfg, context)
+        cfg.pop('refresh', None)
         validate_config(cfg)
         # Explicit profile controls local appearance; no implicit worldwide Ukrainian signs.
         emit('stage', stage='geometry', progress=0.15)

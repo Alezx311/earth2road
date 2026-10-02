@@ -53,6 +53,8 @@ def routes(cfg, net, index, context):
     return validation
 
 def export_world(world, output, *, offline=False):
+    from akadem_maps.runtime import check_sumo
+    check_sumo('duarouter')
     world = Path(world).resolve()
     validate_world(world)
     cfg = read_json(world/'config.json')
@@ -82,7 +84,9 @@ def export_world(world, output, *, offline=False):
         source_raw = world/'inputs/raw/roadworks.geojson'
         if source_raw.exists():
             shutil.copy2(source_raw, raw/source_raw.name)
-        context = BuildContext(build, raw, world/'inputs/config_root', offline)
+        output_path = Path(output).resolve()
+        context = BuildContext(build, raw, world/'inputs/config_root', offline,
+                               diagnostics=output_path.parent/(output_path.name+'.logs'))
         index['validation_routes'] = routes(cfg, net, index, context)
         traffic = demand.build(cfg, ET.parse(build/'corrected.osm').getroot(), net, cfg['seed'], context=context)
         write_json(build/'traffic-audit.json', traffic)

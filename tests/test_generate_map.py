@@ -67,7 +67,10 @@ class IdTest(unittest.TestCase):
 class PipelineTest(unittest.TestCase):
     def test_events_and_steps_with_a_fake_pipeline(self):
         calls = []
-        def build(cfg, world, *, config_root, emit):
+        def build(cfg, world, *, config_root, emit, cache, mode, package, refresh):
+            self.assertEqual(mode, 'auto')
+            self.assertFalse(refresh)
+            self.assertEqual(cache, root/'out/generated/.akadem-inputs')
             calls.append(('build', cfg, world))
             emit('stage', stage='download', progress=0.5)
             emit('result', output=str(world))
