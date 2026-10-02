@@ -10,8 +10,6 @@
 > фази світлофорів, трафік і оздоблення вулиць виведені або синтетичні, а не виміряні.
 > Див. [обмеження](#обмеження) та [результати перевірок](docs/VALIDATION.md).
 
-Раніше — TerraDrive: наявні карти, налаштування й `TerraDrive.cmd` продовжують працювати.
-
 ## Запуск (Windows)
 
 1. Завантажте репозиторій: **Code → Download ZIP** і розпакуйте.
@@ -88,8 +86,8 @@ PowerShell), щоб оновити пакети.
 
 ## Розробка
 
-Дистрибутив і CLI — `earth2road`; аліаси `terra-drive` і `akadem-maps`, Python API `akadem_maps`,
-змінні `AKADEM_*` та наявні ID карт залишаються сумісними. Командний рядок:
+Дистрибутив і CLI — `earth2road`; Python-пакет — `akadem_maps`, змінні оточення мають
+префікс `AKADEM_`. Командний рядок:
 [docs/CLI.md](docs/CLI.md) (англійською). Див. також [CONTRIBUTING](CONTRIBUTING.md),
 [подробиці гри](docs/GAME.md), [результати перевірок](docs/VALIDATION.md) і
 [сторонні ліцензії](THIRD_PARTY_NOTICES.md).

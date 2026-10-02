@@ -7,4 +7,4 @@
 5. Keep observed OSM information distinct from generated assumptions. Traffic demand and default signal timings are synthetic.
 6. Keep downloads, engine binaries, generated maps, caches, credentials and personal notes out of Git.
 7. Use `python -m unittest discover -s tests -v`; map/runtime checks are documented in CONTRIBUTING.
-8. Preserve compatibility with `akadem_maps`, `akadem-maps`, existing world formats and map IDs.
+8. Preserve compatibility with `akadem_maps`, existing world formats and map IDs.

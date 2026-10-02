@@ -4,8 +4,6 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 mkdir -p .tools .cache logs
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo 'Python 3.11+ is required (3.14 is the pinned, validated version).'; exit 1; }
 python3 -m venv .venv
-# The old distribution owns the same files; uninstall it BEFORE the replacement.
-.venv/bin/python -m pip uninstall -y terra-drive
 .venv/bin/python -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
 source tools/godot.sh
 if [[ ! -x "$godot" ]]; then

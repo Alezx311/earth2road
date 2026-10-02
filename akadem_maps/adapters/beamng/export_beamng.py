@@ -1387,7 +1387,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         write_json(level / 'info.json', {
             'title': 'Kyiv — ' + index['name'],
             'description': 'Real OSM road layout and buildings; synthetic elevations, signal timings and street dressing.',
-            'authors': 'Akadem Drive contributors',
+            'authors': 'Earth2Road contributors',
             'size': [round(bounds[2] - bounds[0]), round(bounds[3] - bounds[1])],
             'defaultSpawnPointName': 'spawn_default',
             'spawnPoints': spawn_points,

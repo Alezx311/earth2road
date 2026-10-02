@@ -2,11 +2,14 @@
 
 ## 2026-10-02 — Earth2Road branding and presentation
 
-- New brand/distribution/CLI: Earth2Road / `earth2road`. `terra-drive`, `akadem-maps`,
-  `akadem_maps`, map IDs, world formats and `AKADEM_*` remain compatible. Old launcher
-  forwards to `Earth2Road.cmd`. Setup removes old distribution metadata before the new
-  install (both distributions own the same Python files and aliases).
-- Godot explicitly retains `Godot/app_userdata/TerraDrive` as its user directory.
+- Brand/distribution/CLI/launcher: Earth2Road / `earth2road` / `Earth2Road.cmd` only; the
+  former names, CLI aliases and launcher were removed. `akadem_maps`, map IDs, world formats
+  and `AKADEM_*` remain as internal technical names. BeamNG ZIPs are `earth2road_<map>.zip`;
+  mod metadata, LICENSE and the example fixture credit "Earth2Road contributors" (the tiny
+  example's `inputs/manifest.json` config hash was updated). Terrain `persistentId` seeds
+  changed, so a re-export is not byte-identical to an older ZIP.
+- Godot uses its default user directory for the project name (`app_userdata/Earth2Road`);
+  settings from the previous directory (language, export folder, mode) are not migrated.
   Timelapse takes now use fresh directories; an existing explicit output is rejected,
   never cleared. Clean-overlay capture is optional.
 - Full unittest discovery: 339 run in 554.412 s, 336 passed, 1 skipped, 2 errors.
@@ -126,7 +129,7 @@ Livoberezhna 1 km², A+B (`out/livo-compact`; A-only kept as `out/livo-compact-a
 - Pre-existing, not from this branch: `python -m akadem_maps validate --target beamng` on a
   `tools/export_beamng.py --map` ZIP fails with "Materials without level prefix" (only the
   `--world` path namespaces materials); and `.venv` holds a non-editable copy of
-  `akadem_maps`, so `.venv/Scripts/terra-drive` runs stale code (it still rejects licence plates).
+  `akadem_maps`, so `.venv/Scripts/earth2road` runs stale code (it still rejects licence plates).
 - Now the largest category is road surfaces (120 k tris, 46 % of DAE) — path C.
 - **Not checked in BeamNG**: kerb look without bevel, kerb/wheel collision, load time/RAM.
 
@@ -134,7 +137,7 @@ Livoberezhna 1 km², A+B (`out/livo-compact`; A-only kept as `out/livo-compact-a
 
 `--optimization` now composes features with `+` (`optimization_mode`/`features` in
 `beamng_geometry.py`): `writer` (A), `kerbs` (B), `terrain` (C); `compact` = all three.
-`balanced` (default) and `legacy` are unchanged. Accepted by `terra-drive export`,
+`balanced` (default) and `legacy` are unchanged. Accepted by `earth2road export`,
 `tools/export_beamng.py` and `tools/export_beamng_gui.py`.
 
 ### Path C — `terrain`: ground as a native TerrainBlock (`GroundTerrain`, `beamng_terrain.py`)
@@ -211,7 +214,7 @@ Final sheets and table: `out/bench/livo-final/` (`compare-<view>.jpg`, `results.
 
 Started by Codex (ran out of quota mid-benchmark), finished by Claude.
 
-- `balanced` is the default for `terra-drive export`, `tools/export_beamng.py` and the GUI tool;
+- `balanced` is the default for `earth2road export`, `tools/export_beamng.py` and the GUI tool;
   `legacy` keeps the previous writer and geometry.
 - `Mesh.write` streams indexed COLLADA: only identical (position, normal, UV) tuples at the
   legacy six decimals are shared, so expanded triangles equal the legacy output exactly.
@@ -311,12 +314,12 @@ Checks:
 
 ## 2026-09-30 — BeamNG export from a user's report
 
-Report: "`terra-drive` doesn't exist" and `tools/export_beamng.py` "says the map ID/level ID
+Report: "`earth2road` doesn't exist" and `tools/export_beamng.py` "says the map ID/level ID
 is invalid".
 
-- `terra-drive` exists, but `setup.ps1`/`setup.sh`/`TerraDrive.cmd` install it into `.venv`,
+- `earth2road` exists, but `setup.ps1`/`setup.sh`/`Earth2Road.cmd` install it into `.venv`,
   not onto `PATH`; README only showed the bare command. README (en/uk) now names
-  `.venv\Scripts\terra-drive`, venv activation and `python -m akadem_maps`; setup prints the
+  `.venv\Scripts\earth2road`, venv activation and `python -m akadem_maps`; setup prints the
   BeamNG export command with the venv path.
 - `tools/export_beamng.py --map` takes an installed map ID; a world folder path
   (`out/generated/<id>`) failed with a bare `Invalid map id`. The tool now has `--world`, and a
@@ -324,21 +327,21 @@ is invalid".
   `adapters.beamng.export.export_world` (the CLI's path). Map/level ID errors now show the value
   and the `[a-z0-9_]` rule.
 - Checks: tiny world built from `examples/tiny`; `tools/export_beamng.py --map <world>` ZIP
-  SHA-256 equals `terra-drive export --target beamng` on the same world (d15c36ea…) and
-  `terra-drive validate --target beamng` passes; `--level-id My-Level` gives the new message.
+  SHA-256 equals `earth2road export --target beamng` on the same world (d15c36ea…) and
+  `earth2road validate --target beamng` passes; `--level-id My-Level` gives the new message.
   `python -m unittest discover -s tests`: 321 passed, 1 skipped (2 new tests in
   `test_beamng_export`). Not checked in BeamNG.drive itself.
 
 ## 2026-09-29 — double-click Windows launcher
 
-- `TerraDrive.cmd` at the root: first run calls `setup.ps1`, later runs `start.ps1`
+- `Earth2Road.cmd` at the root: first run calls `setup.ps1`, later runs `start.ps1`
   (both with `-ExecutionPolicy Bypass`, so a downloaded ZIP works). Missing Python 3.11+ →
   offers `winget install Python.Python.3.14 --scope user`, otherwise points to python.org.
-  Arguments go to start.ps1; `-File` keeps `--`, so `TerraDrive.cmd --map tiny -- -- --seconds=5`.
+  Arguments go to start.ps1; `-File` keeps `--`, so `Earth2Road.cmd --map tiny -- -- --seconds=5`.
 - A real `.exe` in Git was not added: binaries are excluded by DECISIONS and `.gitignore`.
 - Fixed `setup.ps1`: the committed file held a BEL byte instead of `\a` in
   `game\data\active_map`; Test-Path threw, so setup failed at its last step on every run.
-- Checks: fresh clone in a temp folder, first `TerraDrive.cmd` run from zero 176 s
+- Checks: fresh clone in a temp folder, first `Earth2Road.cmd` run from zero 176 s
   (setup, Godot import, tiny map, game with bridge on port 8796, exit 0); second run 13 s
   without setup; setup rerun keeps the installed map; the old setup.ps1 exits 1 on the same
   clone. `start_rivne.ps1` was removed at the user's request (also from MANIFEST.in).
@@ -373,7 +376,7 @@ built triangles with mixed winding, so Godot culled whole body sides, glass and 
 ## 2026-09-29 — simulator UI redesign
 
 Separate commit on top of the PR integration. Physics, geometry and world formats unchanged;
-`akadem_maps`/`akadem-maps`, map IDs, hotkeys, English/Українська and OSM attribution kept.
+`akadem_maps`, map IDs, hotkeys, English/Українська and OSM attribution kept.
 
 - Style: graphite surfaces, teal accent, amber warnings, 8 px rhythm, radius 8, no blur
   (`ui_theme.gd`). `ui_modal.gd`: input shield, Tab-contained focus, focus return; a
@@ -579,12 +582,12 @@ Checks:
 
 - The install script copied and hash-verified 254 source files, then failed on `dist/`: the staging wheel/sdist were ACL-locked to the Codex sandbox user. Wheel and sdist were rebuilt here from the same sources (setuptools, `--no-isolation`); the remaining steps then completed unchanged.
 - The initial `git diff --cached --check` failed. Fixed an extra blank line at EOF in `akadem_maps/adapters/godot/demand.py`. Vendored `game/addons/gevp` keeps its upstream trailing whitespace (marked `-whitespace` in `.gitattributes`). The working copy of `setup.sh` was normalized to LF.
-- Passed: pip check, `terra-drive doctor`, `akadem-maps --version`, `tools/check_publication.py`, `git diff --cached --check`, `tests.test_publication` + `tests.test_demand`. `.sh` files have mode 100755. No remote, no commit. The full suite was not rerun because the changes were whitespace-only.
+- Passed: pip check, `earth2road doctor`, `earth2road --version`, `tools/check_publication.py`, `git diff --cached --check`, `tests.test_publication` + `tests.test_demand`. `.sh` files have mode 100755. No remote, no commit. The full suite was not rerun because the changes were whitespace-only.
 
 ## 2026-09-28 — standalone extraction
 
 - Extracted the generator, Godot game, SUMO bridge, BeamNG adapter, configuration and tests.
-- Preserved `akadem_maps` imports, `akadem-maps` alias, map IDs and original copyright notices.
+- Preserved `akadem_maps` imports, map IDs and original copyright notices.
 - Added standalone branding, complete runtime pins, clean-checkout instructions and full CI.
 - Excluded downloaded assets/maps, personal notes, historical QA logs and local tools from Git.
 - Completed validation: 301 passed, one Unix-only skip; package/export/runtime/security results are in VALIDATION.md and VALIDATION.json.

@@ -25,10 +25,6 @@ $venvPy = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $venvPy)) {
     throw "venv python missing at $venvPy"
 }
-# Remove the old distribution first: its RECORD owns the same akadem_maps files
-# and CLI aliases, so uninstalling it after installing Earth2Road would delete them.
-& $venvPy -m pip uninstall -y terra-drive
-if ($LASTEXITCODE -ne 0) { throw "Old distribution cleanup failed" }
 & $venvPy -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 

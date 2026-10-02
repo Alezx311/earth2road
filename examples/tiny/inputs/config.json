@@ -11,7 +11,7 @@
   ],
   "demand_pool": 5,
   "id": "tiny",
-  "input_provenance": "Synthetic OSM-format streets and flat DEM authored by Akadem Drive contributors, MIT; no measured geography.",
+  "input_provenance": "Synthetic OSM-format streets and flat DEM authored by Earth2Road contributors, MIT; no measured geography.",
   "name": "Synthetic offline example",
   "region_profile": "experimental",
   "seed": 311,

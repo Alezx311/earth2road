@@ -18,9 +18,7 @@ generator = ["eclipse-sumo==1.27.1", "sumolib==1.27.1", "numpy>=2.2,<3", "pyproj
 traffic = ["libsumo==1.27.1", "traci==1.27.1", "websockets==15.0.1"]
 
 [project.scripts]
-terra-drive = "akadem_maps.cli:main"
 earth2road = "akadem_maps.cli:main"
-akadem-maps = "akadem_maps.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["akadem_maps*"]

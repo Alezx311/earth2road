@@ -63,7 +63,7 @@ def flat_png(path, rgb, size=BASE_SIZE):
 def ground_material(name, extent, base):
     """Grass TerrainMaterial: own flat base maps, shared t_grass_01 detail and t_macro_grass macro."""
     material = {'name': name, 'internalName': name, 'class': 'TerrainMaterial',
-                'persistentId': str(uuid.uuid5(uuid.NAMESPACE_URL, 'terradrive-terrain/'+name)),
+                'persistentId': str(uuid.uuid5(uuid.NAMESPACE_URL, 'earth2road-terrain/'+name)),
                 'annotation': 'GRASS', 'groundmodelName': 'DIRT',
                 'detailDistances': [0, 0, 50, 70], 'detailDistAtten': [0, .9],
                 'macroDistances': [0, 0, 400, 8000], 'macroDistAtten': [.35, 1], 'detailSize': 2,

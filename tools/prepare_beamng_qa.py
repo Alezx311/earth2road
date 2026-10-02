@@ -52,12 +52,12 @@ def main():
     p.add_argument('--simple-traffic',action='store_true',help='Soak with simplified traffic vehicles')
     p.add_argument('--soak-at',help='Case name to run last, so the soak starts there')
     p.add_argument('--resolution',default='1280 720')
-    p.add_argument('--world',type=Path,help='World folder of a public export (akadem-maps export output)')
+    p.add_argument('--world',type=Path,help='World folder of a public export (earth2road export output)')
     args=p.parse_args()
     public=(args.build/'artifact.json').exists()
     if public:
-        # akadem-maps export: test the final ZIP itself; manifest sits in reports/.
-        if not args.world: raise SystemExit('--world is required for an akadem-maps export')
+        # earth2road export: test the final ZIP itself; manifest sits in reports/.
+        if not args.world: raise SystemExit('--world is required for an earth2road export')
         artifact=json.loads((args.build/'artifact.json').read_text(encoding='utf8'))
         level=args.build/'mod/levels'/artifact['level_id']
         manifest=json.loads((args.build/'reports/kyiv-manifest.json').read_text(encoding='utf8'))

@@ -56,8 +56,7 @@ will skip them until maps are built. The tiny synthetic example needs no downloa
 - Pillow was updated from 12.1.1 to 12.3.0 after the first advisory scan. All final source
   tests, exports and package checks use the corrected pin. See the upstream
   [Pillow 12.3.0 security changes](https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html).
-- CLI/distribution branding was `terra-drive` at the time of this record (renamed to
-  `earth2road` on 2026-10-02; `terra-drive` remains an alias); the `akadem-maps` command, `akadem_maps`
+- CLI/distribution branding is `earth2road` (renamed on 2026-10-02); the `akadem_maps`
   module, existing IDs and formats remain compatible. Local environments are recreated on relocation.
 - CI previously ran only `test_beta.py`; it now discovers the entire suite. Generated worlds,
   packaging outputs, assets, caches, binaries and secrets are excluded from Git.

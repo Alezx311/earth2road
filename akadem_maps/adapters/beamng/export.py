@@ -10,7 +10,6 @@ from akadem_maps.world import validate_world
 from .beamng_assets import STOCK_MESH_MATERIALS
 from .export_beamng import export_map, validate_level as validate_level_files, deterministic_zip
 
-ZIP_NAMES={'akadem':'akadem_drive_akadem.zip','ring_beresteiskyi':'akadem_drive_ring_beresteiskyi.zip'}
 
 def validate_level(level):
     """Structural checks plus material scoping: own names carry the level ID prefix."""
@@ -64,9 +63,9 @@ def export_world(world, output, *, overrides=None, level_id=None, optimization='
         for name in ('surface_audit.json', 'road_seams.json'):
             if (world/name).exists():
                 shutil.copy2(world/name, technical/name)
-        common=('Original generated artwork and code: MIT, Akadem Drive contributors.\n'
+        common=('Original generated artwork and code: MIT, Earth2Road contributors.\n'
                 'BeamNG assets are referenced by path and are not redistributed.\n')
-        data=('Synthetic example streets and flat terrain: MIT, Akadem Drive contributors.\n'
+        data=('Synthetic example streets and flat terrain: MIT, Earth2Road contributors.\n'
               'No OpenStreetMap or measured terrain data.\n') if synthetic else (
               '© OpenStreetMap contributors\n'
               'OSM-derived databases: Open Database License 1.0\n'
@@ -75,7 +74,7 @@ def export_world(world, output, *, overrides=None, level_id=None, optimization='
               'Terrain: Mapzen Terrain Tiles, source-specific licenses; see companion source bundle.\n')
         (level/'LICENSE-DATA.txt').write_text(data+common,encoding='utf8')
         result=validate_level(level)
-        zip_name=ZIP_NAMES.get(mid,'akadem_drive_'+mid+'.zip')
+        zip_name='earth2road_'+mid+'.zip'
         deterministic_zip(stage/'mod',stage/zip_name)
         digest=sha256(stage/zip_name)
         write_json(stage/'artifact.json',{'zip':zip_name,'sha256':digest,'version':__version__,'map':mid,'level_id':level.name,'runtime_verified':False})

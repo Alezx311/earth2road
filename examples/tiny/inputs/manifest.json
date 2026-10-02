@@ -1,6 +1,6 @@
 {
   "files": {
-    "config.json": "4cd08bb0ad7016c332c06a57ea6a0fdbfb8bfedfbbecfd879bf751bd809323bf",
+    "config.json": "01d54001a8daa0bc8ca7c0d874473877407c44b68ef01c17e9e74d6c2cee7ecc",
     "raw/terrain/12/2393/1380.png": "3651cd888242f5a7983e3a46508781ebdbfe712869a138ad33464f171fc833c2",
     "raw/terrain/12/2393/1381.png": "3651cd888242f5a7983e3a46508781ebdbfe712869a138ad33464f171fc833c2",
     "raw/tiny.osm": "c21d9d8f0d7902b7ac475a41048ecaade28be1aec791703c29584664ce856ed3",
@@ -12,5 +12,5 @@
     "resources/style.json": "dc7f57cf0bf15384b461d92eb411f4167590169a75f21bb8331541f143b4bbd2"
   },
   "license": "MIT",
-  "provenance": "Synthetic OSM-format streets and flat DEM authored by Akadem Drive contributors, MIT; no measured geography."
+  "provenance": "Synthetic OSM-format streets and flat DEM authored by Earth2Road contributors, MIT; no measured geography."
 }

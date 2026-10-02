@@ -24,8 +24,8 @@ def prepare_main():
         parser.error(f"game/data/{cfg['id']} is already installed; add --replace (the old copy goes to .cache/replaced/)")
     build_world(cfg,world,config_root=root,cache=root/'data/raw',offline=args.offline)
     if not args.install:
-        print(f'World: {world}\nGodot: akadem-maps export --target godot --world {world} --output <dir>, '
-              f'then akadem-maps install --target godot --export <dir> [--replace] [--activate]')
+        print(f'World: {world}\nGodot: earth2road export --target godot --world {world} --output <dir>, '
+              f'then earth2road install --target godot --export <dir> [--replace] [--activate]')
         return
     from .adapters.godot.export import export_world
     from .adapters.godot.install import install_export

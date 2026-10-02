@@ -10,8 +10,6 @@ Drive it in the bundled **Godot** game or export it as a mod ZIP for **BeamNG.dr
 > signal timings, traffic and street dressing are derived or synthetic, not measured.
 > See [known limitations](#limitations) and [validation results](docs/VALIDATION.md).
 
-Formerly TerraDrive: existing maps, settings and `TerraDrive.cmd` keep working.
-
 ## Start (Windows)
 
 1. Download the repository: **Code → Download ZIP**, and unpack it.
@@ -91,7 +89,7 @@ world format: [docs/WORLD_FORMAT.md](docs/WORLD_FORMAT.md).
 
 ## Development
 
-The distribution and CLI are `earth2road`; `terra-drive` and `akadem-maps` aliases, the `akadem_maps` Python API,
-`AKADEM_*` environment variables and existing map IDs remain compatible.
+The distribution and CLI are `earth2road`; the Python package is `akadem_maps` and environment
+variables use the `AKADEM_` prefix.
 Command line: [docs/CLI.md](docs/CLI.md). See [CONTRIBUTING](CONTRIBUTING.md), [game details](docs/GAME.md),
 [validation results](docs/VALIDATION.md) and [third-party notices](THIRD_PARTY_NOTICES.md).

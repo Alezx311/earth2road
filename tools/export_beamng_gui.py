@@ -40,7 +40,7 @@ def export_installed(mid, destination, events, *, root=ROOT, optimization='balan
             raise ValueError('Choose an output folder outside the map source data')
     stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
     output = destination/f'{mid}-{stamp}-{uuid.uuid4().hex[:8]}'
-    zip_name = f'akadem_drive_{mid}.zip'
+    zip_name = f'earth2road_{mid}.zip'
     with atomic_directory(output) as stage:
         report = export_map(mid, stage/'mod', source_root=root, namespace=True,
                             package_zip=False, emit=events.emit, optimization=optimization)

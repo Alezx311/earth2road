@@ -16,7 +16,7 @@ class LauncherTests(unittest.TestCase):
     def test_paths_with_spaces_and_no_bridge_arguments(self):
         for platform, binary in [('Darwin', '.tools/Godot_v4.6-stable_macos.app/Contents/MacOS/Godot'),
                                  ('Linux', '.tools/Godot_v4.6-stable_linux.x86_64')]:
-            with self.subTest(platform=platform), tempfile.TemporaryDirectory(prefix='Terra drive ') as tmp:
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory(prefix='Earth 2 road ') as tmp:
                 root = Path(tmp)
                 for folder in ['tools', '.venv/bin', 'game/data/tiny', 'game/.godot']:
                     (root/folder).mkdir(parents=True)

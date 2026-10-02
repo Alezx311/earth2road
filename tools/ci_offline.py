@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the installed CLI away from the checkout, with both exporters."""
 import json
-from importlib.metadata import distribution, PackageNotFoundError
+from importlib.metadata import distribution
 from pathlib import Path
 import subprocess
 import sys
@@ -20,18 +20,11 @@ def main():
         if Path(package).resolve().is_relative_to(ROOT / 'akadem_maps'):
             raise RuntimeError('Wheel test imported the checkout; install a non-editable wheel first')
         dist = distribution('earth2road')
-        try:
-            distribution('terra-drive')
-        except PackageNotFoundError:
-            pass
-        else:
-            raise RuntimeError('Remove the old terra-drive distribution before installing Earth2Road')
-        for name in ('earth2road', 'terra-drive', 'akadem-maps'):
-            command = Path(sys.executable).parent / (name + ('.exe' if sys.platform == 'win32' else ''))
-            version = subprocess.check_output([str(command), '--version'], cwd=work, text=True).strip()
-            assert version == dist.version, (name, version, dist.version)
-            help_text = subprocess.check_output([str(command), '--help'], cwd=work, text=True)
-            assert 'usage: earth2road' in help_text
+        command = Path(sys.executable).parent / ('earth2road' + ('.exe' if sys.platform == 'win32' else ''))
+        version = subprocess.check_output([str(command), '--version'], cwd=work, text=True).strip()
+        assert version == dist.version, (version, dist.version)
+        help_text = subprocess.check_output([str(command), '--help'], cwd=work, text=True)
+        assert 'usage: earth2road' in help_text
         run('doctor')
         run('build', '--config', ROOT/'examples/tiny/config.json', '--inputs', ROOT/'examples/tiny/inputs',
             '--offline', '--output', work/'world')

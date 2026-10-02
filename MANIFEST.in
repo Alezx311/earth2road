@@ -1,4 +1,4 @@
-include README.uk.md CONTRIBUTING.md requirements.txt requirements.lock setup.ps1 setup.sh start.ps1 start.sh Earth2Road.cmd TerraDrive.cmd
+include README.uk.md CONTRIBUTING.md requirements.txt requirements.lock setup.ps1 setup.sh start.ps1 start.sh Earth2Road.cmd
 recursive-include config *.json *.xml *.geojson
 recursive-include examples *.json *.xml *.osm *.png *.txt
 recursive-include tests *.py
