@@ -176,14 +176,14 @@ class GroundSeamTests(unittest.TestCase):
         sl, sr = scene.strip_borders(net, w)
         # same point set per side (labels may swap; Godot offsets in (x,z), scene in (x,y))
         to_plane = lambda g: (g[0], -g[2])
-        gset = {to_plane(p) for p in gl+gr}
-        sset = {(p[0], p[1]) for p in sl+sr}
-        self.assertTrue(sset <= gset or gset <= sset)
-        self.assertEqual(len(sset), len(gset))
-        paired = sorted(sset, key=lambda p: (round(p[0], 1), round(p[1], 1)))
-        gpaired = sorted(gset, key=lambda p: (round(p[0], 1), round(p[1], 1)))
-        for a, b in zip(paired, gpaired):
-            self.assertLess(math.hypot(a[0]-b[0], a[1]-b[1]), 1e-6)
+        gpoints = [to_plane(p) for p in gl+gr]
+        spoints = [(p[0], p[1]) for p in sl+sr]
+        self.assertEqual(len(spoints), len(gpoints))
+        # Match within a tolerance, not by exact float equality: BLAS/SIMD paths differ in
+        # the last bit between platforms (GitHub's Windows runner).
+        for a_side, b_side in ((spoints, gpoints), (gpoints, spoints)):
+            for a in a_side:
+                self.assertLess(min(math.hypot(a[0]-b[0], a[1]-b[1]) for b in b_side), 1e-6)
 
     def test_stitch_vertices_preserve_profile_stations(self):
         # Profile stations must survive the FULL draped-grid triangulation (grid cells +
