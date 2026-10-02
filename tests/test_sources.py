@@ -301,18 +301,22 @@ class RelocatedSumoTests(unittest.TestCase):
 
 class CacheAclTests(unittest.TestCase):
     @unittest.skipUnless(__import__('os').name == 'nt', 'Windows ACL inheritance')
-    def test_file_moved_out_of_scratch_inherits_parent_acl(self):
+    def test_file_moved_out_of_scratch_has_parent_default_acl(self):
         # mkdtemp's 0o700 becomes an owner-only ACL on Python 3.13+; a renamed file kept
-        # it and a cache prepared by one account was unreadable for another.
+        # it and a cache prepared by one account was unreadable for another. A file moved
+        # out of scratch must carry the same ACL as one written directly in the cache.
         from akadem_maps.context import scratch_directory
-        with tempfile.TemporaryDirectory() as tmp:
+        def acl(path):
+            out = subprocess.run(['icacls', str(path)], capture_output=True, text=True, errors='replace').stdout
+            lines = [line.replace(str(path), '').strip() for line in out.splitlines() if ':(' in line]
+            self.assertTrue(lines, out)
+            return sorted(lines)
+        # The parent itself must not come from mkdtemp, or both files share its owner-only ACL.
+        with scratch_directory(tempfile.gettempdir(), 'earth2road-acl-') as tmp:
             parent = Path(tmp)/'cache'
             with scratch_directory(parent) as scratch:
                 (Path(scratch)/'tile.png').write_bytes(b'x')
                 (Path(scratch)/'tile.png').replace(parent/'tile.png')
-            self.assertEqual(list(parent.iterdir()), [parent/'tile.png'])
-            acl = subprocess.run(['icacls', str(parent/'tile.png')], capture_output=True,
-                                 text=True, errors='replace').stdout
-            entries = [line for line in acl.splitlines()[:-1] if ':(' in line]
-            self.assertTrue(entries)
-            self.assertTrue(all('(I)' in line for line in entries), acl)
+            (parent/'direct.png').write_bytes(b'x')
+            self.assertEqual(sorted(parent.iterdir()), [parent/'direct.png', parent/'tile.png'])
+            self.assertEqual(acl(parent/'tile.png'), acl(parent/'direct.png'))
