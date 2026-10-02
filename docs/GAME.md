@@ -24,7 +24,7 @@ grid from `examples/tiny`). The same steps by hand:
 `out/` destinations must not already exist; use a new name for another build.
 Linux: `./setup.sh`, `.venv/bin/earth2road` and `./start.sh --map tiny`.
 
-For a real area, use a config from `config/` or `earth2road build --bbox ...` as in the README,
+For a real area, use a config from `config/` or `earth2road build --bbox ...` as in [CLI.md](CLI.md),
 or generate one around any point on Earth:
 
 - In the game: M → **New map from any place on Earth…**. Drag or zoom the OpenStreetMap view,

@@ -11,7 +11,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip check
 ```
 
-Run the README offline example to exercise both exporters. Test the wheel from a directory
+Run the offline example from [docs/CLI.md](docs/CLI.md) to exercise both exporters. Test the wheel from a directory
 outside the checkout to catch accidental source-tree imports. The CI performs this check.
 
 Full discovery includes unit, geometry and offline contract tests. Tests requiring installed
