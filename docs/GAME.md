@@ -1,4 +1,4 @@
-# TerraDrive Godot game
+# Earth2Road Godot game
 
 Godot 4.6 with Jolt provides the vehicle physics. Python/SUMO supplies synthetic traffic.
 Windows is the locally validated platform; Linux has a CI job but was not run locally.
@@ -16,15 +16,15 @@ map is installed yet, it also builds and activates the offline example map `tiny
 grid from `examples/tiny`). The same steps by hand:
 
 ```powershell
-.\.venv\Scripts\terra-drive.exe build --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output out/tiny-world
-.\.venv\Scripts\terra-drive.exe export --target godot --world out/tiny-world --output out/tiny-godot --offline
-.\.venv\Scripts\terra-drive.exe install --target godot --export out/tiny-godot --root . --activate
+.\.venv\Scripts\earth2road.exe build --config examples/tiny/config.json --inputs examples/tiny/inputs --offline --output out/tiny-world
+.\.venv\Scripts\earth2road.exe export --target godot --world out/tiny-world --output out/tiny-godot --offline
+.\.venv\Scripts\earth2road.exe install --target godot --export out/tiny-godot --root . --activate
 ```
 
 `out/` destinations must not already exist; use a new name for another build.
-Linux: `./setup.sh`, `.venv/bin/terra-drive` and `./start.sh --map tiny`.
+Linux: `./setup.sh`, `.venv/bin/earth2road` and `./start.sh --map tiny`.
 
-For a real area, use a config from `config/` or `terra-drive build --bbox ...` as in the README,
+For a real area, use a config from `config/` or `earth2road build --bbox ...` as in the README,
 or generate one around any point on Earth:
 
 - In the game: M → **New map from any place on Earth…**. Drag or zoom the OpenStreetMap view,
@@ -78,17 +78,22 @@ with the tiny fixture. Generated reports live in ignored `logs/`.
 `--timelapse` records how a map is assembled: terrain, land cover, the SUMO lane network,
 road surfaces, markings, sidewalks, buildings, dressing, signals and traffic appear as a wave
 from the centre, then the camera drops to a junction, flies down a street and climbs out.
-Frames go to `logs/timelapse/` (15 fps). Start the traffic bridge first:
+Frames go to a fresh directory per run under `logs/timelapse/` (15 fps). Existing
+captures are never deleted. Start the traffic bridge first:
 
 ```powershell
 $env:AKADEM_MAP = 'manhattan'
 .\.venv\Scripts\python.exe tools\traffic.py            # separate window
 .\.tools\Godot_v4.6-stable_win64_console.exe --path game --resolution 1280x720 -- --timelapse --density=2500 `
-    --timelapse-near=-100,-250 --timelapse-fly=-306,-31,-19,-557
-ffmpeg -framerate 15 -i logs/timelapse/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 20 timelapse.mp4
+    --timelapse-near=-100,-250 --timelapse-fly=-306,-31,-19,-557 --timelapse-output=res://../logs/timelapse/my-take
+ffmpeg -framerate 15 -i logs/timelapse/my-take/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 20 timelapse.mp4
 ```
 
 Options (local map metres): `--timelapse-near=X,Z` centre, `--timelapse-fly=X1,Z1,X2,Z2[,…]`
 street-level flight path (keep it on the street axis; more points follow a curved street),
 `--timelapse-cars=N` cars in the simulation before recording starts (large maps fill slowly),
-`--timelapse-title=TEXT`, `--timelapse-outro=TEXT`. The game itself is unchanged without `--timelapse`.
+`--timelapse-title=TEXT`, `--timelapse-outro=TEXT`, `--timelapse-output=PATH` (fresh directory),
+`--timelapse-overlay=false` (clean frames for editing). Use an absolute output path or
+`res://../logs/timelapse/my-take` for a path relative to the project.
+This is an animated reveal of an already generated map, not a recording of generator
+execution time. The game itself is unchanged without `--timelapse`.

@@ -1,4 +1,40 @@
-# TerraDrive handoff
+# Earth2Road handoff
+
+## 2026-10-02 — Earth2Road branding and presentation
+
+- New brand/distribution/CLI: Earth2Road / `earth2road`. `terra-drive`, `akadem-maps`,
+  `akadem_maps`, map IDs, world formats and `AKADEM_*` remain compatible. Old launcher
+  forwards to `Earth2Road.cmd`. Setup removes old distribution metadata before the new
+  install (both distributions own the same Python files and aliases).
+- Godot explicitly retains `Godot/app_userdata/TerraDrive` as its user directory.
+  Timelapse takes now use fresh directories; an existing explicit output is rejected,
+  never cleared. Clean-overlay capture is optional.
+- Full unittest discovery: 339 run in 554.412 s, 336 passed, 1 skipped, 2 errors.
+  Both errors were Godot subprocess timeouts inside the sandbox (asset props and
+  vehicle availability). Both passed outside the sandbox: 2 tests, 1.046 s.
+  Logs: `logs/earth2road-unittest.log`, `logs/earth2road-godot-retest.log`.
+- Built wheel/sdist; installed new non-editable package; `tools/ci_offline.py` passed
+  from a temporary directory, including new CLI and both aliases, world build,
+  validation, both adapters and Godot install. `pip check` and publication audit pass.
+  Headless Godot editor import completed without script errors.
+- Failed setup experiment: `pip install --no-build-isolation` lacked setuptools.
+  Installed build tools locally and retried successfully. No runtime pin changed.
+- Kyiv Maidan, Lviv centre and Odesa compact ZIPs exported and run in BeamNG 0.39.4
+  from separate profiles (`out/earth2road-launch/beamng/*/result.json`): load 14–15 s,
+  one route of 226–317 m each, 4 wheels in contact, no damage, 303 surface samples
+  with max error < 1 mm, all signals bound, 5–6 moving AI entries. Download folder
+  `out/earth2road-launch/downloads/` (ZIPs, README.uk.md, SHA256SUMS, runtime-results).
+  This is one route per map, not whole-map acceptance.
+- Video `out/earth2road-launch/video/Earth2Road-ukraine-dev-60s.mp4` (60 s, 1080p30, silent).
+  The first Godot take stalled: GEVP squares the action strength, so throttle 0.38 gave
+  0.14 and the car stayed at 1 km/h in N; the HUD also still read "TERRA / DRIVE".
+  Fixed (`hud.gd` → EARTH2ROAD, throttle 0.8, export shot shows the compact mode) and
+  recaptured; the stalled take is kept as `godot-promo-v1-stalled`. `edit_promo.py`
+  keeps badges off the top edge on the gameplay shot, where the game HUD is.
+- Godot UI in the picker/export shots is English although the locale is set to `uk`.
+- GitHub repository renamed to `Alezx311/earth2road` (origin updated); docs, the Reddit
+  draft and the download README point there. Not done: public posting and release
+  publication; the Reddit draft still needs the release URL.
 
 ## 2026-10-01 — `export_optimize`: profile of a 1 × 1 km map (Livoberezhna)
 

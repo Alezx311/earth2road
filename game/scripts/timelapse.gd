@@ -5,8 +5,8 @@ extends Node
 ## surfaces, markings, sidewalks, buildings, dressing, signals, traffic — as a wave from the
 ## map centre, while the camera flies an aerial orbit, drops to a signalised junction, flies
 ## down the main street at street level and climbs out over the whole map.
-## Each frame is saved to logs/timelapse/frame_NNNN.jpg at a fixed 15 fps of animation time:
-##   ffmpeg -framerate 15 -i logs/timelapse/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p out.mp4
+## Each take uses a fresh logs/timelapse/<map>-<time>-<pid>/ directory at 15 animation fps.
+## Use --timelapse-output=<fresh path> to select a take and --timelapse-overlay=false for editing.
 ## Nothing here changes the game itself.
 ## Options: --timelapse-near=X,Z (centre, default: middle of the map), --timelapse-title=TEXT,
 ## --timelapse-fly=X1,Z1,X2,Z2[,X3,Z3…] (street-level flight path, may bend with the street),
@@ -66,10 +66,16 @@ func _ready() -> void:
 	measure()
 	main.capture_focus = center
 	main.world.focus = center
-	out_dir = ProjectSettings.globalize_path("res://../logs/timelapse")
-	DirAccess.make_dir_recursive_absolute(out_dir)
-	for f in DirAccess.get_files_at(out_dir):
-		DirAccess.remove_absolute(out_dir + "/" + f)
+	var default_dir := "res://../logs/timelapse/%s-%d-%d" % [main.data.get("id", "map"), int(Time.get_unix_time_from_system()), OS.get_process_id()]
+	out_dir = ProjectSettings.globalize_path(arg("output", default_dir))
+	if DirAccess.dir_exists_absolute(out_dir):
+		push_error("Timelapse output already exists; choose a fresh --timelapse-output directory")
+		get_tree().quit(1)
+		return
+	if DirAccess.make_dir_recursive_absolute(out_dir) != OK:
+		push_error("Cannot create timelapse output directory")
+		get_tree().quit(1)
+		return
 	build_keys()
 	build_overlay()
 	aim(0.0)
@@ -412,11 +418,20 @@ func styled(l: Label, size: int, color := Color.WHITE) -> Label:
 	return l
 
 func build_overlay() -> void:
+	if arg("overlay", "true") == "false":
+		# Clean capture for editing. Labels still exist for the animation update.
+		caption = Label.new()
+		numbers = Label.new()
+		add_child(caption)
+		add_child(numbers)
+		caption.hide()
+		numbers.hide()
+		return
 	var layer := CanvasLayer.new()
 	layer.layer = 50
 	add_child(layer)
 	var title := styled(Label.new(), 26)
-	title.text = arg("title", "TerraDrive  ·  %s  ·  generated from OpenStreetMap" % main.data.get("name", ""))
+	title.text = arg("title", "Earth2Road  ·  %s  ·  generated from OpenStreetMap" % main.data.get("name", ""))
 	title.position = Vector2(30, 22)
 	layer.add_child(title)
 	for i in range(STAGES.size()):
