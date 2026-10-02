@@ -5,6 +5,7 @@ from importlib.metadata import distribution
 from pathlib import Path
 import subprocess
 import sys
+import sysconfig
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +21,8 @@ def main():
         if Path(package).resolve().is_relative_to(ROOT / 'akadem_maps'):
             raise RuntimeError('Wheel test imported the checkout; install a non-editable wheel first')
         dist = distribution('earth2road')
-        command = Path(sys.executable).parent / ('earth2road' + ('.exe' if sys.platform == 'win32' else ''))
+        # A venv keeps scripts next to python; a system Windows Python uses <prefix>/Scripts.
+        command = Path(sysconfig.get_path('scripts')) / ('earth2road' + ('.exe' if sys.platform == 'win32' else ''))
         version = subprocess.check_output([str(command), '--version'], cwd=work, text=True).strip()
         assert version == dist.version, (version, dist.version)
         help_text = subprocess.check_output([str(command), '--help'], cwd=work, text=True)
