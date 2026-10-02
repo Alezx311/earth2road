@@ -17,7 +17,9 @@ jobs:
         with:
           python-version: '3.14'
       - name: Install build and runtime dependencies
-        run: python -m pip install -c requirements.lock ".[generator,traffic]" build
+        # Editable: runtime.ROOT must be the checkout so .tools/ (Godot) and game/ resolve.
+        # The built wheel is tested separately below, from outside the source tree.
+        run: python -m pip install -c requirements.lock -e ".[generator,traffic]" build
       - name: Download pinned Godot version
         shell: python
         run: |
