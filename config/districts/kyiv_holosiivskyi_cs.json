@@ -1,0 +1,24 @@
+{
+  "id": "kyiv_holosiivskyi_cs",
+  "name": "Київ — Голосіївський район · південний центр",
+  "region_profile": "ukraine",
+  "center": [
+    30.582495,
+    50.313567
+  ],
+  "boundary": {
+    "geojson": "areas/kyiv_holosiivskyi_cs.geojson",
+    "buffer_m": 0
+  },
+  "chunk_size": 250,
+  "seed": 311,
+  "terrain_zoom": 12,
+  "traffic_count": 600,
+  "start_time": "08:00",
+  "geofabrik": {
+    "url": "local/ukraine-260918-kyiv.osm.pbf",
+    "md5": "41a038084c3ba11ed0fe2a7bb0c17c71",
+    "note": "Local cut of the dated Geofabrik extract ukraine-260918 (OSM data 2026-09-18), bbox [30.1, 50.16, 31.06, 50.68]; place it in <cache>/geofabrik/."
+  },
+  "note": "OSM administrative boundary (relation/1754513) + 150 m buffer. Part \"південний центр\" of an equal-area split, 200 m overlap with neighbouring parts."
+}
