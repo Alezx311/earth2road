@@ -1249,8 +1249,9 @@ def build(cfg, root, context):
     if area_xy is not None:
         parking = parking.intersection(area_xy)
     green_out=[]
+    cover_local, parking_local = scene.LocalCut(cover_cut), scene.LocalCut(parking)
     for area in greens:
-        poly=area['poly'].difference(cover_cut).difference(parking)
+        poly=parking_local.subtract_from(cover_local.subtract_from(area['poly']))
         if is_rural:
             poly=poly.difference(unary_union([a['cut'] for a in greens if 'cut' in a]))
         if area_xy is not None:

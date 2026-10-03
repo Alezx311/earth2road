@@ -21,6 +21,63 @@ GROUND_CELL = 20.0
 DECK_MEDIAN_GAP = 6.0        # m; narrower slots between parallel bridge decks are closed (assumed single structure)
 
 
+class LocalCut:
+    """`geom` for many small differences against it (paths, green areas).
+
+    Each `x.difference(geom)` re-nodes the whole map-wide polygon; on a 45 km² district
+    that took hours. Above LOCAL_CUT_COORDS vertices the polygon is split once into
+    quadtree tiles (clip_by_rect) and each query subtracts only the tiles around its envelope.
+    Smaller maps keep the exact original operation."""
+
+    def __init__(self, geom, leaf=2000):
+        self.geom = geom
+        self.tree = None
+        if geom is None or geom.is_empty or shapely.get_num_coordinates(geom) <= LOCAL_CUT_COORDS:
+            return
+        self.leaves, self.rects = [], []
+        self._split(geom, geom.bounds, leaf, 0)
+        self.tree = shapely.STRtree(self.rects)
+
+    def _split(self, geom, rect, leaf, depth):
+        if geom.is_empty:
+            return
+        if shapely.get_num_coordinates(geom) <= leaf or depth >= 12:
+            if not geom.is_valid:
+                geom = shapely.make_valid(geom)
+            self.leaves.append(geom)
+            self.rects.append(box(*rect))
+            return
+        x0, y0, x1, y1 = rect
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        for r in ((x0, y0, mx, my), (mx, y0, x1, my), (x0, my, mx, y1), (mx, my, x1, y1)):
+            try:
+                part = shapely.clip_by_rect(geom, *r)
+            except shapely.errors.GEOSException:
+                # RectangleIntersection can emit a collapsed ring; the full overlay cannot.
+                part = geom.intersection(box(*r))
+            self._split(part, r, leaf, depth + 1)
+
+    def around(self, other):
+        if self.tree is None:
+            return self.geom
+        hits = self.tree.query(box(*other.bounds).buffer(1.0))
+        return unary_union([self.leaves[i] for i in hits]) if len(hits) else Polygon()
+
+    def subtract_from(self, other):
+        if self.tree is None:
+            return other.difference(self.geom)
+        # A - (B u C) = (A - B) - C: no union of the tiles per query.
+        for i in self.tree.query(box(*other.bounds).buffer(1.0)):
+            if other.is_empty:
+                break
+            other = other.difference(self.leaves[i])
+        return other
+
+
+LOCAL_CUT_COORDS = 100000
+DRAPE_SPLIT_WORK = 50_000_000   # polygon vertices x grid cells
+
+
 def polygons(geom):
     if geom is None or geom.is_empty:
         return []
@@ -62,11 +119,33 @@ def draped_triangles(poly, cell=GROUND_CELL):
     out = []
     for p in polygons(poly):
         x0, y0, x1, y1 = p.bounds
-        for ix in range(math.floor(x0/cell), math.ceil(x1/cell)):
-            for iy in range(math.floor(y0/cell), math.ceil(y1/cell)):
+        ix0, ix1 = math.floor(x0/cell), math.ceil(x1/cell)
+        iy0, iy1 = math.floor(y0/cell), math.ceil(y1/cell)
+        if int(shapely.get_num_coordinates(p)) * (ix1 - ix0) * (iy1 - iy0) > DRAPE_SPLIT_WORK:
+            # District-wide ground: intersecting the whole polygon with every cell is
+            # O(cells x vertices). Halve it along the same cell grid first (same cells, same order).
+            _drape_split(p, ix0, ix1, iy0, iy1, cell, out)
+            continue
+        for ix in range(ix0, ix1):
+            for iy in range(iy0, iy1):
                 part = p.intersection(box(ix*cell, iy*cell, (ix+1)*cell, (iy+1)*cell))
                 out += triangles(part)
     return out
+
+
+def _drape_split(p, ix0, ix1, iy0, iy1, cell, out):
+    if p.is_empty:
+        return
+    if ix1 - ix0 > 1:
+        m = (ix0 + ix1) // 2
+        for a, b in ((ix0, m), (m, ix1)):
+            _drape_split(p.intersection(box(a*cell, iy0*cell, b*cell, iy1*cell)), a, b, iy0, iy1, cell, out)
+    elif iy1 - iy0 > 1:
+        m = (iy0 + iy1) // 2
+        for a, b in ((iy0, m), (m, iy1)):
+            _drape_split(p.intersection(box(ix0*cell, a*cell, ix1*cell, b*cell)), ix0, ix1, a, b, cell, out)
+    else:
+        out += triangles(p.intersection(box(ix0*cell, iy0*cell, ix1*cell, iy1*cell)))
 
 
 def offset_line(pts, d):
@@ -585,6 +664,7 @@ def paths(ways, nodes, tags, to_xy, cut, ground, lift=0.05, step=3.0):
     """Decorative footways/cycleways from OSM (not simulated), draped on the ground and
     removed where they would overlap the carriageway or SUMO sidewalks."""
     out = []
+    local = LocalCut(cut) if cut is not None else None
     for w in ways.values():
         t = tags(w)
         kind = t.get('highway')
@@ -594,8 +674,8 @@ def paths(ways, nodes, tags, to_xy, cut, ground, lift=0.05, step=3.0):
         if len(refs) < 2:
             continue
         line = LineString([to_xy(*nodes[r]) for r in refs])
-        if cut is not None:
-            line = line.difference(cut)
+        if local is not None:
+            line = local.subtract_from(line)
         parts = [line] if line.geom_type == 'LineString' else [g for g in getattr(line, 'geoms', []) if g.geom_type == 'LineString']
         for part in parts:
             if part.length < 2:
