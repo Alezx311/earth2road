@@ -101,19 +101,21 @@ def planar(ring):
     return poly if not poly.is_empty else Polygon()
 
 
-def triangles(poly):
-    """Constrained Delaunay triangulation: keeps concave outlines and holes intact."""
+def triangles(poly, min_area=0.01):
+    """Constrained Delaunay triangulation: keeps concave outlines and holes intact.
+    Parts below `min_area` are dropped; callers whose pieces must tile an exact
+    outline (generated junction pavement) pass a smaller value."""
     if not poly.is_valid:
         poly = poly.buffer(0)
     out = []
     for p in polygons(poly):
-        if p.area < 0.01:
+        if p.area < min_area:
             continue
         out += [list(t.exterior.coords)[:3] for t in shapely.constrained_delaunay_triangles(p).geoms]
     return out
 
 
-def draped_triangles(poly, cell=GROUND_CELL):
+def draped_triangles(poly, cell=GROUND_CELL, min_area=0.01):
     """Triangles of `poly` split on a grid so a height field evaluated at the vertices
     follows the terrain instead of spanning it with one flat plane."""
     out = []
@@ -124,28 +126,28 @@ def draped_triangles(poly, cell=GROUND_CELL):
         if int(shapely.get_num_coordinates(p)) * (ix1 - ix0) * (iy1 - iy0) > DRAPE_SPLIT_WORK:
             # District-wide ground: intersecting the whole polygon with every cell is
             # O(cells x vertices). Halve it along the same cell grid first (same cells, same order).
-            _drape_split(p, ix0, ix1, iy0, iy1, cell, out)
+            _drape_split(p, ix0, ix1, iy0, iy1, cell, out, min_area)
             continue
         for ix in range(ix0, ix1):
             for iy in range(iy0, iy1):
                 part = p.intersection(box(ix*cell, iy*cell, (ix+1)*cell, (iy+1)*cell))
-                out += triangles(part)
+                out += triangles(part, min_area)
     return out
 
 
-def _drape_split(p, ix0, ix1, iy0, iy1, cell, out):
+def _drape_split(p, ix0, ix1, iy0, iy1, cell, out, min_area=0.01):
     if p.is_empty:
         return
     if ix1 - ix0 > 1:
         m = (ix0 + ix1) // 2
         for a, b in ((ix0, m), (m, ix1)):
-            _drape_split(p.intersection(box(a*cell, iy0*cell, b*cell, iy1*cell)), a, b, iy0, iy1, cell, out)
+            _drape_split(p.intersection(box(a*cell, iy0*cell, b*cell, iy1*cell)), a, b, iy0, iy1, cell, out, min_area)
     elif iy1 - iy0 > 1:
         m = (iy0 + iy1) // 2
         for a, b in ((iy0, m), (m, iy1)):
-            _drape_split(p.intersection(box(ix0*cell, a*cell, ix1*cell, b*cell)), ix0, ix1, a, b, cell, out)
+            _drape_split(p.intersection(box(ix0*cell, a*cell, ix1*cell, b*cell)), ix0, ix1, a, b, cell, out, min_area)
     else:
-        out += triangles(p.intersection(box(ix0*cell, iy0*cell, ix1*cell, iy1*cell)))
+        out += triangles(p.intersection(box(ix0*cell, iy0*cell, ix1*cell, iy1*cell)), min_area)
 
 
 def offset_line(pts, d):
@@ -251,7 +253,7 @@ def markings(net, road_z, structure_of):
             minor = conns and all(c.getState() in ('m', 's', 'w') for c in conns)
             if (signalised or minor) and lane.getLength() > 8:
                 pts = lane_xyz(lane, road_z)
-                tip = offset_line(pts, 0)[-1]
+                tip = getattr(road_z, 'stop_points', {}).get(lane.getID(), offset_line(pts, 0)[-1])
                 a, b = pts[-2], pts[-1]
                 length = math.hypot(b[0]-a[0], b[1]-a[1]) or 1.0
                 back = (tip[0]-(b[0]-a[0])/length*0.5, tip[1]-(b[1]-a[1])/length*0.5, tip[2])
@@ -346,7 +348,14 @@ def footprint(strips, widths_pad=0.0):
     """2D union of strip footprints built from the actual offset borders (miter clamp 0.5,
     as world.gd draws), not from buffered centerlines: the ground cut boundary therefore
     coincides with the rendered ribbon edge corner-for-corner."""
-    polys = [strip_polygon(s['points'], s['width'], widths_pad) for s in strips if len(s['points']) >= 2]
+    polys = []
+    for s in strips:
+        if s.get('geometry') == 'v2':
+            from .roadgen import footprint as generated_footprint
+            p = generated_footprint(s)
+            polys.append(p.buffer(widths_pad) if widths_pad else p)
+        elif len(s['points']) >= 2:
+            polys.append(strip_polygon(s['points'], s['width'], widths_pad))
     polys = [p for p in polys if not p.is_empty]
     if not polys:
         return Polygon()

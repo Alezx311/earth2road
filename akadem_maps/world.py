@@ -14,6 +14,8 @@ from .world_format import COORDINATES
 from . import __version__
 
 def validate_config(cfg):
+    from .core.roadgen import options
+    options(cfg)
     if 'corridor' in cfg:
         from .core.corridor import validate_includes
         validate_includes(cfg['corridor'])

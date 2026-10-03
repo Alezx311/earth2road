@@ -14,8 +14,13 @@ from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point
 def road_mesh(tile):
     mesh = Mesh()
     for road in tile.get('road_strips', []):
-        mesh.strip([beam_point(p) for p in road['points']], road['width'],
-                   'road', centre_seam=True)
+        if road.get('geometry') == 'v2':
+            # Cut at a generated junction socket; the ribbon would overlap it.
+            for tri in road['triangles']:
+                mesh.tri('road', *(beam_point(p) for p in tri), up=True)
+        else:
+            mesh.strip([beam_point(p) for p in road['points']], road['width'],
+                       'road', centre_seam=True)
     for junction in tile.get('junctions', []):
         for tri in junction.get('triangles', []):
             mesh.tri('road', *(beam_point(p) for p in tri), up=True)

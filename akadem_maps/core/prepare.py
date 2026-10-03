@@ -29,7 +29,7 @@ from akadem_maps.core import road_profiles
 from akadem_maps.core import corridor
 from akadem_maps.core import pois as poi_points
 from akadem_maps.core import rural
-from akadem_maps.core import road_geometry, surface_audit
+from akadem_maps.core import road_geometry, surface_audit, road_graph, roadgen
 
 
 def write_json(path, value):
@@ -750,6 +750,8 @@ def write_world(world, folder):
 
 def build(cfg, root, context):
     BUILD = context.build
+    road_options = roadgen.options(cfg)
+    use_roadgen = road_options['mode'] == 'v2'
     BUILD.mkdir(parents=True, exist_ok=True)
     map_clip_report = rural.clip_roads(root,corridor.area(cfg, context=context)) if 'boundary' in cfg else None
     nodes = {n.attrib['id']: (float(n.attrib['lon']),float(n.attrib['lat'])) for n in root.findall('node')}
@@ -779,6 +781,8 @@ def build(cfg, root, context):
                     w.remove(tag)
             underground_excluded += 1
     context.progress('terrain', 0.2)
+    source_graph = road_graph.source_graph(root, lambda t: drivable(t) or (is_rural and rural.accessible_track(t)),
+                                           synthetic=cfg.get('source_kind') == 'synthetic') if 'road_geometry' in cfg else None
     terrain = Terrain(cfg, context)
     base = terrain.sample(*cfg['center'])
     node_heights, way_refs, elevation_report = road_node_heights(root, nodes, tags, lambda lon,lat: terrain.sample(lon,lat)-base, include_tracks=is_rural)
@@ -851,6 +855,22 @@ def build(cfg, root, context):
                     road_z.shapes[lane.getID()] = [(x, y) for x, y, _ in curve]
                     road_z.z[lane.getID()] = [z for _, _, z in curve]
     road_z.refresh_junctions()
+    road_patches = {}
+    if source_graph is not None:
+        write_json(BUILD/'roadgen_input.json', {
+            'version': 1, 'source': source_graph,
+            'network_sha256': hashlib.sha256((BUILD/'network.net.xml').read_bytes()).hexdigest(),
+            'strips': {lid: {k:v for k,v in r.items() if not k.startswith('_')} for lid,r in prepared_strips.items()},
+            'shapes': road_z.shapes, 'z': road_z.z, 'internal_by_node': road_z.internal_by_node})
+    if use_roadgen:
+        road_patches, bound_graph, roadgen_report, roadgen_timings = roadgen.generate(
+            source_graph, net, prepared_strips, road_z, road_options['curve_tolerance_m'])
+        write_json(BUILD/'road_graph.json', bound_graph)
+        write_json(BUILD/'roadgen_report.json', roadgen_report)
+        # Timings are diagnostic, outside the reproducible world manifest.
+        if context.diagnostics:
+            write_json(context.diagnostics/'roadgen_timings.json', roadgen_timings)
+        roadgen.lane_heights(road_patches, road_z)
     road_z.paint_heights = {}
     road_z.paint_areas = {}
     for edge in net.getEdges():
@@ -859,6 +879,8 @@ def build(cfg, root, context):
             mesh = surface_audit.TriangleIndex((r['lane'], r.get('triangles', list(surface_audit.ribbon_triangles(r['points'], r['width']))), r['topology']) for r in strips)
             road_z.paint_heights[edge.getID()] = lambda x,y,z,m=mesh: road_geometry.height_on(m,x,y,z)
             road_z.paint_areas[edge.getID()] = road_geometry.union(mesh.polys)
+    if road_patches:
+        roadgen.paint_surfaces(road_patches, prepared_strips, road_z)
     def edge_surface(edge):
         for lane in edge.getLanes():
             for wid in lane.getParam('origId', '').split():
@@ -931,6 +953,12 @@ def build(cfg, root, context):
         for run in runs:
             # GroundField edges = the actual ribbon borders (roads and earth ramps); the
             # ground mesh then snaps to their exact height right on the seam.
+            if strip.get('geometry') == 'v2':
+                for border in roadgen.boundaries(strip):
+                    anchors += border
+                    edges += scene.border_segments(border)
+                    profile += [(p[0], p[1]) for p in border]
+                continue
             anchors += run
             left, right = scene.strip_borders(run, strip['width'])
             if '_height' in strip:
@@ -978,7 +1006,11 @@ def build(cfg, root, context):
         compatible = compatible + [joined_surfaces[i][1] for i in sorted(previous)
                       if poly.intersects(joined_surfaces[i][0]) and
                       surface_audit.relationship(topology, joined_surfaces[i][1]['topology']) == 'connected']
-        poly, surface_tris, z_at = road_geometry.junction_surface(poly, compatible, road_z.node_z[node.getID()])
+        if node.getID() in road_patches:
+            patch = road_patches[node.getID()]
+            poly, surface_tris, z_at = patch['poly'], patch['triangles'], patch['height']
+        else:
+            poly, surface_tris, z_at = road_geometry.junction_surface(poly, compatible, road_z.node_z[node.getID()])
         node_polys[node.getID()] = poly
         if surface_tris:
             record = {'lane':'junction:'+node.getID(), 'points':surface_tris[0], 'width':1.,
@@ -1010,15 +1042,19 @@ def build(cfg, root, context):
                     profile += [(x, y) for x, y in list(hole.coords)]
         junctions.append({'id':node.getID(),'bridge':bridge,'topology':topology,
                           'triangles':[[point(x,y,z) for x,y,z in tri] for tri in surface_tris]})
+        if node.getID() in road_patches:
+            junctions[-1].update(geometry='v2', family=road_patches[node.getID()]['family'])
         if is_rural:
             surfaces = [edge_surface(e) for e in node.getIncoming()+node.getOutgoing() if e.getFunction()=='']
             junctions[-1]['surface'] = 'road' if 'road' in surfaces else ('gravel' if 'gravel' in surfaces else 'dirt')
     for item in lanes:
-        if item['internal']:
+        if item['internal'] or road_patches:
             item['points'] = road_z.points(net.getLane(item['id']), point)
     road_z.turn_markings = road_geometry.turn_markings(net, road_z, node_polys)
     carriageway = road_geometry.union([scene.footprint(road_strips), *junction_polys]).buffer(0.05)
     walk_strips, walk_areas = scene.sidewalks(net, road_z, carriageway, structure_of)
+    if road_patches:
+        walk_strips, walk_areas = roadgen.sidewalks(walk_strips, walk_areas, road_patches, carriageway)
     walk_ramps = []
     for strip in walk_strips:
         runs = [strip['points']]
@@ -1300,7 +1336,7 @@ def build(cfg, root, context):
                     for lane in e.getLanes():
                         if not lane.allows('passenger'):
                             continue
-                        shp=lane.getShape()
+                        shp=road_z.shape(lane)
                         for i,((ax,ay),(bx,by)) in enumerate(zip(shp,shp[1:])):
                             h=math.degrees(math.atan2(bx-ax,by-ay))%360
                             if abs((h-shot['heading']+180)%360-180)>60:
@@ -1310,7 +1346,7 @@ def build(cfg, root, context):
                                 best=(d,lane,i,h)
                 if best:
                     _,lane,i,h=best
-                    x,y=lane.getShape()[i]
+                    x,y=road_z.shape(lane)[i]
                     item.update({'heading':h,'position':point(x,y,road_z.z[lane.getID()][i])})
             shots.append(item)
     context.progress('signs', 0.84)

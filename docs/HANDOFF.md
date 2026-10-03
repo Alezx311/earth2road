@@ -1,5 +1,166 @@
 # Earth2Road handoff
 
+## 2026-10-03 — roadgen-v2 lab fixes (Claude)
+
+- Found 3/10 roadgen tests failing: the "curved approach crosses template boundary" guard
+  rejected straight X/width-transition cases, because the approach before its socket stuck out
+  of the curb-return curve. The core now absorbs that stub (`candidate`); the guard stays.
+- Lane-centre stations without pavement (`lane_surface_errors`, `10046_1` at `y_acute`):
+  `scene.triangles` silently drops pieces < 0.01 m², so sockets cutting a strip near its own
+  station lost slivers (and patch draping lost cell corners). `triangles`/`draped_triangles`
+  take `min_area`; roadgen uses `MIN_PIECE = 1e-4` (= `prepare.MIN_TRIANGLE_AREA`). Default
+  0.01 unchanged, so legacy output is unaffected.
+  First (wrong) guess was the stitching of far knots; restricting knots to patch boundaries
+  doubled sub-mm cracks (1324 vs 614 holes > 1e-4 m²; legacy 670) and was reverted.
+- Fixture: merge/split connectors ran through the junction centre without a shared node
+  (60 m² overlaps in v2 and legacy); now routed around. The roundabout ring had only one node
+  per arm, so it rendered as a diamond in BeamNG (owner screenshot); now a node every 15°.
+  The generator draws what OSM gives; coarse real rings would still be polygonal.
+- Size: `roadgen.sidewalks` turned whole sidewalk strips near a collar into 2 m-draped walking
+  areas and re-draped every area (walk triangles 520 → 65 601). Now strips are trimmed
+  (`_runs_clear_of`), only the near remainder becomes an area, untouched areas are kept, and
+  the collar's outer edge (never asphalt-facing) is `buffer(3, quad_segs=4).simplify(.05)`.
+  Patch cores are triangulated whole (planar), transitions in ≤2 m cross-sections
+  (`BAND_STEP`) instead of a 2 m world grid. `beamng_pavement.road_mesh` uses v2 strip
+  triangles (the main surface export already did).
+- Lab (all 24 cases, BeamNG compact, `out/roadgen-v2/all-claude-ring`): 24/24 expected status
+  (18 primary v2, 6 fallback controls); 52 v2 / 80 fallback effective junctions; connected
+  steps max 12.5 mm (same site 12.9 mm in legacy), 0 uncovered lane stations, 0 patch/road
+  overlaps > 1e-3 m²; DecalRoad height audit max 0.291 m (legacy 0.297). Export: surfaces
+  35 252 tris (legacy 36 223), sidewalks 31 529 (18 480), ZIP 1.95 MB (1.62 MB); geometry
+  ~15 s. The extra sidewalk triangles are kerbs along curved curb returns — not reduced further.
+- Owner's second BeamNG test still showed the 4-node diamond after installing the fixed ZIP:
+  `temp/levels/kyiv_roadgen_lab` held .cdae compiled at 15:00 under the same mesh names, and
+  the ZIP entries carry the fixed `ZIP_STAMP` (2026-09-24), so the game kept the old meshes.
+  `static_mesh` now appends a 10-hex SHA-256 of the .dae to its file name; a changed mesh is a
+  new path and cannot hit a stale cache (signs/signal head keep fixed names). Export tests
+  85 OK. Re-exported ZIP (`all-claude-ring/beamng2`) copied to the game's mods folder;
+  not yet confirmed in game.
+- First real v2 map: Bilychi 4×4 km (`out/roadgen-v2/real/bilychy_v2.json`, the verified
+  offline inputs of `bilychy_offline_verified`), build 32 min, compact export 8.5 min.
+  522 v2 / 1779 fallback (T 360, X 98, transition 23, Y 15, merge 13, split 13). Fallback
+  reasons: endcap 722, approach too short 586, socket cross-section 141, approach tangent 112,
+  overlapping group 112, single-ribbon 25, structure 24, roundabout 21, internal lane 18.
+- The first Bilychi build had 32 lane stations > 5 cm off the pavement (legacy 8), all on v2
+  patches: lanes got patch heights only at sparse SUMO vertices while transitions bend
+  (smoothstep). `roadgen.lane_heights` adds a station every 1 m (`LANE_STEP`) inside a patch,
+  incl. internal lanes. Rebuild: 8 (the same legacy sites; 7 uncovered, pre-existing).
+  Shot snapping in `prepare` now indexes `road_z.shape` instead of the SUMO shape.
+- The first export failed with MemoryError (109 MiB) with ~8.6 GB free commit and no other
+  Python running (probably the game open); the second run, after rebuild, passed.
+- Bilychi v2 vs the 2026-10-02 legacy export: connected steps > 10 cm 31 vs 32, max 0.372 m
+  both; ZIP 51.2 vs 45.5 MB; surfaces 925 k vs 955 k tris; sidewalks 527 k vs 271 k;
+  DecalRoad height audit over_5cm 4846 vs 3165, over_20cm 1674 vs 1458, over_2m 20 vs 20
+  (max 16.46 m at the same pre-existing node). DecalRoad nodes come from SUMO edge shapes,
+  so they still chord through transitions — follow-up. Installed as
+  `earth2road_bilychy_roadgen_v2.zip` (level `kyiv_bilychy_roadgen_v2`); not loaded in game yet.
+- Checks: `test_roadgen` 13 OK (3 new); full suite 382 OK, 1 skipped
+  (`logs/unittest-roadgen-claude-final.log`). Bilychi legacy/v2 real-map builds were started
+  and cancelled at the owner's request; no real map has been built with v2 yet.
+
+## 2026-10-03 — roadgen-v2 prototype (implementation in progress)
+
+- Added opt-in `road_geometry.mode: v2` (default remains legacy), OSM source graph,
+  SUMO binding, T/X/Y/merge/split/transition templates and generated shared pavement,
+  sidewalk collars and paint clipping. `tools/roadgen_lab.py` builds synthetic offline
+  fixtures or replays prepared geometry, producing PNG/SVG and JSON diagnostics.
+- First complete 24-case lab: 18 primary cases use v2; short/close/divided/roundabout/
+  five-arm/structure controls use explicit fallback. Supporting streets are counted
+  separately from primary cases. No engine acceptance yet.
+- Checks so far: `python -m unittest discover -s tests -p test_roadgen.py -v`
+  10 passed, including offline reproducibility. Existing surface seam suite: 12 passed.
+- Failed fixture attempts: wrong example-resource path; then interleaved OSM nodes/ways
+  made netconvert read only the first way, so spawn selection failed. Fixed ordering.
+  Initial grade tests exposed a snapped-boundary tolerance error; corrected 1e-7 to 2e-6 m.
+- Initial lab audit found up to 0.127 m steps and one sub-millimetre uncovered station.
+  A shared-boundary station pass and height tolerance correction are being revalidated.
+  Results under ignored `out/roadgen-v2/`; old attempts retained for comparison.
+
+## 2026-10-03 — roadgen-v2 planning backlog
+
+- Created and switched to `roadgen-v2` from `generator-local-cut`, preserving the existing
+  uncommitted district configs/tool, Reddit draft and handoff additions.
+- [PLAN.md](PLAN.md) now holds the user's 12-part backlog: road graph/junction families,
+  elevation, BeamNG export v2, Building Grammar, hybrid geometry/textures, city props,
+  generation/nightly pipelines, Ukrainian showcase maps, city packs, monetization and devlog.
+- First priority is roads + shared junction/elevation transitions, then measured BeamNG export.
+  The 4×4 km/~20 MB baseline and 22–35/30–50 MB estimates are planning references to verify,
+  not new benchmark results. Existing functionality must be audited before implementation.
+- Next work unit: choose a reproducible baseline, inspect existing road/elevation/export code
+  and tests, then define the road graph and junction prototype. No implementation started here.
+- Initial branch creation failed because the sandbox could not write `.git/refs/heads`;
+  retry with approved elevated permissions succeeded. No generation/runtime experiments run.
+- Checks passed: `git diff --check -- docs/PLAN.md docs/HANDOFF.md`; a `python -c` check
+  calling `tools.check_publication.inspect_file` on those two files (UTF-8, local Markdown
+  links and source hygiene), plus section-number assertions (1–12; 115 unchecked tasks).
+  `git branch --show-current` reports `roadgen-v2`. Full unittest/runtime checks were not run
+  for this documentation-only change; no previous map acceptance status was changed.
+
+## 2026-10-03 — Kyiv district and suburb maps for BeamNG (overnight batch)
+
+- `tools/configure_districts.py <admin.geojson>` writes `config/districts/<id>.json` and
+  `config/districts/areas/<id>.geojson` from OSM administrative relations (Kyiv raions,
+  admin_level 10; towns, admin_level 9), listed with relation IDs in `AREAS`. The outline is
+  buffered 150 m (coarse arcs) and simplified 10 m in the tool; configs use `buffer_m: 0`.
+  The admin GeoJSON came from a one-off pyosmium area scan of ukraine-260918 (not kept in Git).
+- Failed: the first configs used `buffer_m: 150` from `boundary_area` (64 segments per quarter
+  arc). The netconvert `--keep-edges.in-geo-boundary` argument reached 45–72 k characters;
+  Windows CreateProcess failed with an empty netconvert.log ("SUMO netconvert failed",
+  Podilskyi). Pecherskyi (12.6 k) passed; Solomianskyi, started with the long outline, also
+  passed netconvert — not investigated why.
+  Not fixed in core: `corridor.geo_boundary` has no length guard.
+- Districts above 55 km² are split into equal-area parts along the longer axis (200 m overlap,
+  ids `_w/_c/_e`, `_s/_cs/_cn/_n`); union of parts covers 100 % of each relation. Reasons:
+  build memory (a 45 km² build peaks at ~13 GB private; the machine has 32 GB RAM + 8 GB
+  pagefile, and three parallel builds dropped free commit to 1.1 GB) and the earlier
+  8 × 8 km Shuliavka level that BeamNG could not load.
+- Per-map extraction from the full 877 MB PBF took ~400 s. A Kyiv-area cut
+  `ukraine-260918-kyiv.osm.pbf` (36 MB, md5 41a03808…, bbox 30.10 50.16 31.06 50.68) was
+  made with the same selection as `core/osm_extract.py` (PBF output instead of XML) and is
+  referenced from the district configs as `local/ukraine-260918-kyiv.osm.pbf` (cache-only;
+  nothing is downloaded from that "url"). `ring_beresteiskyi` still uses the full PBF.
+- Batch runner (ignored, `out/districts/`): `run.py` = build → `export --optimization compact`
+  → copy ZIP to `%LOCALAPPDATA%/BeamNG/BeamNG.drive/current/mods`; `worker.sh` takes items
+  from `todo.txt` when ≥14 GB commit is free and 15 min after the previous start. Results:
+  `out/districts/status.jsonl`; logs `logs/districts/`. The runner's `peak_gb` is always 0
+  (it reads the venv launcher process, not the real interpreter) — ignore it.
+- Ring + Beresteiskyi regenerated from `config/ring_beresteiskyi.json` with the same level ID
+  `kyiv_ring_teremky_berkovets`, compact: ZIP 92 MB (old legacy ZIP 258 MB). The old
+  `akadem_drive_ring_beresteiskyi.zip` and the game's 1.9 GB `temp/levels/` cache for that
+  level were moved to `out/districts/replaced-mods/` (not deleted) to avoid two ZIPs with one level.
+- Timings (one map, two in parallel): Pecherskyi 22 km² build 38 min (incl. full-PBF extract)
+  + export 18 min, ZIP 65 MB; Shevchenkivskyi 31 km² 75 + 25 min, 95 MB; Solomianskyi 45 km²
+  109 + 37 min, 116 MB; Podilskyi 41 km² 56 + 26 min, 84 MB; ring 72 + 27 min, 92 MB.
+- Fixed (core, `scene.py`/`prepare.py`): large maps stalled in the "trees" stage for hours
+  (py-spy: Dniprovskyi west 3.5 h, CPU-bound, flat memory). Three map-wide polygon operations
+  repeated per small feature: `paths` (`line.difference(covered)` per footway), green areas
+  (`difference(cover_cut)` per area) and `draped_triangles` (whole ground polygon ∩ every
+  20 m cell). `LocalCut` splits a polygon above `LOCAL_CUT_COORDS` (100 k vertices) into
+  quadtree tiles once and subtracts only the tiles near each feature; `draped_triangles`
+  halves along the same cell grid when vertices × cells > `DRAPE_SPLIT_WORK` (50 M). Below
+  the thresholds the original operations run unchanged. Synthetic benchmark: 300 path
+  differences 2.7 s → 0.1 s. After the fix Dniprovskyi west reached "signs" in 24 min.
+  Tests `tests/test_local_cut.py` (equivalence vs direct difference/drape); full suite
+  369 OK, 1 skipped (`logs/districts/unittest-drape.log`). Maps built before this change
+  used the old code; geometry differs only by floating-point noding at tile seams.
+- Follow-ups found during the batch: `get_num_coordinates` returns int32 and the
+  vertices × cells product overflowed (RuntimeWarning in every large build; a wrapped value
+  only selects the slower, equivalent path) — now cast to int. Holosiivskyi north failed with
+  GEOS "Invalid number of points in LinearRing found 3" in the trees stage (no traceback; the
+  CLI prints one only with `AKADEM_MAPS_TRACEBACK=1`, now set by the batch runner). Most likely
+  `clip_by_rect` in `LocalCut`; it now falls back to `intersection(box)` on GEOSException,
+  and the retry passed. Not proven to be the source. Final full suite after these: 369 OK,
+  1 skipped (`logs/districts/unittest-final.log`).
+- Result (2026-10-03 11:5x): 31 ZIPs in BeamNG mods, 1.61 GB — 22 Kyiv district maps
+  (Pecherskyi, Shevchenkivskyi, Podilskyi, Solomianskyi whole; Dniprovskyi 2, Sviatoshynskyi 3,
+  Obolonskyi 3, Darnytskyi 3, Desnianskyi 3, Holosiivskyi 4 parts), ring, and 8 towns (Irpin,
+  Bucha, Brovary, Vyshneve + Kriukivshchyna, Boryspil, Vyshhorod, Boiarka, Sofiivska +
+  Petropavlivska Borshchahivka). ZIPs 17–116 MB; forest/floodplain parts are the small ones
+  (Darnytskyi east: 197 motor-road ways, 420 lanes). Hostomel was not included (no
+  settlement-level boundary in this extract; the hromada is 67 km² with the airfield).
+- Not done: no map from this batch was loaded in BeamNG (runtime_verified false; acceptance
+  pending). Whether 45–55 km² compact levels load is untested.
+
 ## 2026-10-02 — local sources and offline preparation
 
 - SUMO resolves native eclipse-sumo binaries before pip wrappers; `doctor` exercises

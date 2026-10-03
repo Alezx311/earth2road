@@ -429,8 +429,14 @@ def spawn_sphere(name, record):
 
 
 def static_mesh(level, level_id, name, mesh, origin, collision=True, parent='KyivGenerated', *, optimization='balanced', collision_mesh=None, metrics=None, category='props'):
-    relative = f'art/shapes/{name}.dae'
-    stats = mesh.write(level / relative, origin, uv_scales=UV, optimization=optimization, collision=collision_mesh)
+    draft = level / f'art/shapes/{name}.dae'
+    stats = mesh.write(draft, origin, uv_scales=UV, optimization=optimization, collision=collision_mesh)
+    # The game reuses its compiled .cdae while the .dae path is unchanged and the
+    # cache is newer than the (fixed) ZIP stamp, so a re-exported level would show
+    # stale geometry. A content digest in the file name makes changed meshes new paths.
+    digest = hashlib.sha256(draft.read_bytes()).hexdigest()[:10]
+    relative = f'art/shapes/{name}_{digest}.dae'
+    draft.replace(level / relative)
     if metrics is not None:
         metrics.add(category, stats, collision)
     return scene_object(name, 'TSStatic', parent, shapeName=f'/levels/{level_id}/{relative}', position=list(origin),
