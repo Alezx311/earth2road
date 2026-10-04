@@ -159,6 +159,7 @@ def vertices(geom):
 def audit(index, tiles, lane_meta=None, junction_meta=None):
     mesh = TriangleIndex(surfaces(tiles, lane_meta, junction_meta))
     contacts = {}
+    reporting_floor = .001 if index.get('road_elevation') else .01
     # A 2 mm tolerance detects rounded, nominally common edges without bridging gaps.
     for i, poly in enumerate(mesh.polys):
         owner = mesh.owners[i]
@@ -176,7 +177,7 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
             point = max(pts, key=lambda p: abs(at(mesh.planes[i], *p)-at(mesh.planes[k], *p)))
             h0, h1 = at(mesh.planes[i], *point), at(mesh.planes[k], *point)
             delta = abs(h1-h0)
-            if delta <= .01:
+            if delta <= reporting_floor:
                 continue
             key = (*pair, math.floor(point[0]/2), math.floor(point[1]/2))
             if key in contacts and contacts[key]['step_m'] >= delta:
@@ -186,11 +187,19 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
                              'step_m': round(delta, 4), 'world': world((*point, min(h0, h1))),
                              'beamng': [round(point[0], 3), round(point[1], 3), round(min(h0, h1), 3)]}
     records = sorted(contacts.values(), key=lambda r: (-r['step_m'], r['surfaces'], r['world']))
-    changes, profile_changes = [], []
+    changes, profile_changes, steep, surface_steep, crossfalls = [], [], [], [], []
+    cross_missing, cross_samples, cross_missing_examples = 0, 0, []
     lane_surface_errors = []
     for lane in index.get('lanes', []):
         sampled = list(stations([xyz(p) for p in lane['points']]))
         grades = [(b[1][2]-a[1][2])/(b[0]-a[0]) for a, b in zip(sampled, sampled[1:])]
+        limit = .12 if lane.get('service') else .06
+        # Absolute grade is independent of a grade change: a long steep hill
+        # must be reported even though it is perfectly smooth.
+        for (station, p), grade in zip(sampled, grades):
+            if abs(grade) > limit:
+                steep.append({'lane': lane['id'], 'grade': round(grade, 6),
+                              'limit': limit, 'station_m': round(station, 3), 'world': world(p)})
         for i, (a, b) in enumerate(zip(grades, grades[1:])):
             if abs(b-a) > .02:
                 p = sampled[i+1][1]
@@ -201,12 +210,22 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
                if lane.get('internal') else 'lane:'+lane['id'])
         for _, p in sampled:
             hits = mesh.hits(*p[:2])
+            if index.get('road_elevation'):
+                meta = mesh.metadata.get(own, {})
+                hits = [(h,sid) for h,sid in hits if sid == own or relationship(meta,mesh.metadata[sid]) == 'connected']
             error = min((abs(h-p[2]) for h, _ in hits), default=999.)
             preferred = [h for h,sid in hits if sid == own] or [h for h,_ in hits]
             h = min(preferred, key=lambda h: abs(h-p[2])) if preferred else None
             surface_samples.append((*p[:2], h))
             if error > .05:
                 lane_surface_errors.append({'lane': lane['id'], 'error_m': round(error, 4), 'world': world(p)})
+        for i,(a,b) in enumerate(zip(surface_samples,surface_samples[1:])):
+            if a[2] is None or b[2] is None:
+                continue
+            grade = (b[2]-a[2])/(sampled[i+1][0]-sampled[i][0])
+            if abs(grade) > limit:
+                surface_steep.append({'lane':lane['id'], 'grade':round(grade,6), 'limit':limit,
+                                      'station_m':round(sampled[i][0],3), 'world':world(a)})
         for a,b,c in zip(surface_samples,surface_samples[1:],surface_samples[2:]):
             if any(p[2] is None for p in (a,b,c)):
                 continue
@@ -214,6 +233,30 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
             if delta > .02:
                 changes.append({'lane':lane['id'], 'internal':bool(lane.get('internal')), 'change':round(delta,6),
                                 'world':world(b), 'beamng':list(b)})
+        if index.get('road_elevation'):
+            meta = mesh.metadata.get(own, {})
+            for i, (_, p) in enumerate(sampled):
+                a, b = sampled[max(0,i-1)][1], sampled[min(len(sampled)-1,i+1)][1]
+                length = math.dist(a[:2], b[:2])
+                if length < 1e-9:
+                    continue
+                half = lane.get('width', 3.2)*.49
+                nx, ny = -(b[1]-a[1])/length, (b[0]-a[0])/length
+                heights = []
+                for sign in (-1, 0, 1):
+                    hits = mesh.hits(p[0]+sign*nx*half, p[1]+sign*ny*half)
+                    valid = [(z,sid) for z,sid in hits if sid == own or relationship(meta,mesh.metadata[sid]) == 'connected']
+                    heights.append(min((z for z,_ in valid), key=lambda z: abs(z-p[2]), default=None))
+                cross_samples += 1
+                if None in heights:
+                    cross_missing += 1
+                    if len(cross_missing_examples) < 100:
+                        cross_missing_examples.append({'lane':lane['id'], 'world':world(p),
+                            'missing_offsets_m':[round(offset,3) for offset,h in zip((-half,0.,half),heights) if h is None]})
+                else:
+                    slope = (heights[2]-heights[0])/(2*half)
+                    if abs(slope) > .06:
+                        crossfalls.append({'lane':lane['id'], 'grade':round(slope,6), 'world':world(p)})
     groups = {}
     for category in ('connected', 'grade_separated', 'ambiguous'):
         subset = [r for r in records if r['classification'] == category]
@@ -221,6 +264,7 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
                             'max_m': max((r['step_m'] for r in subset), default=0.)}
     regressions = classify_regressions(index.get('id'), mesh, records)
     return {'version': 2, 'provenance': 'generated geometry; not surveyed Kyiv road heights',
+            'contact_reporting_floor_m': reporting_floor,
             'method': 'exact triangle contacts, maximum affine height difference; deduplicated per surface pair / 2 m cell',
             'coordinates': 'world=[east,up,south]; beamng=[east,north,up], before export vertical_offset',
             'triangles': len(mesh.polys), 'steps': groups,
@@ -228,6 +272,13 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
                        'worst': sorted(changes, key=lambda r: -r['change'])[:100], 'all': changes},
             'profile_smooth': {'spacing_m': 2, 'over_2pct':len(profile_changes),
                                'over_5pct':sum(r['change'] > .05 for r in profile_changes)},
+            'absolute_grade': {'provenance':'generated; thresholds are warnings, not surveyed limits',
+                               'limits':{'default':.06,'service':.12}, 'over_limit':len(surface_steep),
+                               'worst':sorted(surface_steep,key=lambda r:-abs(r['grade']))[:100]},
+            'profile_grade': {'over_limit':len(steep),'worst':sorted(steep,key=lambda r:-abs(r['grade']))[:100]},
+            'cross_section': {'samples':cross_samples, 'missing_surface':cross_missing,
+                              'missing_examples':cross_missing_examples,
+                              'over_6pct':len(crossfalls), 'worst':sorted(crossfalls,key=lambda r:-abs(r['grade']))[:100]},
             'lane_surface_errors': {'over_5cm': len(lane_surface_errors), 'worst': sorted(lane_surface_errors, key=lambda r: -r['error_m'])[:100]},
             'acceptance': 'blocked' if groups['connected']['over_60cm'] else 'pending',
             'worst': records[:100], 'contacts': records, 'regression_sites': regressions}

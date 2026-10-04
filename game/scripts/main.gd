@@ -685,15 +685,18 @@ func run_shots() -> void:
 		world.focus = cam.position
 		var waited := 0.0
 		while waited < 1.0 or world.pending() > 0:
+			# The player's chase camera re-takes the viewport after a reset/menu sync.
+			cam.make_current()
 			await get_tree().process_frame
 			waited += get_process_delta_time()
 			if waited > 90.0:
 				push_error("Capture tile timeout")
 				get_tree().quit(2)
 				return
+		cam.make_current()
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(dir+"/"+shot.name+".png")
-		print("SHOT ",shot.name)
+		print("SHOT ",shot.name," camera=",get_viewport().get_camera_3d() == cam)
 	get_tree().quit()
 
 ## Every catalogue model parked in a row next to the spawn, photographed from the side

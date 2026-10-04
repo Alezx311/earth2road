@@ -1105,7 +1105,8 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                                  'translationId': poi['title']})
 
         stage_event('geometry')
-        roads, lanes, location, roadstats, _elevation = road_network(index, net)
+        nav_tiles = ((tid, read_json(source/'tiles'/f'{tid}.json')) for tid in sorted(index['tiles'])) if index.get('road_elevation') else None
+        roads, lanes, location, roadstats, _elevation = road_network(index, net, tiles=nav_tiles)
         objects += roads
         sig, sigaudit = signals(index, lanes)
         write_json(level / 'map.json', {'segments': {}})

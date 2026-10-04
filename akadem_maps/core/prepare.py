@@ -29,7 +29,7 @@ from akadem_maps.core import road_profiles
 from akadem_maps.core import corridor
 from akadem_maps.core import pois as poi_points
 from akadem_maps.core import rural
-from akadem_maps.core import road_geometry, surface_audit, road_graph, roadgen
+from akadem_maps.core import road_geometry, surface_audit, road_graph, roadgen, road_elevation
 
 
 def write_json(path, value):
@@ -332,7 +332,7 @@ def overlap_targets(road_ways, xy):
                 targets[nid] = (best[1], best[2], best[3], 1.0, True)
     return targets
 
-def road_node_heights(root, nodes, tags, sample, iterations=40, include_tracks=False):
+def road_node_heights(root, nodes, tags, sample, iterations=40, include_tracks=False, ground_override=None):
     """One height per drivable OSM node. Every lane, junction and car takes its height
     from this profile (see RoadHeights), so all lanes of a road agree at each station.
 
@@ -368,8 +368,8 @@ def road_node_heights(root, nodes, tags, sample, iterations=40, include_tracks=F
     across = lambda field, p: field.get(p[0], 0.0)+(field.get(p[1], 0.0)-field.get(p[0], 0.0))*p[2]
     pull = lambda n: 0.5*partners[n][3] if n in partners else 0.0
     anchor = {n: z+pull(n)*(across(raw, partners[n])-z) if n in partners else z for n, z in raw.items()}
-    ground = dict(anchor)
-    for _ in range(iterations):
+    ground = dict(anchor) if ground_override is None else {n: ground_override.get(n, raw[n]) for n in raw}
+    for _ in range(iterations if ground_override is None else 0):
         nxt = {}
         for nid, near in neighbours.items():
             total = sum(1/d for d, _ in near.values())
@@ -541,21 +541,35 @@ class RoadHeights:
     netconvert averages joined junction clusters. Internal lanes interpolate linearly
     from the end of their incoming lane to the start of their outgoing lane; junction
     surfaces and anything left blend the adjoining lane ends by inverse distance."""
-    def __init__(self, net, nodes, heights, way_refs):
+    def __init__(self, net, nodes, heights, way_refs, profiles=None, structure_ways=()):
         self.net = net
         self.poly = {}
         for wid, refs in way_refs.items():
             pts = [(*net.convertLonLat2XY(*nodes[n]), heights[n]) for n in refs if n in heights]
             if len(pts) >= 2:
                 self.poly[wid] = pts
+        self.profile_lines = {}
+        self.bend_fields = {}
+        if profiles is not None:
+            self.poly = profiles
+            for wid, pts in profiles.items():
+                line = LineString([p[:2] for p in pts])
+                along = np.r_[0., np.cumsum([math.dist(a[:2], b[:2]) for a,b in zip(pts,pts[1:])])]
+                self.profile_lines[wid] = (line, along)
+                if wid not in structure_ways:
+                    self.bend_fields[wid] = road_elevation.BendField(pts)
         self.z = {}
         self.unmatched = 0
         lanes = [l for e in net.getEdges(withInternal=True) for l in e.getLanes()]
         self.shapes = {lane.getID(): lane.getShape() for lane in lanes}
+        if profiles is not None:
+            for lane in lanes:
+                if lane.allows('passenger'):
+                    self.shapes[lane.getID()] = road_geometry.densify(self.shapes[lane.getID()])
         for lane in lanes:
             if lane.getEdge().getFunction() == '':
                 wids = lane.getParam('origId', '').split()
-                zs = [self.project(wids, x, y) for x, y in lane.getShape()]
+                zs = [self.project(wids, x, y) for x, y in self.shape(lane)]
                 if any(z is None for z in zs):
                     self.unmatched += 1
                     continue
@@ -606,6 +620,17 @@ class RoadHeights:
         best = None
         for wid in wids:
             pts = self.poly.get(wid)
+            if wid in self.profile_lines:
+                line, along = self.profile_lines[wid]
+                p = Point(x, y)
+                d = line.distance(p)**2
+                if best is None or d < best[0]:
+                    s = line.project(p)
+                    i = min(len(pts)-2, max(0, int(np.searchsorted(along, s, side='right'))-1))
+                    length = along[i+1]-along[i]
+                    z = float(road_profiles.profile_z(pts, i, (s-along[i])/length if length > 1e-9 else 0.))
+                    best = (d, self.bend_fields[wid].height(x,y,z) if wid in self.bend_fields else z)
+                continue
             for segment, ((ax, ay, az), (bx, by, bz)) in enumerate(zip(pts or [], (pts or [])[1:])):
                 dx, dy = bx-ax, by-ay
                 length = dx*dx+dy*dy
@@ -785,7 +810,8 @@ def build(cfg, root, context):
                                            synthetic=cfg.get('source_kind') == 'synthetic') if 'road_geometry' in cfg else None
     terrain = Terrain(cfg, context)
     base = terrain.sample(*cfg['center'])
-    node_heights, way_refs, elevation_report = road_node_heights(root, nodes, tags, lambda lon,lat: terrain.sample(lon,lat)-base, include_tracks=is_rural)
+    if not use_roadgen:
+        node_heights, way_refs, elevation_report = road_node_heights(root, nodes, tags, lambda lon,lat: terrain.sample(lon,lat)-base, include_tracks=is_rural)
     map_area = corridor.area(cfg, context=context)
     processed = BUILD/'corrected.osm'
     ET.ElementTree(root).write(processed, encoding='utf-8', xml_declaration=True)
@@ -831,7 +857,23 @@ def build(cfg, root, context):
         return [round(x-cx,3),round(ground_height[0](x,y) if z is None else z,3),round(-(y-cy),3)]
     def geo_point(lon,lat):
         return point(*net.convertLonLat2XY(lon,lat))
-    road_z = RoadHeights(net, nodes, node_heights, way_refs)
+    profiles, structure_ways = None, set()
+    if use_roadgen:
+        profiles, ground_nodes, profile_report = road_elevation.ground_profiles(
+            root, nodes, tags, lambda t: drivable(t) or (is_rural and rural.accessible_track(t)),
+            net.convertLonLat2XY, height)
+        node_heights, way_refs, elevation_report = road_node_heights(
+            root, nodes, tags, lambda lon,lat: terrain.sample(lon,lat)-base,
+            include_tracks=is_rural, ground_override=ground_nodes)
+        structure_ways = {wid for wid,w in ways.items() if structure_level(tags(w)) != 0}
+        profiles = road_elevation.constrained_profiles(profiles, node_heights, structure_ways)
+        profile_report['max_shared_node_constraint_shift_m'] = round(max(
+            (abs(node_heights[n]-z) for n,z in ground_nodes.items()),default=0.),4)
+        elevation_report['profile'] = profile_report
+    road_z = RoadHeights(net, nodes, node_heights, way_refs, profiles=profiles, structure_ways=structure_ways)
+    if use_roadgen:
+        profile_report['bend_surfaces'] = sum(len(b.bends) for b in road_z.bend_fields.values())
+        write_json(BUILD/'road_elevation.json', profile_report)
     elevation_report['lanes_without_osm_profile'] = road_z.unmatched
     way_tags = {wid: tags(w) for wid, w in ways.items()}
     road_meta = road_geometry.metadata(net, way_tags, way_refs)
@@ -843,6 +885,20 @@ def build(cfg, root, context):
             if lane.allows('passenger') and len(lane.getShape()) >= 2:
                 prepared_strips[lane.getID()] = {'points': scene.lane_xyz(lane, road_z),
                     'width': lane.getWidth()+.02, 'lane': lane.getID(), 'topology': road_meta[lane.getID()]}
+                if use_roadgen:
+                    strip = prepared_strips[lane.getID()]
+                    wids = lane.getParam('origId', '').split()
+                    # Sample the whole carriageway from one source profile, including
+                    # the shared lane edges on bends, rather than flatten each lane.
+                    vertex_heights = {}
+                    def surface_vertex(x, y, z):
+                        key = (x,y)
+                        if key not in vertex_heights:
+                            vertex_heights[key] = road_z.project(wids,x,y)
+                        h = vertex_heights[key]
+                        return (x,y,z if h is None else h)
+                    strip['triangles'] = [[surface_vertex(*p) for p in tri] for tri in
+                                          surface_audit.ribbon_triangles(strip['points'], strip['width'])]
     seam_report = road_geometry.align_strips(list(prepared_strips.values()))
     for lid, strip in prepared_strips.items():
         road_z.shapes[lid] = [(x, y) for x, y, _ in strip['points']]
@@ -1378,6 +1434,9 @@ def build(cfg, root, context):
     if poi_cfg.get('enabled'):
         world['pois']=poi_records
     world['id'] = cfg['id']
+    if use_roadgen:
+        world['road_elevation'] = {'version': 1, 'mode': 'distance_filtered',
+                                   'provenance': 'derived/synthetic', 'sample_step_m': road_elevation.STEP}
     world['region_profile'] = cfg.get('region_profile', 'experimental')
     if is_rural:
         world['fences'] = fences
@@ -1396,6 +1455,8 @@ def build(cfg, root, context):
     write_json(BUILD/'road_seams.json', seam_report)
     report['surface_audit'] = {k: surfaces_report[k] for k in ('version', 'method', 'steps', 'acceptance', 'worst')}
     report['surface_audit']['smooth'] = {k: v for k, v in surfaces_report['smooth'].items() if k != 'all'}
+    report['surface_audit']['absolute_grade'] = surfaces_report['absolute_grade']
+    report['surface_audit']['cross_section'] = surfaces_report['cross_section']
     report['surface_audit']['report'] = 'surface_audit.json'
     report['surface_audit']['seams'] = seam_report['counts']
     write_json(BUILD/'audit.json',report)

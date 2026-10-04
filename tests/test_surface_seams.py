@@ -21,6 +21,15 @@ def as_world(strips):
 
 
 class SurfaceAuditTests(unittest.TestCase):
+    def test_absolute_grade_and_full_width_are_audited(self):
+        r = road('a',[(0,0,0),(20,0,2)])
+        lane = {'id':'a','width':4.,'points':[audit.world(p) for p in r['points']]}
+        report = audit.audit({'lanes':[lane],'road_elevation':{'version':1}},[as_world([r])])
+        self.assertGreater(report['absolute_grade']['over_limit'],0)
+        self.assertEqual(report['profile_smooth']['over_2pct'],0)
+        self.assertGreater(report['cross_section']['samples'],0)
+        self.assertEqual(report['cross_section']['missing_surface'],0)
+
     def test_known_step_and_touching_edge_without_overlap(self):
         for y in (0, 4):
             strips = [road('a', [(0, 0, 0), (10, 0, 0)]), road('b', [(0, y, .7), (10, y, .7)])]

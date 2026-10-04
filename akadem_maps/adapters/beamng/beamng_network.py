@@ -226,7 +226,33 @@ def border_stubs(edges, junctions, ring):
             (not _inside(junctions[j], ring) or _ring_distance(junctions[j], ring) <= BORDER_STUB_M)}
 
 
-def road_network(index, network_path):
+class RoadSurfaces:
+    """Build a small triangle lookup per road, never select an unrelated overpass."""
+    def __init__(self, tiles):
+        self.roads, self.junctions = defaultdict(list), defaultdict(list)
+        for _, tile in tiles:
+            for road in tile.get('road_strips', []):
+                self.roads[road.get('lane')].append(road)
+            for junction in tile.get('junctions', []):
+                self.junctions[junction['id']].append(junction)
+
+    def for_edge(self, forward, back):
+        from akadem_maps.core.surface_audit import TriangleIndex, ribbon_triangles
+        surfaces = []
+        for edge in (forward, back):
+            if edge:
+                for lane in edge['lanes']:
+                    for r in self.roads[lane.get('id')]:
+                        triangles = ([tuple(beam_point(p) for p in t) for t in r['triangles']]
+                                     if 'triangles' in r else ribbon_triangles([beam_point(p) for p in r['points']],r['width']))
+                        surfaces.append((lane.get('id'), triangles, {}))
+        for jid in (forward['from'], forward['to']):
+            for j in self.junctions[jid]:
+                surfaces.append((jid, ([beam_point(p) for p in t] for t in j['triangles']), {}))
+        return TriangleIndex(surfaces)
+
+
+def road_network(index, network_path, tiles=None):
     """DecalRoads for the engine navigation graph, plus the drivable lane table."""
     root = ET.parse(network_path).getroot()
     offset = index['offset']
@@ -252,6 +278,7 @@ def road_network(index, network_path):
     drivable_lanes = {lane.get('id'): lanes[lane.get('id')]
                       for edge in edges.values() for lane in edge['lanes']}
     elevation = Elevation(drivable_lanes)
+    surfaces = RoadSurfaces(tiles) if tiles is not None and index.get('road_elevation') else None
 
     objects, seen, stats = [], set(), defaultdict(int)
     pairing = carriageway_pairs(edges)
@@ -291,6 +318,11 @@ def road_network(index, network_path):
         profile = edge_profile(forward, lanes)
         if not profile and back:
             profile = edge_profile(back, lanes)
+        surface = surfaces.for_edge(forward,back) if surfaces else None
+        if index.get('road_elevation'):
+            from akadem_maps.core.road_geometry import densify
+            path = densify(path, 2.)
+        dense_path = path
         path = ai_spacing(path, max(width, 3.0))
         nodes = []
         for x, y in path:
@@ -298,7 +330,26 @@ def road_network(index, network_path):
             if z is None:
                 z = elevation.at(x, y)
                 stats['heights_fallback'] += 1
+            if surface is not None:
+                hits = surface.hits(x,y)
+                if hits:
+                    z = min((h for h,_ in hits), key=lambda h:abs(h-z))
+                else:
+                    stats['surface_height_fallback'] += 1
             nodes.append([round(x, 3), round(y, 3), round(z, 3), round(max(width, 3.0), 2)])
+        if surface is not None:
+            # Respect navigation radii even when a steep transition needs more
+            # stations than BeamNG can keep. Report that conflict, don't hide it.
+            for x,y in dense_path:
+                z = profile_height(nodes,x,y)
+                hits = surface.hits(x,y)
+                if hits:
+                    error = min(abs(h-z) for h,_ in hits)
+                    stats['surface_chord_samples'] += 1
+                    stats['surface_chord_over_5cm'] += int(error > .05)
+                    stats['surface_chord_max_m'] = round(max(stats['surface_chord_max_m'],error),4)
+                else:
+                    stats['surface_chord_unmatched'] += 1
         # Two roads whose ends weld to the same pair of graph nodes leave map.lua a
         # chord across a chain of degree-2 nodes. optimizeNodes then builds the merged
         # edge with no `lanes` field and edgeCompare dies comparing nil with a string,
@@ -344,8 +395,10 @@ def road_network(index, network_path):
 def road_height_audit(roads, tiles, cell=20.0):
     """Compare DecalRoad node Z to the nearest visual road-strip sample (BeamNG XY).
 
-    Large deltas mean the driving surface floats above (or sinks below) the asphalt
-    mesh. Does not fail the export; counts go into the manifest.
+    This historical, approximate comparison is not a surface-contact test: a
+    nearby station may belong to a different level or lie along a slope. V2's
+    surface_chord_* navigation counts instead use the owning road triangles.
+    Does not fail the export; counts go into the manifest.
     """
     samples = defaultdict(list)
     for _tileid, tile in tiles:

@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'tools'))
 from beamng_corridors import bridge_rail_objects, edge_sections
 from export_beamng import prop, shift_object, apply_overrides
-from beamng_network import ai_spacing, carriageway_pairs, stable_id, road_network
+from beamng_network import ai_spacing, carriageway_pairs, stable_id, road_network, RoadSurfaces
 from road_profiles import profile_z, write_types
 from beamng_road_audit import SurfaceIndex
 from test_beamng_export import fixture
@@ -26,6 +26,28 @@ DOUBLE_ALLEY_NET = '''<net><location projParameter="+proj=utm +zone=36" netOffse
 
 
 class RoadRegressionTests(unittest.TestCase):
+    def test_surface_sampling_selects_own_road_and_junction(self):
+        ground = {'lane':'low', 'points':[[0,0,0],[0,2,-100]], 'width':8}
+        bridge = {'lane':'high', 'points':[[0,8,0],[0,8,-100]], 'width':8}
+        sampler = RoadSurfaces([('a',{'road_strips':[ground,bridge]})])
+        surface = sampler.for_edge({'from':'a','to':'b','lanes':[{'id':'low'}]},None)
+        self.assertTrue(surface.hits(0,50))
+        self.assertTrue(all(abs(z-1)<1e-8 for z,_ in surface.hits(0,50)))
+
+    def test_v2_navigation_keeps_height_stations_without_radius_overlap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            index, net = fixture(Path(tmp))
+            old,*_ = road_network(index,net)
+            index['road_elevation'] = {'version':1}
+            new,*_ = road_network(index,net)
+            self.assertEqual(len(old),len(new))
+            self.assertGreater(sum(len(r['nodes']) for r in new),sum(len(r['nodes']) for r in old))
+            for before,after in zip(old,new):
+                self.assertEqual(before['nodes'][0],after['nodes'][0])
+                self.assertEqual(before['nodes'][-1],after['nodes'][-1])
+                for a,b in zip(after['nodes'],after['nodes'][1:]):
+                    self.assertGreater(math.dist(a[:2],b[:2]),a[3]/2)
+
     def rails(self, strips, walks=()):
         return bridge_rail_objects([('0', {'road_strips': strips, 'sidewalks': walks})], prop, 'rail.dae', stable_id)
 

@@ -1,5 +1,85 @@
 # Earth2Road handoff
 
+## 2026-10-05 — roadgen-v2 elevation: real-map regressions (Claude)
+
+- Codex's Bilychi-03 ran pre-final code (started 22:10, last edits 22:18) and died with its
+  session. Rebuilt as `out/elevation-v2/bilychy-04` (final Codex code, same verified inputs):
+  against the earlier v2 world, re-audited with the same current audit, it regressed —
+  connected steps >60 cm 0 → 5 (max 0.69 m, acceptance `blocked`), grade changes >5 points
+  293 → 544, crossfall >6% 893 → 2868, absolute grade over limit 3023 → 10778. Lab-05
+  (final Codex code) was clean, as lab-04: the lab has no rings, wide bends or real DEM.
+- Elevation-only bench (OSM + z12 DEM, ~17 s, no netconvert) reproduced it: v2 tracked the
+  DEM to 2 cm median, i.e. barely filtered. A larger radius made it worse (1498 breaks at
+  R=96): 85/107 breaks sat within 3 m of branch nodes, where every chain ended and was
+  filtered alone. Not kept: local quadratic / R=48–96 sweeps.
+- Fixes in `road_elevation`: (1) chains continue through a junction on the straightest
+  unused edge within 35° (`STROKE_TURN`), so a straight street is one filtered stroke and
+  side roads join it; bench breaks >5 points 107 → 64 (legacy 13, mostly service/DEM
+  cliff), >2 points 718 → 253 (legacy 303). (2) `BendField` no longer fits a plane: the
+  plane carried terrain slope across wide roads as crossfall (3-lane roundabout
+  `1200327578`, lanes 8 m apart, 0.64 m apart in height → the 0.69 m junction step).
+  Near bends it now averages dense profile stations with a Gaussian whose width grows
+  with centreline distance; bend weights are summed (closed rings included), never
+  switched by nearest centre (the old switch stepped 0.25 m on a synthetic ring).
+  Bilychi-05 (only the nearest-switch fix, still planes) did not move the step: 0.68 m.
+- Bilychi-07 (all fixes): steps >60 cm 0 (max 0.424, acceptance `pending`), >10 cm 26
+  (old v2 31), crossfall >6% 1667, lane-centre errors 29 (old v2 26 with the v2 audit),
+  grade changes >5 points 517 / >2 points 4402. By lane: ordinary lanes are at parity
+  (99/776 vs old 128/743), v2 template connectors 8/159 (old 4/125); fallback-junction
+  connectors carry the rest, 410/2950 vs 161/1096 — IDW junction surfaces between the now
+  steeper (DEM-preserving) approaches. Absolute grade over limit stays ~3.5× legacy by
+  the DECISIONS choice not to flatten terrain; way `60545126` keeps a 9 m DEM drop over
+  ~40 m (flagged in `road_elevation.json` spikes, max correction 3.54 m).
+- Lab-06: 24/24 expected status, 50 v2 / 82 fallback, 0 lane errors, 0 changes >5 points
+  (12 → 16 >2 points); max connected step 1 mm → 25 mm between opposite lanes of one curved
+  edge (`10066`): the Gaussian field is not linear, so differently placed ribbon vertices
+  interpolate it differently. Below the 10 cm threshold; noted, not fixed.
+- Pre-existing, not elevation: service way `993483437` ends ~2 m above the road it joins at
+  `11363616237` in the old world too; lab cross-section misses (107) are lane edges inside
+  the 4→2 taper of `width_transition` (SUMO S-curves) plus ≤3 cm boundary samples.
+- Checks: full suite 397 OK, 1 skipped (`logs/elevation-unittest-claude-2.log`); new tests
+  for ring blending and through-junction strokes. BeamNG compact export of Bilychi-07
+  (`out/elevation-v2/bilychy-07-beamng`, level `kyiv_bilychy_elevation_v2`) completed:
+  ZIP 62.8 MB (old v2 51.2 MB), DecalRoad height audit over_2m 16 (old 20), max 3.59 m
+  (old 16.46 m); navigation chords 146,607 samples, 793 >5 cm, max 3.39 m, 543 without an
+  owning surface. Installed as `mods/earth2road_bilychy_elevation_v2.zip` (renamed so the
+  old `earth2road_bilychy_roadgen_v2.zip` stays for comparison; SHA-256 f8a53f14…);
+  not loaded in game yet.
+- Open: (a) owner decision — keep DEM-preserving grades (3.5× more >6% samples) or filter
+  harder; (b) fallback junction surfaces (IDW) are now the main roughness source;
+  (c) Bilychi-07 installed but not driven in BeamNG/Godot yet.
+
+## 2026-10-04 — roadgen-v2 elevation (implementation and acceptance in progress)
+
+- V2 uses DEM stations <=2 m apart, robust local linear filtering over a 24 m radius,
+  and degree-two graph chains across OSM way boundaries. Shared source nodes, paired
+  carriageways, structure heights and ramp assumptions remain constrained by the existing
+  elevation rules. Legacy keeps its original height path. Heights remain derived/synthetic.
+- Dense road profiles feed the whole ribbon width, junction transitions, ground boundaries,
+  lane positions and paint. Local planes around sharp ground-road bends avoid jumps between
+  nearest source segments; bridges/tunnels are excluded from that additional fit.
+- Added absolute surface grade (6% / service 12% warning thresholds), profile grade and
+  cross-section diagnostics. BeamNG v2 navigation samples its own road/junction triangles,
+  retains height stations subject to the existing navigation-radius spacing, and reports
+  residual chord errors rather than violating the engine's node-spacing constraint.
+- Completed intermediate lab `out/elevation-v2/lab-04`: all 24 primary cases retain their
+  expected v2/fallback status; 50 v2 / 82 fallback effective junctions (two supporting
+  junctions differ from the old 52/80). Zero contacts exceeding the audit's 1 cm reporting
+  floor, zero lane-centre errors >5 cm, zero grade changes >5 percentage points / 2 m;
+  12 changes >2 points remain. Cross-width audit: 15,375 sections, 107 sections missing at
+  least one same-topology surface sample; this is not a claim of full-width acceptance.
+  Both exporters completed. Latest small diagnostic/structure-protection fixes postdate
+  this lab snapshot. Real-map and engine acceptance are still pending.
+- Failed experiments: lab-01 densified walking-area outlines too and hit a GEOS overlay
+  error; densification is now limited to passenger lanes. Lab-02 hit NumPy int64 JSON
+  serialization in the smoothness counters; profile queries now return native floats.
+  Lab-03 exposed nearest-segment height jumps inside sharp source bends; the shared bend
+  field removed changes >5 points in lab-04. Bilychi attempts 01/02 were stopped while
+  still preparing roads to restart with these fixes; neither is a completed map result.
+- Initial full suite: 393 discovered, 2 errors (Godot subprocess timeouts in sandbox),
+  1 skipped; no assertion failures (`logs/elevation-unittest-01.log`). An unsandboxed
+  final discovery, Bilychi-03 build and isolated lab BeamNG drive check are running.
+
 ## 2026-10-03 — roadgen-v2 lab fixes (Claude)
 
 - Found 3/10 roadgen tests failing: the "curved approach crosses template boundary" guard
@@ -54,6 +134,16 @@
   (max 16.46 m at the same pre-existing node). DecalRoad nodes come from SUMO edge shapes,
   so they still chord through transitions — follow-up. Installed as
   `earth2road_bilychy_roadgen_v2.zip` (level `kyiv_bilychy_roadgen_v2`); not loaded in game yet.
+- Godot comparison (`out/roadgen-v2/compare/bilychy_compare_{1,2}.jpg`): 8 v2 junctions
+  (2 X, 2 T, Y, transition, merge, split) shot with identical poses in the installed legacy
+  `bilychy_offline_verified` and the new `bilychy_roadgen_v2` (poses injected into each
+  `index.json`, originals restored). `main.gd --shots` produced the chase-camera view for every
+  pose (the player camera re-took the viewport); the shot camera is now made current every
+  wait frame and before capture, and the log prints `camera=true`.
+  Seen in v2: curved curb returns and continuous sidewalks instead of jagged wedges; the
+  transition case lost its asphalt step. Defects to check: at T `436619329` and the Y the
+  sidewalk collar wraps across an adjacent paved strip (not in the carriageway cut?); at the
+  merge the crosswalk on the left arm is gone (legacy had one).
 - Checks: `test_roadgen` 13 OK (3 new); full suite 382 OK, 1 skipped
   (`logs/unittest-roadgen-claude-final.log`). Bilychi legacy/v2 real-map builds were started
   and cancelled at the owner's request; no real map has been built with v2 yet.

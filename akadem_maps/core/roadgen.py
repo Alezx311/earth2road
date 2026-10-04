@@ -9,7 +9,7 @@ import math
 import time
 
 import numpy as np
-from shapely import set_precision
+from shapely import set_precision, line_merge
 from shapely.geometry import LineString, Point, Polygon
 from shapely.prepared import prep
 from shapely.strtree import STRtree
@@ -81,6 +81,10 @@ def _section(area, origin, direction, distance):
     c = [origin[i]+distance*direction[i] for i in (0, 1)]
     line = LineString([(c[0]+normal[0]*s, c[1]+normal[1]*s) for s in (-1000., 1000.)])
     cut = area.intersection(line)
+    if cut.geom_type == 'MultiLineString':
+        # Densified collinear ribbon triangles can leave sub-micrometre gaps
+        # in the overlay. Merge only touching fragments, never a real island.
+        cut = line_merge(set_precision(cut, 1e-6))
     if cut.geom_type != 'LineString' or cut.length < .5:
         raise Unsupported('disconnected or missing socket cross-section')
     pts = sorted(cut.coords, key=lambda p: _dot(p, normal))

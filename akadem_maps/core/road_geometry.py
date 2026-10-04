@@ -160,7 +160,7 @@ def align_strips(strips):
         if contact.is_empty:
             continue
         bases = {r['lane']: densify(r['points']) for r in group}
-        original = TriangleIndex((r['lane'], ribbon_triangles(bases[r['lane']], r['width']), meta) for r in group)
+        original = TriangleIndex((r['lane'], r.get('triangles', ribbon_triangles(bases[r['lane']], r['width'])), meta) for r in group)
         line = LineString([p[:2] for p in group[0]['points']])
         contact_points = [p for pg in scene.polygons(contact) for p in pg.exterior.coords]
         distances = [line.project(Point(p)) for p in contact_points]
@@ -174,7 +174,7 @@ def align_strips(strips):
             base_points = bases[road['lane']]
             road['points'] = [(x, y, corrected(x, y)) for x, y, _ in base_points]
             tris = []
-            for tri in ribbon_triangles(base_points, road['width']):
+            for tri in road.get('triangles', ribbon_triangles(base_points, road['width'])):
                 poly = robust('difference', Polygon([p[:2] for p in tri]), main_area)
                 for cut in scene.triangles(poly):
                     tris.append([(x, y, corrected(x, y)) for x, y in cut])
