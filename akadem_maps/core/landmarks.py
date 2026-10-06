@@ -13,6 +13,7 @@ BASE = {'monument': .85, 'memorial': .55, 'castle': .85, 'ruins': .60,
         'university': .65, 'theatre': .7, 'train_station': .85, 'station': .85,
         'mall': .65, 'park': .55, 'stadium': .75, 'square': .8, 'bridge': .75,
         'tower': .6, 'works': .55, 'museum': .7, 'attraction': .65}
+POI_SPACING = 150.0   # metres; a landmark spawn this close to another quick-travel point is dropped
 
 
 def category(tags):
@@ -77,3 +78,20 @@ def discover(root, to_world, inside, limit=5):
         a.pop('_nodes')
         a['selected'] = a in selected
     return {'candidates': unique, 'selected': selected, 'duplicates': duplicates}
+
+
+def merge_spawns(records, snapped, selected):
+    """Append snapped landmark spawns to quick-travel `records`; return the IDs skipped.
+
+    A config anchor or OSM POI already stopping at the place wins: one spawn per place."""
+    existing, skipped = list(records), []
+    names = {a['osm']: a['name'] for a in selected}
+    for p in snapped:
+        p['id'] = 'landmark_' + p['osm'].replace('/', '_')
+        p['title'] = names[p['osm']]
+        if any(q.get('osm') == p['osm'] or math.dist(q['position'][::2], p['position'][::2]) < POI_SPACING
+               for q in existing):
+            skipped.append(p['id'])
+        else:
+            records.append(p)
+    return skipped

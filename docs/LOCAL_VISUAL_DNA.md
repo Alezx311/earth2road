@@ -69,8 +69,9 @@ are suppressed for DNA buildings in this minimal grammar.
 Landmarks come from selected OSM categories on nodes, ways and relations, with member
 node means as representative points. Category, name and Wikipedia/Wikidata tags
 produce a heuristic importance score, not a measured popularity score. Matching
-Wikidata IDs and nearby equal names deduplicate representations. Up to five named
-landmarks separated by 200 m are selected. Road snapping uses existing POI rules;
+Wikidata IDs and nearby equal names deduplicate representations. Up to `landmark_limit`
+(in `local_visual_dna`, default 5) named landmarks separated by 200 m are selected;
+a landmark spawn within 150 m of a config anchor or OSM POI is skipped. Road snapping uses existing POI rules;
 unsnappable landmarks stay in the report. Visual anchors never become spawns, and
 landmark importance does not imply a neighbourhood style.
 

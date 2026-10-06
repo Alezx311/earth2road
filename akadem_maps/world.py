@@ -21,6 +21,9 @@ def validate_config(cfg):
         contained(Path.cwd(), dna['file'])
         if cfg.get('visual_profile') == 'rural':
             raise ValueError('local_visual_dna and visual_profile=rural cannot be combined')
+        limit = dna.get('landmark_limit', 5)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 0 <= limit <= 50:
+            raise ValueError('local_visual_dna.landmark_limit must be an integer 0..50')
     from .core.roadgen import options
     options(cfg)
     if 'corridor' in cfg:

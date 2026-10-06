@@ -1,0 +1,118 @@
+{
+  "id": "bilychy_dna",
+  "name": "Bilychi - Local Visual DNA",
+  "note": "Same 4 km square as bilychy_roadgen_v2 (in-game picker around 50.46252, 30.35471), with Local Visual DNA and quick-travel points. Points chosen manually from OSM names; not an administrative boundary.",
+  "bbox": [
+    30.326487,
+    50.444434,
+    30.382933,
+    50.480608
+  ],
+  "center": [
+    30.35471,
+    50.462521
+  ],
+  "overpass": "https://overpass-api.de/api/interpreter",
+  "overpass_maxsize": 268435456,
+  "overpass_mirrors": [
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ],
+  "region_profile": "ukraine",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "local_visual_dna": {
+    "file": "config/visuals/bilychy_dna.json",
+    "landmark_limit": 10
+  },
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Метро «Академмістечко»",
+        "lon": 30.35498,
+        "lat": 50.4647
+      },
+      {
+        "name": "Метро «Житомирська»",
+        "lon": 30.36588,
+        "lat": 50.45612
+      },
+      {
+        "name": "ТРЦ Academcity",
+        "lon": 30.35767,
+        "lat": 50.4591
+      },
+      {
+        "name": "ТЦ «ХІТ MALL»",
+        "lon": 30.36383,
+        "lat": 50.45659
+      },
+      {
+        "name": "Спорткомплекс «Наука-Спорт»",
+        "lon": 30.36988,
+        "lat": 50.46718
+      },
+      {
+        "name": "Інститути НАН · Академмістечко",
+        "lon": 30.35758,
+        "lat": 50.46623
+      },
+      {
+        "name": "Університет «Україна»",
+        "lon": 30.36966,
+        "lat": 50.45372
+      },
+      {
+        "name": "Парк імені Михайла Реуцького",
+        "lon": 30.37659,
+        "lat": 50.45249
+      },
+      {
+        "name": "Сквер Героїв ОУН",
+        "lon": 30.35355,
+        "lat": 50.45644
+      },
+      {
+        "name": "Дача Дьякова",
+        "lon": 30.35181,
+        "lat": 50.45338
+      },
+      {
+        "name": "Зупинний пункт «Новобіличі»",
+        "lon": 30.35803,
+        "lat": 50.47705
+      },
+      {
+        "name": "Храм святителя Миколая · Біличі",
+        "lon": 30.33697,
+        "lat": 50.46041
+      },
+      {
+        "name": "Агромат «Світ кераміки»",
+        "lon": 30.35064,
+        "lat": 50.47187
+      },
+      {
+        "name": "Берестейська розв'язка · Кільцева",
+        "lon": 30.3572,
+        "lat": 50.45539
+      },
+      {
+        "name": "Берестейське шосе · західний в'їзд",
+        "lon": 30.32992,
+        "lat": 50.45371
+      },
+      {
+        "name": "Табір «Пролісок» · ліс",
+        "lon": 30.33474,
+        "lat": 50.45091
+      }
+    ]
+  }
+}

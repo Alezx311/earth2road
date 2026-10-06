@@ -159,6 +159,19 @@ class LandmarkTests(unittest.TestCase):
         self.assertIn('relation/1', [a['id'] for a in r['candidates']])
         self.assertTrue(all(a['score_source'].startswith('heuristic:') for a in r['selected']))
 
+    def test_landmark_spawn_near_existing_point_is_skipped(self):
+        records = [{'id': 'poi_01', 'osm': None, 'position': [0, 0, 0]}]
+        snapped = [{'osm': 'node/1', 'position': [100, 5, 0]}, {'osm': 'way/2', 'position': [400, 5, 0]}]
+        selected = [{'osm': 'node/1', 'name': 'Near'}, {'osm': 'way/2', 'name': 'Far'}]
+        self.assertEqual(landmarks.merge_spawns(records, snapped, selected), ['landmark_node_1'])
+        self.assertEqual([(r['id'], r.get('title')) for r in records], [('poi_01', None), ('landmark_way_2', 'Far')])
+
+    def test_landmark_limit_is_validated(self):
+        from akadem_maps.world import validate_config
+        for bad in (-1, 51, 2.5, True):
+            with self.assertRaises(ValueError):
+                validate_config({'local_visual_dna': {'file': 'config/visuals/podil_dna.json', 'landmark_limit': bad}})
+
     def test_pbf_selection_keeps_standalone_landmark(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td)/'input.osm'

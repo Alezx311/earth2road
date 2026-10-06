@@ -1385,17 +1385,13 @@ def build(cfg, root, context):
         poi_report.update(candidates=len(found),kept=len(poi_kept),placed=len(poi_records))
     landmark_report = None
     if dna:
-        landmark_report = landmarks.discover(root, geo_point, corridor.contains(map_area))
+        landmark_report = landmarks.discover(root, geo_point, corridor.contains(map_area),
+                                             limit=int(dna_cfg.get('landmark_limit', 5)))
         landmark_place_report = {'pois_unsnapped': []}
         snapped = poi_points.place(landmark_report['selected'], [], net,
                                   poi_points.Snapper(net, spawn_ok, rightmost), point,
                                   road_z.at_offset, landmark_place_report)
-        existing_osm = {p.get('osm') for p in poi_records}
-        for p in snapped:
-            p['id'] = 'landmark_' + p['osm'].replace('/', '_')
-            p['title'] = next(a['name'] for a in landmark_report['selected'] if a['osm'] == p['osm'])
-            if p['osm'] not in existing_osm:
-                poi_records.append(p)
+        landmark_report['skipped_near_poi'] = landmarks.merge_spawns(poi_records, snapped, landmark_report['selected'])
         landmark_report['unsnapped'] = landmark_place_report['pois_unsnapped']
         landmark_report['spawn_ids'] = [p['id'] for p in snapped]
     import random

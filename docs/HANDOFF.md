@@ -1,5 +1,31 @@
 # Earth2Road handoff
 
+## 2026-10-06 — Local Visual DNA for Bilychi, 21 quick-travel points (Claude)
+
+- Owner drove Podil DNA: "much better", quick-travel by points is convenient; some places
+  have no textures (location not given). Static check of the Podil ZIP: all 227 materials
+  defined, every level texture present, 157 DNA facade PNGs decode (RGB 256²). Cause not found.
+- `config/bilychy_dna.json`: same 4 km square as `bilychy_roadgen_v2`, new level
+  `kyiv_bilychy_dna`. Source re-extracted (selection v3) from the full Ukraine PBF (396 s,
+  11,351 ways); terrain copied from Bilychi-11 inputs. Cache `out/bilychy-dna/inputs`.
+- Profile `config/visuals/bilychy_dna.json`: 5 manual profiles (private, khrushchovka,
+  panel_high, industrial, forest_edge); 96 anchors on a 400 m grid (650 m radius), profile
+  per anchor by a fixed rule from OSM building type/levels and landuse within 300 m
+  (`logs/bilychy-dna/make_profile.py`, grid stats `grid.json`; ignored).
+- Points: `local_visual_dna.landmark_limit` (default 5, validated 0..50) set to 10;
+  `pois` enabled (limit 6) with 16 manual anchors from OSM names (metro stations, malls,
+  NAS institutes, parks, interchanges). `landmarks.merge_spawns` drops a landmark spawn
+  within 150 m of an existing point. Result: 21 spawns (15 anchors, 4 landmarks, 5 fuel
+  minus overlaps); unsnapped >150 m from a usable lane: Proliskok camp, Dacha Diakova,
+  St Nicholas church, Agromat, 2 landmark nodes. 4 landmark spawns skipped as duplicates.
+- World `out/bilychy-dna/world-01` (17,082 lanes, 112 tiles; build ~70 min): 4,414 styled
+  buildings, 1,765 gabled, 172 roof fallbacks, 4,023 synthetic trees, 0 OSM trees.
+  Export compact `out/bilychy-dna/beamng-01`: ZIP 65.8 MB, SHA-256 b902493a…, 9,748
+  objects, 65,984 forest instances; height audit over 2 m: 20, max 6.51 m.
+  Installed as `mods/earth2road_bilychy_dna.zip` (BeamNG was running; needs restart).
+  `kyiv_bilychy_roadgen_v2.zip` untouched. Full suite 435 OK, 1 skipped
+  (`logs/bilychy-dna/unittest-01.log`). Not driven yet.
+
 ## 2026-10-06 — Local Visual DNA, Podil pilot (Codex)
 
 - User selected a 2×2 km Podil pilot, manually authored profiles, buildings + greenery,
