@@ -969,3 +969,54 @@ def _walking_area(poly, height):
     return {'bridge': False, 'structure_level': 0, 'provenance': 'generated',
             'triangles': [[(x, y, height(x, y)) for x, y in t] for t in scene.draped_triangles(poly, cell=2., min_area=MIN_PIECE)],
             'rings': [[(x, y, height(x, y)) for x, y in ring.coords] for ring in [poly.exterior, *poly.interiors]]}
+
+
+SIDEWALK_MIN_RUN = 4.0     # m; a shorter leftover is a shard, not a sidewalk
+SIDEWALK_OVERLAP = 0.15    # m of carriageway a sidewalk edge may touch
+WALK_MIN_AREA = 1.5        # m²
+WALK_MIN_WIDTH = 0.6       # m
+
+
+def clear_sidewalks(strips, areas, carriageway):
+    """Sidewalks follow the carriageway, never cross it (playtest 2026-10-06, note 4).
+
+    The carriageway (same-level road strips and junction surfaces) is drawn first;
+    a sidewalk run whose centreline comes within half its width of the shrunk
+    carriageway is removed: at a merging slip road the main road's SUMO sidewalk
+    otherwise runs across the gore and over the slip road. Short leftovers and thin
+    walking-area slivers are dropped instead of drawn as kerb shards."""
+    if carriageway.is_empty:
+        return strips, areas, {'sidewalk_runs_cut': 0, 'walking_slivers_dropped': 0}
+    core = carriageway.buffer(-SIDEWALK_OVERLAP)
+    near = prep(core)
+    out, cut = [], 0
+    for s in strips:
+        if s.get('structure_level', 0) or s.get('bridge'):
+            out.append(s)
+            continue
+        poly = scene.strip_polygon(s['points'], s['width'])
+        if poly.is_empty or not near.intersects(poly):
+            out.append(s)
+            continue
+        runs = _runs_clear_of(s['points'], core.buffer(s['width']/2), max(SIDEWALK_MIN_RUN, s['width']))
+        cut += 1
+        out += [{**s, 'points': run} for run in runs]
+    kept, dropped = [], 0
+    for a in areas:
+        if a.get('structure_level', 0) or a.get('bridge'):
+            kept.append(a)
+            continue
+        tri_polys = [Polygon([p[:2] for p in t]) for t in a['triangles']]
+        parts = scene.polygons(geometry.union(tp.buffer(1e-6) for tp in tri_polys))
+        solid = [pg for pg in parts if pg.area >= WALK_MIN_AREA and not pg.buffer(-WALK_MIN_WIDTH/2).is_empty]
+        if len(solid) == len(parts):
+            kept.append(a)
+            continue
+        dropped += len(parts)-len(solid)
+        if not solid:
+            continue
+        keep = prep(geometry.union(solid).buffer(1e-4))
+        rings = [r for r in a.get('rings', []) if len(r) >= 3 and keep.intersects(Polygon([p[:2] for p in r]).buffer(0))]
+        kept.append({**a, 'triangles': [t for t, tp in zip(a['triangles'], tri_polys) if keep.contains(tp.centroid)],
+                     'rings': rings})
+    return out, kept, {'sidewalk_runs_cut': cut, 'walking_slivers_dropped': dropped}

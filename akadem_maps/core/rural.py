@@ -142,21 +142,52 @@ def roof(item, tags):
         item['roof_source'] = 'synthetic approximation of '+shape
 
 
-def dress(buildings, way_tags, root, nodes, net, point, road_cut, area):
-    """Return fences and trees in global map coordinates; no per-tile blind spots."""
+# Assumed heights of observed linear barriers; road barriers are low (playtest note 1).
+BARRIER_HEIGHT = {'fence': 1.2, 'wall': 1.2, 'hedge': 1.2, 'jersey_barrier': 0.85, 'guard_rail': 0.8}
+HOUSE_TYPES = ('house', 'detached', 'semidetached_house', 'bungalow')
+
+
+def private_houses(buildings, way_tags, point):
+    """Urban private sector: tagged houses, and untagged small buildings among them."""
+    zero = point(0,0)
+    centre = lambda b: Polygon([(p[0]-zero[0], zero[2]-p[2]) for p in b['points']]).centroid
+    houses = [b for b in buildings if (way_tags.get(str(b['id']), {}).get('building') or b.get('building_type')) in HOUSE_TYPES]
+    from shapely import STRtree
+    tree = STRtree([centre(b) for b in houses]) if houses else None
+    picked = set(id(b) for b in houses)
+    for b in buildings:
+        kind = way_tags.get(str(b['id']), {}).get('building') or b.get('building_type')
+        if tree is not None and kind in ('yes', 'residential') and b['height'] <= 8:
+            if len(tree.query(centre(b).buffer(60))) >= 3:
+                picked.add(id(b))
+    return lambda b: id(b) in picked
+
+
+def dress(buildings, way_tags, root, nodes, net, point, road_cut, area, house=None, roofs=True):
+    """Return fences and trees in global map coordinates; no per-tile blind spots.
+
+    Urban maps (playtest 2026-10-06, note 6) pass ``house`` to pick the private sector
+    and ``roofs=False``: roofs there belong to OSM tags or Local Visual DNA.
+    """
     # Reconstruct network XY from game points using the supplied centre conversion.
     zero = point(0,0)
     def poly_xy(b):
-        return Polygon([(p[0]-zero[0], zero[2]-p[2]) for p in b['points']])
-    footprint = unary_union([poly_xy(b) for b in buildings]) if buildings else Polygon()
-    forbidden = unary_union([road_cut.buffer(1.2), footprint.buffer(0.8)])
+        poly = Polygon([(p[0]-zero[0], zero[2]-p[2]) for p in b['points']])
+        return poly if poly.is_valid else poly.buffer(0)
+    from .osm_buildings import robust, union
+    footprint = union(poly_xy(b) for b in buildings) if buildings else Polygon()
+    forbidden = union([road_cut.buffer(1.2), footprint.buffer(0.8)])
     fences, trees, gardens = [], [], []
     seen = Polygon()
     for b in buildings:
         tags = way_tags.get(str(b['id']), {})
-        roof(b, tags)
+        if roofs:
+            roof(b, tags)
         kind = tags.get('building') or b.get('building_type') or 'yes'
-        if kind not in ('yes', 'house', 'detached', 'residential', 'microsoft', 'overture') or b['height'] > 8:
+        if house is not None:
+            if not house(b) or b['height'] > 8:
+                continue
+        elif kind not in ('yes', 'house', 'detached', 'residential', 'microsoft', 'overture') or b['height'] > 8:
             continue
         plot = poly_xy(b)
         if not 35 < plot.area < 450:
@@ -168,7 +199,8 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area):
         from shapely.ops import nearest_points
         home, street = nearest_points(plot.centroid, road_cut)
         entry = LineString([home,street]).buffer(2.5)
-        garden = ring.difference(unary_union([forbidden,entry,seen]))
+        blocked = union([forbidden,entry,seen])
+        garden = robust(lambda a, b: a.difference(b), ring, blocked)
         if not garden.is_empty:
             gardens.append({'id':'garden_'+str(b['id']), 'kind':'garden','poly':garden,
                             'provenance':'synthetic garden near observed footprint; parcel unknown'})
@@ -176,13 +208,13 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area):
             location = garden.representative_point()
             if location.distance(forbidden)>1.2:
                 trees.append(point(location.x,location.y))
-        lines = ring.boundary.difference(unary_union([forbidden, entry, seen]))
+        lines = robust(lambda a, b: a.difference(b), ring.boundary, blocked)
         for line in ([lines] if lines.geom_type == 'LineString' else getattr(lines,'geoms',[])):
             if line.geom_type != 'LineString' or line.length < 2:
                 continue
             fences.append({'id':str(b['id']), 'points':[point(x,y) for x,y in line.coords],
                            'height':1.1, 'provenance':'synthetic setback fence; parcel unknown'})
-        seen = unary_union([seen, ring.buffer(0.5)])
+        seen = union([seen, ring.buffer(0.5)])
     # Observed shelterbelts are lines, not forests. Fill their lines at a fixed spacing.
     for w in root.findall('way'):
         tags = {t.get('k'):t.get('v') for t in w.findall('tag')}
@@ -196,12 +228,14 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area):
                 for i in range(int(part.length/9)+1):
                     p = part.interpolate(i*9)
                     if not forbidden.covers(p): trees.append(point(p.x,p.y))
-        if tags.get('barrier') in ('fence','wall','hedge'):
-            line = LineString(coords).intersection(area).difference(road_cut.buffer(1.2))
+        if tags.get('barrier') in BARRIER_HEIGHT:
+            # Road barriers stand right at the kerb; property fences keep a setback.
+            gap = 0.3 if tags['barrier'] in ('jersey_barrier', 'guard_rail') else 1.2
+            line = robust(lambda a, b, c: a.intersection(b).difference(c), LineString(coords), area, road_cut.buffer(gap))
             for part in ([line] if line.geom_type=='LineString' else getattr(line,'geoms',[])):
                 if part.geom_type=='LineString' and part.length>1:
                     fences.append({'id':w.get('id'), 'points':[point(x,y) for x,y in part.coords],
-                                   'height':1.2,'provenance':'osm alignment; assumed height'})
+                                   'height':BARRIER_HEIGHT[tags['barrier']],'provenance':'osm alignment; assumed height'})
     return fences, trees, gardens
 
 

@@ -87,6 +87,19 @@ SURFACES = {
                            normal=f'{TEX}/tileable/road/jri_dirt_mesh/jri_dirt_mesh_n.normal.png',
                            baseColorFactor=[0.78, 0.76, 0.72, 1], roughnessFactor=0.95),
                     4.0, {'groundType': 'GRAVEL', 'annotation': 'NATURE'}),
+    # Lakes and ponds: a still, dark, glossy surface. Not a BeamNG water volume, so
+    # vehicles do not float; the lake bed stays the DEM surface (playtest note 5).
+    'kyiv_water': (_tileset('tileable/road/m_asphalt_new_01', 't_asphalt_02', maps='b nm',
+                            baseColorFactor=[0.16, 0.27, 0.33, 1], roughnessFactor=0.06, metallicFactor=0.0),
+                   12.0, {'groundType': 'MUD', 'annotation': 'NATURE'}),
+    # Sports pitch (mown, brighter) and a tartan running track (playtest note 9).
+    'kyiv_pitch': (_stage(f'{TEX}/terrain/grass/groundmesh_grass2/groundmesh_grass_b.color.png',
+                          normal=f'{TEX}/terrain/grass/grass_garden/t_grass_long_nm.normal.png',
+                          baseColorFactor=[0.55, 0.85, 0.45, 1], roughnessFactor=0.9),
+                   4.0, {'groundType': 'GRASS', 'annotation': 'NATURE'}),
+    'kyiv_track': (_tileset('tileable/road/m_asphalt_new_01', 't_asphalt_02', maps='b nm ao',
+                            baseColorFactor=[0.95, 0.42, 0.32, 1], roughnessFactor=0.85),
+                   6.0, {'groundType': 'ASPHALT', 'annotation': 'STREET'}),
     'kyiv_metal': (_stage(f'{TEX}/tileable/metal/metal_galvanized/t_metal_galvanized_01_b.color.png',
                           rough=f'{TEX}/tileable/metal/metal_galvanized/t_metal_galvanized_02_r.data.png',
                           metallicMap=f'{TEX}/tileable/metal/metal_galvanized/t_metal_galvanized_02_m.data.png',

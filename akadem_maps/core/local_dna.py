@@ -127,7 +127,8 @@ class Field:
         sample = self.sample(poly.centroid.x, poly.centroid.y)
         if not sample:
             return
-        key = str(b['id'])
+        # Parts of one S3DB building share their outline's choices (playtest note 10).
+        key = str(b.get('style_key', b['id']))
         # Fade the chance of applying grammar to the legacy default at coverage edges.
         if unit(self.seed, key, 'coverage') >= sample['strength']:
             return

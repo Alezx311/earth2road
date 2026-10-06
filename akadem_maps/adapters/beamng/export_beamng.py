@@ -23,7 +23,7 @@ import zlib
 from shapely.geometry import Point, Polygon
 
 from akadem_maps.adapters.beamng.beamng_assets import (DRAWN_FACADES, FOREST_ITEMS, LANDMARKS, PANEL_FACADES, PANEL_TILE, PARK_BUSHES,
-                           PROP_SHAPES, STREET_TREES, WOOD_TREES, building_style,
+                           PROP_SHAPES, ROOFS, STREET_TREES, WOOD_TREES, building_style,
                            forest_files, forest_item_data, surface_materials, tree_materials,
                            uv_scales)
 from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point, features, optimization_mode, cross, dashed, normal, sub, triangulate
@@ -264,15 +264,21 @@ def building_mesh(building, facade, roof):
         vertices = [beam_point(p) for p in tri]
         mesh.tri(facade, *vertices)
         mesh.tri(facade, *reversed(vertices))
-    for a, b, c in ([] if roof_faces else triangulate([(p[0], p[1], top) for p in pts])):
-        mesh.tri(roof, a, b, c, True)
+    for a, b, c in triangulate([(p[0], p[1], top) for p in pts]):
+        if not roof_faces:
+            mesh.tri(roof, a, b, c, True)
         if base > 0:
+            # Raised part (passage, S3DB min_height): close its underside.
             mesh.tri(facade, (a[0], a[1], bottom), (c[0], c[1], bottom), (b[0], b[1], bottom))
     if sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(pts, pts[1:] + pts[:1])) < 0:
         pts.reverse()
     for a, b in zip(pts, pts[1:] + pts[:1]):
         mesh.wall((a[0], a[1], floor), (b[0], b[1], floor), bottom - floor, top - floor, facade)
     return mesh
+
+
+# Landcover kinds with their own surface (playtest 2026-10-06, notes 5 and 9); others are grass.
+COVER_MATERIALS = {'water': 'kyiv_water', 'pitch': 'kyiv_pitch', 'track': 'kyiv_track'}
 
 
 def tile_meshes(tile, sidewalks=True, ground=True):
@@ -282,8 +288,9 @@ def tile_meshes(tile, sidewalks=True, ground=True):
     for tri in tile.get('parking', []):
         surface.tri('kyiv_asphalt_worn', *(beam_point(p) for p in tri), up=True)
     for green in tile.get('greens', []):
+        material = COVER_MATERIALS.get(green.get('kind'), 'kyiv_grass')
         for tri in green['triangles']:
-            surface.tri('kyiv_grass', *(beam_point(p) for p in tri), up=True)
+            surface.tri(material, *(beam_point(p) for p in tri), up=True)
     for road in tile.get('road_strips', []):
         if 'triangles' in road:
             for tri in road['triangles']:
@@ -310,6 +317,12 @@ def tile_meshes(tile, sidewalks=True, ground=True):
             points = [beam_point(p) for p in ring]
             for a, b in zip(points, points[1:] + points[:1]):
                 surface.wall(a, b, 0, .035, 'kyiv_curb')
+    for fence in tile.get('fences', []):
+        # Setback/OSM fences, both faces (the Godot game draws them the same way).
+        points = [beam_point(p) for p in fence['points']]
+        for a, b in zip(points, points[1:]):
+            surface.wall(a, b, -0.1, float(fence.get('height', 1.2)), 'kyiv_fac_block')
+            surface.wall(b, a, -0.1, float(fence.get('height', 1.2)), 'kyiv_fac_block')
     for path in tile.get('paths', []):
         paint.strip([beam_point(p) for p in path['points']], path['width'], 'kyiv_gravel', .02)
     for mark in tile.get('markings', []):
@@ -709,7 +722,8 @@ def vegetation(tiles, dna=None):
             counts['trees_osm'] += sum(t['provenance'] == 'osm' for t in tile.get('tree_records', []))
             counts['trees_synthetic_world'] += sum(t['provenance'] != 'osm' for t in tile.get('tree_records', []))
         for green in tile.get('greens', []):
-            if dna and green['kind'] not in ('wood', 'green', 'orchard'):
+            # Water, pitches and tracks carry no vegetation in any mode.
+            if green['kind'] not in ('wood', 'green', 'orchard'):
                 continue
             area = sum(abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
                        for a, b, c in ([beam_point(p) for p in tri] for tri in green['triangles']))
@@ -967,7 +981,8 @@ def preview_image(tiles, lane_points, bounds):
 
     for _tileid, tile in tiles:
         for green in tile.get('greens', []):
-            color = (44, 78, 40) if green.get('kind') == 'wood' else (56, 86, 48)
+            color = {'wood': (44, 78, 40), 'water': (62, 98, 118), 'pitch': (70, 120, 56),
+                     'track': (150, 76, 60)}.get(green.get('kind'), (56, 86, 48))
             for triangle in green['triangles']:
                 fill(triangle, color)
     for _tileid, tile in tiles:
@@ -1241,7 +1256,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         # Whole buildings merge into 250 m cells by footprint centre: thousands of
         # per-building TSStatics dominated level load time.
         building_cells = defaultdict(Mesh)
-        dna_styles = {}
+        dna_styles, roof_colours = {}, {}
         from akadem_maps.adapters.beamng.beamng_placement import audit_building
         for index_n, (bid, parts) in enumerate(building_items, 1):
             facade, roof = building_style(parts[0])
@@ -1255,8 +1270,14 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                                    math.floor(sum(p[1] for p in pts) / len(pts) / SURFACE_CELL))]
             for b in parts:
                 audit_building(b, corridors.pavement, corridors.audit)
+                part_roof = roof
+                if b.get('roof_color'):
+                    # Observed OSM roof:colour: one shared material per colour, never per building.
+                    part_roof = 'kyiv_roof_c_' + b['roof_color'][1:]
+                    roof_colours[part_roof] = b['roof_color']
+                    UV[part_roof] = 1/3
                 try:
-                    part = building_mesh(b, facade, roof)
+                    part = building_mesh(b, facade, part_roof)
                 except ValueError as e:
                     errors.append({'building': b['id'], 'error': str(e)})
                     continue
@@ -1286,6 +1307,13 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                                'Stages': [{'baseColorMap': f'/levels/{level_id}/art/kyiv/{name}.color.png',
                                            'roughnessFactor': .78}, {}, {}, {}],
                                'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+        metal_roof = ROOFS['kyiv_roof_metal'][0]
+        for name, hexa in sorted(roof_colours.items()):
+            rgb = [int(hexa[i:i+2], 16)/255 for i in (1, 3, 5)]
+            materials[name] = {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                               'Stages': [{**metal_roof, 'baseColorFactor': rgb + [1]}, {}, {}, {}],
+                               'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+        counts['roof_colour_materials'] = len(roof_colours)
         # Sign faces are Ukrainian (DSTU) artwork; other regions get no posted signs
         # rather than foreign-looking ones.
         ukrainian = config.get('region_profile', 'ukraine') == 'ukraine'

@@ -26,6 +26,10 @@ PAIR_DISTANCE = 45.
 DECK_CURVE = 60.  # m, length of the crest curve over a crossing beneath a bridge
 DECK_JOIN = 8.    # m, Gaussian rounding where a deck lift meets the deck profile
 PAIR_FADE = 30.
+# Divided motorways/trunks get a continuous median barrier where the two centrelines
+# run within MEDIAN_MAX metres (owner's request, playtest 2026-10-06 note 1).
+MEDIAN_CLASSES = ('motorway', 'trunk')
+MEDIAN_MAX = 30.
 SPIKE = 1.0
 STROKE_TURN = 35.  # degrees; a straighter continuation through a junction is one stroke
 # Synthetic road engineering scale, not a surveyed design standard. Penalize
@@ -37,6 +41,15 @@ FAIRING_CLASS_FACTOR = .8
 CORRECTION_GRADE = .03
 CORRECTION_MIN = 12.
 CORRECTION_MAX = 60.
+# A minor road keeps the junction node's height across the major road's half width
+# plus MOUTH_MARGIN, then returns to its own profile at no more than MOUTH_GRADE
+# (playtest 2026-10-06, note 8: a service mouth 0.6 m above a primary road).
+CLASS_RANK = {'motorway': 0, 'trunk': 1, 'primary': 2, 'secondary': 3, 'tertiary': 4,
+              'unclassified': 5, 'residential': 5, 'living_street': 6, 'service': 7}
+MOUTH_MARGIN = 4.
+MOUTH_GRADE = .04
+MOUTH_FADE = (6., 40.)
+LANE_WIDTH = 3.3
 
 
 class BendField:
@@ -333,7 +346,8 @@ def ground_profiles(root, nodes, tags, drivable, to_xy, sample):
         node_z = np.interp(along,stations,filtered)
         profiles[wid] = {'refs': refs, 'along': along, 'stations': stations,
                          'xy': xy, 'points': list(zip(xx, yy, filtered)), 'node_z': node_z}
-    paired = pair_carriageways(profiles, way_tags)
+    medians = []
+    paired = pair_carriageways(profiles, way_tags, medians)
     # Every node follows the reconciled profile, including non-junction nodes
     # inside a correction's fade. Old pre-correction anchors would undo the
     # reconciliation at each OSM vertex. Average shared paired nodes explicitly
@@ -353,6 +367,7 @@ def ground_profiles(root, nodes, tags, drivable, to_xy, sample):
               'fairing_length_m': FAIRING_LENGTH, 'fairing_class_factor': FAIRING_CLASS_FACTOR,
               'shared_height_policy': 'higher class, then longer stroke; reconcile before way assembly',
               'paired_carriageway_ways': len(paired),
+              'medians': medians,
               'worst': sorted(spikes, key=lambda r: (-r['correction_m'], r['way'], r['station_m']))[:100]}
     return profiles, ground, report
 
@@ -426,7 +441,19 @@ def deck_clearance(profiles, way_refs, levels, clearance, grade):
     return report
 
 
-def pair_carriageways(profiles, way_tags):
+def pair_key(tags):
+    """What makes two one-way ways the carriageways of one road: the name, else the
+    route ref, else (unnamed main roads, playtest 2026-10-06 note 1) the class."""
+    if tags.get('name'):
+        return ('name', tags['name'])
+    if tags.get('ref'):
+        return ('ref', tags['ref'])
+    if tags.get('highway') in ('motorway', 'trunk', 'primary', 'secondary'):
+        return ('class', tags['highway'])
+    return None
+
+
+def pair_carriageways(profiles, way_tags, medians=None):
     """Average the profiles of the two one-way carriageways of a divided road.
 
     Each carriageway samples the DEM on its own line, tens of metres from the
@@ -435,12 +462,13 @@ def pair_carriageways(profiles, way_tags):
     the weight fades in and out over PAIR_FADE metres. Returns the changed ways."""
     from shapely.geometry import LineString, Point
     from shapely.strtree import STRtree
-    cand = [w for w, t in way_tags.items() if w in profiles and t.get('name') and
+    cand = [w for w, t in way_tags.items() if w in profiles and pair_key(t) and
             t.get('oneway') in ('yes', '1', 'true') and not t.get('highway', '').endswith('_link') and
             t.get('highway') not in ('service',) and structure(t) == (0, False, False)]
     if len(cand) < 2:
         return []
     lines = [LineString([p[:2] for p in profiles[w]['points']]) for w in cand]
+    index = {w: i for i, w in enumerate(cand)}
     tree = STRtree(lines)
     original = {w: np.array([p[2] for p in profiles[w]['points']]) for w in cand}
     changed = []
@@ -458,7 +486,7 @@ def pair_carriageways(profiles, way_tags):
             found = {}
             for j in tree.query(q.buffer(PAIR_DISTANCE)):
                 o = cand[int(j)]
-                if o == w or way_tags[o].get('name') != way_tags[w].get('name'):
+                if o == w or pair_key(way_tags[o]) != pair_key(way_tags[w]):
                     continue
                 d = lines[int(j)].distance(q)
                 if d > PAIR_DISTANCE:
@@ -483,6 +511,23 @@ def pair_carriageways(profiles, way_tags):
             if found:
                 o = max(found, key=lambda o: (votes[o], -found[o][0]))
                 partner_z[k], weight[k] = found[o][1], 1.
+                partner[k] = o
+        if medians is not None and way_tags[w].get('highway') in MEDIAN_CLASSES:
+            # Median line of a divided main road: midway to the partner's centreline.
+            run = []
+            for k, (x, y, _) in enumerate(pts):
+                o = partner[k]
+                if o is None or o < w or options[k][o][0] > MEDIAN_MAX:
+                    if len(run) > 1:
+                        medians.append({'ways': [w, last], 'points': run})
+                    run = []
+                    continue
+                j = index[o]
+                q = lines[j].interpolate(lines[j].project(Point(x, y)))
+                run.append(((x+q.x)/2, (y+q.y)/2))
+                last = o
+            if len(run) > 1:
+                medians.append({'ways': [w, last], 'points': run})
         if not weight.any():
             continue
         # Fade the coupling in and out instead of switching it at a station.
@@ -536,17 +581,75 @@ def correction_field(along, deltas, fixed, min_width=CORRECTION_MIN):
     return at
 
 
-def constrained_profiles(profiles, heights, structure_ways):
+def _rank(tags):
+    kind = tags.get('highway', '')
+    return CLASS_RANK.get(kind.removesuffix('_link'), 8)
+
+
+def _width(tags):
+    try:
+        lanes = int(str(tags.get('lanes', '')).split(';')[0])
+    except ValueError:
+        lanes = 2 if tags.get('oneway') in ('yes', '1', 'true', '-1') else 2
+    return max(1, lanes)*LANE_WIDTH
+
+
+def mouths(profiles, way_tags):
+    """way -> [(node index, plateau half-length)] where the way meets a higher-class road."""
+    at_node = defaultdict(list)
+    for wid, p in profiles.items():
+        for n in set(p['refs']):
+            at_node[n].append(wid)
+    out = defaultdict(list)
+    for n, wids in at_node.items():
+        if len(wids) < 2:
+            continue
+        for wid in wids:
+            mine = _rank(way_tags.get(wid, {}))
+            major = [o for o in wids if o != wid and _rank(way_tags.get(o, {})) < mine]
+            if not major:
+                continue
+            reach = max(_width(way_tags.get(o, {})) for o in major)/2+MOUTH_MARGIN
+            for k, r in enumerate(profiles[wid]['refs']):
+                if r == n:
+                    out[wid].append((k, reach))
+    return out
+
+
+def plateau(knots, z, anchors):
+    """Hold each anchor height within its reach, then carry the offset to the road's own
+    profile and fade it out; the added grade stays within 1.5 x MOUTH_GRADE."""
+    z = np.asarray(z, dtype=float).copy()
+    for s0, h, reach in anchors:
+        base = z.copy()
+        for side in (1, -1):
+            edge_s = s0+side*reach
+            if not knots[0] <= edge_s <= knots[-1]:
+                edge_s = min(knots[-1], max(knots[0], edge_s))
+            offset = h-float(np.interp(edge_s, knots, base))
+            fade = min(MOUTH_FADE[1], max(MOUTH_FADE[0], abs(offset)/MOUTH_GRADE))
+            d = side*(knots-s0)
+            mask = d >= 0
+            inside = mask & (d <= reach)
+            beyond = mask & (d > reach)
+            z[inside] = h
+            z[beyond] = base[beyond]+offset*(1-np.array([_smoothstep((v-reach)/fade) for v in d[beyond]]))
+    return z
+
+
+def constrained_profiles(profiles, heights, structure_ways, way_tags=None):
     """Carry shared-node/structure constraints into the dense, filtered profiles.
 
     Insert source nodes as exact knots. Bridges use the existing constrained deck
     profile; ground roads retain DEM detail plus a smooth constraint correction.
+    With ``way_tags``, a minor road also levels out at the mouth of a major road.
     """
     result = {}
     uses = defaultdict(int)
     for p in profiles.values():
         for n in set(p['refs']):
             uses[n] += 1
+    mouth = mouths(profiles, way_tags) if way_tags else {}
     for wid, p in profiles.items():
         along = p['along']
         values = [heights[n] for n in p['refs']]
@@ -565,5 +668,10 @@ def constrained_profiles(profiles, heights, structure_ways):
             if out and math.dist(out[-1][:2], (x, y)) < 1e-7:
                 continue
             out.append((float(x), float(y), float(z)))
+        if mouth.get(wid) and wid not in structure_ways and len(out) > 1:
+            s = np.r_[0., np.cumsum([math.dist(a[:2], b[:2]) for a, b in zip(out, out[1:])])]
+            anchors = [(float(along[k]), values[k], reach) for k, reach in mouth[wid]]
+            zz = plateau(s, [v[2] for v in out], anchors)
+            out = [(x, y, float(v)) for (x, y, _), v in zip(out, zz)]
         result[wid] = out
     return result

@@ -9,9 +9,9 @@ const MARK_LIFT := 0.025
 const CURB := 0.15
 const BRIDGE_DEPTH := 1.2
 const CHUNK := 250.0
-const COLLIDE := {"road": 1, "dirt": 1, "gravel": 1, "farmland": 2, "garden": 2, "orchard": 2, "yard": 2, "fence": 4, "ground": 2, "green": 2, "wood": 2, "parking": 2, "building": 4, "bridge": 4, "sidewalk": 8}
+const COLLIDE := {"road": 1, "dirt": 1, "gravel": 1, "farmland": 2, "garden": 2, "orchard": 2, "yard": 2, "fence": 4, "ground": 2, "green": 2, "wood": 2, "water": 2, "pitch": 2, "track": 2, "parking": 2, "building": 4, "bridge": 4, "sidewalk": 8}
 ## Tyre surface for GEVP wheels (Wheel reads the collider's first group).
-const SURFACE := {"road": "Road", "dirt": "Dirt", "gravel": "Dirt", "farmland": "Dirt", "garden": "Dirt", "orchard": "Grass", "yard": "Dirt", "parking": "Road", "sidewalk": "Road", "bridge": "Road", "building": "Road", "ground": "Dirt", "green": "Grass", "wood": "Grass"}
+const SURFACE := {"road": "Road", "dirt": "Dirt", "gravel": "Dirt", "farmland": "Dirt", "garden": "Dirt", "orchard": "Grass", "yard": "Dirt", "parking": "Road", "sidewalk": "Road", "bridge": "Road", "building": "Road", "ground": "Dirt", "green": "Grass", "wood": "Grass", "water": "Dirt", "pitch": "Grass", "track": "Road"}
 const Materials = preload("res://scripts/materials.gd")
 const VisualTile = preload("res://visuals/tile.gd")
 
@@ -257,16 +257,26 @@ func build_building(building: Dictionary) -> void:
 	for p in pts:
 		poly.append(Vector2(p[0], p[2]))
 	var indices := Geometry2D.triangulate_polygon(poly)
+	var roof_kind := str(building.get("roof_material", "roof"))
+	var flat_roof := "roof"
+	# Observed OSM roof:colour (playtest 2026-10-06, note 10): one material per colour.
+	if building.has("roof_color"):
+		roof_kind = "roof_c_" + str(building.roof_color).substr(1)
+		flat_roof = roof_kind
+		if not mats.has(roof_kind):
+			mats[roof_kind] = Materials.surface("", 1.0, Color.WHITE, Color(str(building.roof_color)), {"roughness_bias": -0.1})
 	for t in building.get("roof_triangles", []):
-		tri(vec(t[0]), vec(t[1]), vec(t[2]), str(building.get("roof_material", "roof")))
+		tri(vec(t[0]), vec(t[1]), vec(t[2]), roof_kind)
 	for t in building.get("roof_gables", []):
-		tri(vec(t[0]), vec(t[1]), vec(t[2]), str(building.get("roof_material", "roof")), false)
-		tri(vec(t[2]), vec(t[1]), vec(t[0]), str(building.get("roof_material", "roof")), false)
-	for i in range(0, indices.size(), 3) if not building.has("roof_triangles") else []:
+		tri(vec(t[0]), vec(t[1]), vec(t[2]), roof_kind, false)
+		tri(vec(t[2]), vec(t[1]), vec(t[0]), roof_kind, false)
+	var shaped := building.has("roof_triangles")
+	for i in range(0, indices.size(), 3) if not shaped or base > 0.0 else []:
 		var a := Vector3(poly[indices[i]].x, top, poly[indices[i]].y)
 		var b := Vector3(poly[indices[i + 1]].x, top, poly[indices[i + 1]].y)
 		var c := Vector3(poly[indices[i + 2]].x, top, poly[indices[i + 2]].y)
-		tri(a, b, c, "roof")
+		if not shaped:
+			tri(a, b, c, flat_roof)
 		if base > 0.0:
 			tri(Vector3(a.x, bottom, a.z), Vector3(b.x, bottom, b.z), Vector3(c.x, bottom, c.z), "facade", false, Vector2(0, -1))
 	# COLOR.r: tint from the OSM id; COLOR.g: shop ground floor; COLOR.b: facade family / 5 (facade.gdshader).
@@ -289,11 +299,11 @@ func commit(collide := true) -> void:
 		# Wide ranges: the spectator camera looks at the whole district from kilometres up.
 		inst.visibility_range_end = 5000 if item.kind in ["facade", "roof", "roof_tile", "roof_metal"] else (500 if item.kind in ["mark", "path", "curb", "fence"] else 9000)
 		# Flat cover cannot shade anything visible; skipping it keeps the shadow passes cheap.
-		if item.kind in ["mark", "path", "ground", "green", "wood", "water", "parking", "road", "sidewalk", "curb", "dirt", "gravel", "farmland", "garden", "orchard", "yard"]:
+		if item.kind in ["mark", "path", "ground", "green", "wood", "water", "pitch", "track", "parking", "road", "sidewalk", "curb", "dirt", "gravel", "farmland", "garden", "orchard", "yard"]:
 			inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(inst)
 		var layer_kind: String = "building" if item.kind in ["facade", "roof", "roof_tile", "roof_metal"] else item.kind
-		if str(item.kind).begins_with("dna_facade_"):
+		if str(item.kind).begins_with("dna_facade_") or str(item.kind).begins_with("roof_c_"):
 			layer_kind = "building"
 			inst.visibility_range_end = 5000
 		if COLLIDE.has(layer_kind):

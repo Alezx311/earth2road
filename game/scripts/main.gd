@@ -11,6 +11,7 @@ const Modal = preload("res://scripts/ui_modal.gd")
 const IncidentView = preload("res://scripts/incident_view.gd")
 const MapMenu = preload("res://scripts/map_menu.gd")
 const I18n = preload("res://scripts/i18n.gd")
+const DefectMarker = preload("res://scripts/defect_marker.gd")
 const SPEEDS := [0, 1, 2, 4, 8, 16]
 const MAX_DENSITY := 10000       # fallback; the bridge reports its own limit on connect
 ## Seconds between automatic reconnect attempts while the bridge is unreachable.
@@ -57,6 +58,7 @@ var last_header: Dictionary = {}
 var start_args := {}
 var capture_focus = null
 var map_menu: Control
+var defect_dialog: Control
 ## The traffic socket is opened from _process, never from _ready: Godot sends the WebSocket
 ## handshake only while polling, and building a large map (plus the first shader compile)
 ## can block the main thread for longer than the bridge used to wait for it.
@@ -244,6 +246,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		I18n.toggle()
 	elif code==KEY_F12:
 		capture()
+	elif code==KEY_F9:
+		mark_defect()
 	elif spectating:
 		return
 	elif code==KEY_C:
@@ -275,7 +279,7 @@ func switch_map(id: String) -> void:
 	get_tree().reload_current_scene()
 
 func modal_open() -> bool:
-	return map_menu != null or help_panel != null or paused
+	return map_menu != null or help_panel != null or paused or defect_dialog != null
 
 ## Called at the opening event, before the next physics tick. Raw Input polling
 ## must be gated as well as GUI events (a modal only consumes the latter).
@@ -586,6 +590,11 @@ func build_ui() -> void:
 	hud_view = Hud.new()
 	hud.add_child(hud_view)
 	hud_view.action.connect(ui_action)
+	# Aim for F9: the defect point is whatever lies under the screen centre.
+	var crosshair := Ui.label("+", 22, Color(1, 1, 1, 0.55))
+	crosshair.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(crosshair)
 	status = hud_view.status
 	speed_label = hud_view.speed_label
 	detail = hud_view.detail
@@ -607,7 +616,7 @@ func build_ui() -> void:
 const HELP_LINES := [
 	["DRIVING","WASD or arrows — throttle, brake, steer (S when stopped — reverse) · SPACE — handbrake\nC — camera · RMB + mouse — look around · wheel — camera distance · V — car model · R — back to start"],
 	["SPECTATOR","F — free camera over the city · WASD move · wheel or Q/E height\nRMB + mouse — turn and tilt · MMB — pan · Z/X — rotate · SHIFT — faster"],
-	["TIME AND TRAFFIC","1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot"],
+	["TIME AND TRAFFIC","1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot · F9 — mark a defect"],
 	["ROAD SITUATIONS","T — panel: accident, lane closure, roadworks, jam, speed limit\nPick a situation and click a road · a click without one shows what is there and unlocks the traffic light"],
 ]
 const ATTRIBUTION := "© OpenStreetMap contributors · ODbL  |  Mapzen Terrain"
@@ -642,6 +651,24 @@ func capture() -> void:
 	get_viewport().get_texture().get_image().save_png("res://../logs/screenshot.png")
 	print("SCREENSHOT logs/screenshot.png")
 
+## F9: the frame is grabbed before the dialog appears; the crosshair marks the recorded point.
+func mark_defect() -> void:
+	if defect_dialog or DisplayServer.get_name()=="headless": return
+	await RenderingServer.frame_post_draw
+	var exclude: Array[RID] = []
+	if player.body: exclude.append(player.body.get_rid())
+	var dialog := DefectMarker.new()
+	dialog.image = get_viewport().get_texture().get_image()
+	dialog.record = DefectMarker.describe(get_viewport(), WorldStream.map_id(), data.offset,
+		player.body, exclude, "spectator" if spectating else ("cockpit" if player.cockpit else "chase"))
+	dialog.closed.connect(func():
+		dialog.queue_free()
+		defect_dialog = null
+		sync_modal_state())
+	defect_dialog = dialog
+	hud.add_child(dialog)
+	sync_modal_state()
+
 func write_metrics() -> void:
 	if fps_samples.is_empty():return
 	fps_samples.sort()
@@ -674,7 +701,12 @@ func run_shots() -> void:
 		while waited < 12.0:
 			await get_tree().process_frame
 			waited += get_process_delta_time()
-	for shot in data.get("shots",[]):
+	var shots: Array = data.get("shots",[])
+	# --shots-file=PATH: ad-hoc QA poses in world coordinates (tools/shots_file.py), no rebuild.
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--shots-file="):
+			shots = JSON.parse_string(FileAccess.get_file_as_string(arg.split("=", true, 1)[1])).shots
+	for shot in shots:
 		if data.get("visual_profile", "") == "rural":
 			env.fog_depth_begin = maxf(600.0, float(shot.height)*2.0)
 			env.fog_depth_end = maxf(4500.0, float(shot.height)*8.0)

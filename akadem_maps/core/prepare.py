@@ -29,7 +29,7 @@ from akadem_maps.core import road_profiles
 from akadem_maps.core import corridor
 from akadem_maps.core import pois as poi_points
 from akadem_maps.core import rural
-from akadem_maps.core import local_dna, landmarks
+from akadem_maps.core import local_dna, landmarks, osm_buildings, landcover, roundabouts
 from akadem_maps.core import road_geometry, surface_audit, road_graph, roadgen, road_elevation
 
 
@@ -139,6 +139,12 @@ class Terrain:
 def sumolib_typemap():
     import sumo_data
     return Path(list(sumo_data.__path__)[0])/'data/typemap/osmNetconvert.typ.xml'
+
+# Median barrier between paired carriageways (playtest 2026-10-06, note 1).
+MEDIAN_HEIGHT = 0.9
+MEDIAN_CLEARANCE = 0.8
+MEDIAN_MIN_RUN = 8.0
+
 
 def number(raw, default):
     try:
@@ -818,6 +824,8 @@ def build(cfg, root, context):
                 if tag.attrib['k'] == 'highway':
                     w.remove(tag)
             underground_excluded += 1
+    roundabout_report = roundabouts.unify(root, nodes, drivable)
+    lane_suspects = road_profiles.lane_suspects(root, nodes)
     context.progress('terrain', 0.2)
     source_graph = road_graph.source_graph(root, lambda t: drivable(t) or (is_rural and rural.accessible_track(t)),
                                            synthetic=cfg.get('source_kind') == 'synthetic') if 'road_geometry' in cfg else None
@@ -879,7 +887,8 @@ def build(cfg, root, context):
             root, nodes, tags, lambda lon,lat: terrain.sample(lon,lat)-base,
             include_tracks=is_rural, ground_override=ground_nodes, crest=True, dense_pairs=True)
         structure_ways = {wid for wid,w in ways.items() if structure_level(tags(w)) != 0}
-        profiles = road_elevation.constrained_profiles(profiles, node_heights, structure_ways)
+        profiles = road_elevation.constrained_profiles(profiles, node_heights, structure_ways,
+                                                       {wid: tags(w) for wid, w in ways.items()})
         profile_report['deck_clearance'] = road_elevation.deck_clearance(
             profiles, way_refs, {wid: surface_audit.structure(tags(ways[wid])) for wid in profiles},
             BRIDGE_CLEARANCE['road'], MAX_RAMP_GRADE['default'])
@@ -1153,6 +1162,8 @@ def build(cfg, root, context):
     walk_strips, walk_areas = scene.sidewalks(net, road_z, carriageway, structure_of)
     if road_patches:
         walk_strips, walk_areas = roadgen.sidewalks(walk_strips, walk_areas, road_patches, carriageway)
+    level_carriageway = road_geometry.union([scene.footprint([r for r in road_strips if not r['bridge']]), *junction_polys])
+    walk_strips, walk_areas, elevation_report['sidewalk_clearance'] = roadgen.clear_sidewalks(walk_strips, walk_areas, level_carriageway)
     walk_ramps = []
     for strip in walk_strips:
         runs = [strip['points']]
@@ -1177,6 +1188,29 @@ def build(cfg, root, context):
                             # terrain is not excavated under an elevated plaza either.
                             *[p for area in walk_areas if not area.get('bridge') for ring in area['rings'] if not (p := scene.planar(ring)).is_empty]])
     dem = lambda x, y: height(x, y)
+    # Lakes and forests mapped as multipolygon relations, in every map mode (playtest note 5).
+    relation_areas = landcover.relation_covers(root, nodes, net.convertLonLat2XY, map_area, is_rural)
+    # Water is flat at a low DEM percentile; its shore anchors the ground to that level.
+    water_levels = {}
+    water_sources = [(a['id'], a['poly']) for a in relation_areas if a['kind'] == 'water']
+    for wid, w in ways.items():
+        refs = [nd.attrib['ref'] for nd in w.findall('nd')]
+        if len(refs) >= 4 and refs[0] == refs[-1] and all(r in nodes for r in refs) and landcover.kind(tags(w), is_rural) == 'water':
+            water_sources.append((wid, Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)))
+    shore_cut = road_cut.buffer(3.0)
+    for wid, poly in water_sources:
+        for piece in osm_buildings.polygons(poly):
+            if piece.area < 4:
+                continue
+            level = landcover.water_level(piece, height)
+            water_levels[wid] = min(level, water_levels.get(wid, level))
+    for wid, poly in water_sources:
+        if wid in water_levels:
+            for piece in osm_buildings.polygons(poly):
+                for line in landcover.shore(piece, water_levels[wid], shore_cut):
+                    anchors += line
+                    edges += scene.border_segments(line)
+    elevation_report['water_levels'] = len(water_levels)
     ground_z = scene.GroundField(dem, anchors, edges=edges)
     context.progress('ground', 0.55)
     # Low decks (terrain within 2 m under the asphalt) are cut out of the ground, and the
@@ -1202,6 +1236,7 @@ def build(cfg, root, context):
         markings = []
     elevation_report['ground_anchor_points'] = len(anchors)
     buildings, greens, parking_polys, osm_footprints = [], [], [], []
+    building_inputs = []
     facade_fixes = visual_tags.overrides(context.resource('style.json'))
     dna_cfg = cfg.get('local_visual_dna') or {}
     dna = local_dna.Field(read_json(context.config_file(dna_cfg['file'])), geo_point, cfg['seed']) if dna_cfg else None
@@ -1232,42 +1267,62 @@ def build(cfg, root, context):
         polygon = Polygon([nodes[r] for r in refs])
         if not polygon.is_valid or not clip.intersects(polygon):
             continue
-        coords = [geo_point(*nodes[r]) for r in refs[:-1]]
         if 'building' in t or 'building:part' in t:
-            counts['buildings']+=1
-            default_levels = (2 if t.get('building')=='apartments' else 1) if is_rural else (5 if t.get('building')=='apartments' else 2)
-            levels = number(t.get('building:levels'),default_levels)
-            h = number(t.get('height'),levels*3+(1.8 if is_rural else 0))
-            mode = 'height' if 'height' in t else ('levels' if 'building:levels' in t else 'assumed')
-            counts['building_height_'+mode]+=1
-            item = {'id':wid,'points':coords,'height':max(2,min(h,180)),'height_source':mode,'levels':levels,**visual_tags.classify(wid,t,facade_fixes)}
-            if dna:
-                dna.apply(item, t)
-            if 'shop' in t or 'amenity' in t or t.get('building') in ('retail','commercial','supermarket'):
-                item['ground_floor']='shop'
-            footprint = Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)
-            osm_footprints.append(footprint)
-            if passages is not None and footprint.intersects(passages):
-                # Building passage: full-height block outside the carriageway, raised block above it.
-                counts['buildings_split_for_passages']+=1
-                for part, raised in ((footprint.difference(passages),False),(footprint.intersection(passages),True)):
-                    for poly in (part.geoms if part.geom_type=='MultiPolygon' else [part]):
-                        if poly.geom_type!='Polygon' or poly.area<1:
-                            continue
-                        ring = list(poly.exterior.coords)[:-1]
-                        piece = {**item,'points':[point(x,y) for x,y in ring]}
-                        if raised:
-                            piece['base']=PASSAGE_CLEARANCE
-                        buildings.append(piece)
-                continue
-            buildings.append(item)
-        elif is_rural and rural.cover(t):
-            greens.append({'id':wid,'kind':rural.cover(t),'poly':Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)})
-        elif t.get('landuse') in ('forest','grass','recreation_ground','meadow','village_green') or t.get('natural') in ('wood','scrub','grassland','water') or t.get('leisure') in ('park','garden','playground','pitch'):
-            kind = 'water' if t.get('natural')=='water' else ('wood' if t.get('landuse')=='forest' or t.get('natural') in ('wood','scrub') else 'green')
-            greens.append({'id':wid,'kind':kind,'poly':Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)})
+            building_inputs.append((wid, t, [nodes[r] for r in refs[:-1]]))
+        elif landcover.kind(t, is_rural):
+            greens.append({'id':wid,'kind':landcover.kind(t, is_rural),'poly':Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)})
         elif t.get('amenity')=='parking' and 'building' not in t and t.get('parking','surface') in ('surface','lane','street_side'):
             parking_polys.append(Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0))
+    counts['landcover_relations'] = len(relation_areas)
+    greens = relation_areas + greens
+    for rid, t, shape in osm_buildings.relation_footprints(root, nodes):
+        if not clip.intersects(shape):
+            continue
+        counts['building_relations'] += 1
+        for piece in osm_buildings.polygons(shape):
+            for part in osm_buildings.hole_free(piece):
+                building_inputs.append((rid, t, list(part.exterior.coords)[:-1]))
+    building_footprints = {}
+    def add_building(bid, t, ring):
+        footprint = Polygon([net.convertLonLat2XY(*q) for q in ring]).buffer(0)
+        if footprint.is_empty or footprint.geom_type != 'Polygon':
+            return
+        coords = [geo_point(*q) for q in ring]
+        counts['buildings']+=1
+        default_levels = (2 if t.get('building')=='apartments' else 1) if is_rural else (5 if t.get('building')=='apartments' else 2)
+        if not is_rural and 'building:levels' not in t and 'height' not in t:
+            default_levels = osm_buildings.assumed_levels(t, footprint.area, default_levels)
+        levels = number(t.get('building:levels'),default_levels)
+        h = number(t.get('height'),levels*3+(1.8 if is_rural else 0))
+        mode = 'height' if 'height' in t else ('levels' if 'building:levels' in t else 'assumed')
+        counts['building_height_'+mode]+=1
+        item = {'id':bid,'points':coords,'height':max(2,min(h,180)),'height_source':mode,'levels':levels,**visual_tags.classify(bid,t,facade_fixes)}
+        item['_tags'], item['_part'] = t, 'building:part' in t and 'building' not in t
+        min_height = osm_buildings.number(t.get('min_height'))
+        if min_height and 0 < min_height < item['height']-0.5:
+            item['base'] = min_height
+        if 'shop' in t or 'amenity' in t or t.get('building') in ('retail','commercial','supermarket'):
+            item['ground_floor']='shop'
+        osm_footprints.append(footprint)
+        if passages is not None and footprint.intersects(passages):
+            # Building passage: full-height block outside the carriageway, raised block above it.
+            counts['buildings_split_for_passages']+=1
+            for part, raised in ((footprint.difference(passages),False),(footprint.intersection(passages),True)):
+                for poly in (part.geoms if part.geom_type=='MultiPolygon' else [part]):
+                    if poly.geom_type!='Polygon' or poly.area<1:
+                        continue
+                    ring = list(poly.exterior.coords)[:-1]
+                    piece = {**item,'points':[point(x,y) for x,y in ring]}
+                    if raised:
+                        piece['base']=PASSAGE_CLEARANCE
+                    building_footprints[id(piece)] = poly
+                    buildings.append(piece)
+            return
+        building_footprints[id(item)] = footprint
+        buildings.append(item)
+    for bid, t, ring in building_inputs:
+        add_building(bid, t, ring)
+    buildings = osm_buildings.apply_parts(buildings, building_footprints, counts)
     context.progress('buildings', 0.7)
     # Building enrichment (INTEGRATE): DATA candidates merged strictly after the
     # OSM buildings above. OSM keeps priority (they are never mutated, only
@@ -1323,21 +1378,68 @@ def build(cfg, root, context):
                                          + len(exclusion['water_excluded']) + len(exclusion['duplicate_overlap_dropped']))
         counts['enrichment_candidates'] = len(features)
     fences, row_trees = [], []
-    if dna:
-        for b in buildings:
-            if 'local_style' not in b:
-                dna.apply(b, way_tags.get(str(b['id']), {}))
+    # Nothing stands on a driving surface (playtest 2026-10-06, note 7): footprints over
+    # the at-grade carriageway are clipped, or dropped when mostly on it, and reported.
+    drive_surface = road_geometry.union([scene.footprint([r for r in road_strips if not r['bridge']
+                                                          and edge_level.get(r['edge'], 0) == 0]), *junction_polys])
+    clearance_audit = []
+    buildings = osm_buildings.clear_carriageway(buildings, building_footprints, drive_surface, point,
+                                                net.convertXY2LonLat, counts, clearance_audit)
+    # Read every item's facts first: a visible outline is processed (and its markers
+    # removed) before the parts that inherit from it.
+    facts = [(b.get('_tags') or way_tags.get(str(b['id']), {}), b.get('_parent')) for b in buildings]
+    facts = [(t, parent, parent.get('_tags') if parent else None) for t, parent in facts]
+    for b, (t, parent, parent_tags) in zip(buildings, facts):
+        if parent:
+            b['style_key'] = str(parent['id'])
+        if dna and 'local_style' not in b:
+            dna.apply(b, {**{k: v for k, v in (parent_tags or {}).items() if k in osm_buildings.APPEARANCE}, **t})
+        if 'local_style' not in b and osm_buildings.wants_style(t, parent_tags):
+            osm_buildings.observe(b, t, parent_tags)
+            counts['observed_styles'] += 1
+        osm_buildings.roof_colour(b, t, parent_tags)
+        style = b.get('local_style')
+        if style and style['roof'] in osm_buildings.SHAPED_ROOFS:
+            reason = osm_buildings.shaped_roof(b, style['roof'], osm_buildings.number(t.get('roof:height')))
+            b['local_style'] = style = {**style}
+            if reason:
+                style['roof_fallback'] = reason
+            counts['shaped_roofs_'+(style['roof'] if not reason else 'fallback')] += 1
+        elif style:
             local_dna.roof(b)
-            if b.get('local_style', {}).get('roof_fallback'):
+        if dna and style:
+            if b['local_style'].get('roof_fallback'):
                 dna.counts['roof_fallbacks'] += 1
-            dna.counts['gabled_roofs'] += 'roof_triangles' in b
+            dna.counts['gabled_roofs'] += b.get('roof_shape_rendered', 'gabled') == 'gabled' and 'roof_triangles' in b
+        for key in ('_tags', '_part', '_parent'):
+            b.pop(key, None)
     if is_rural:
         fences, row_trees, gardens = rural.dress(buildings,way_tags,root,nodes,net,point,road_cut,
                                       area_xy if area_xy is not None else corridor.to_net(map_area,net))
-        greens = rural.relation_covers(root,nodes,net.convertLonLat2XY,map_area)+greens+gardens
+        greens = greens+gardens
         counts['rural_fences'] = len(fences)
         counts['rural_roofs'] = sum('roof_triangles' in b for b in buildings)
         counts['tree_row_instances'] = len(row_trees)
+    else:
+        # Urban private sector: yards, setback fences, a garden tree, OSM fences and tree rows.
+        fences, row_trees, gardens = rural.dress(buildings, way_tags, root, nodes, net, point, road_cut,
+                                                 area_xy if area_xy is not None else corridor.to_net(map_area, net),
+                                                 house=rural.private_houses(buildings, way_tags, point), roofs=False)
+        greens = greens + gardens
+        counts['urban_fences'] = len(fences)
+        counts['urban_gardens'] = len(gardens)
+        counts['tree_row_instances'] = len(row_trees)
+    if use_roadgen:
+        # Continuous median barrier of divided motorways/trunks, open at every junction
+        # and crossing: wherever the carriageway itself reaches the median line.
+        for median in profile_report.get('medians', []):
+            line = LineString(median['points']).difference(carriageway.buffer(MEDIAN_CLEARANCE))
+            for part in ([line] if line.geom_type == 'LineString' else getattr(line, 'geoms', [])):
+                if part.geom_type == 'LineString' and part.length >= MEDIAN_MIN_RUN:
+                    fences.append({'id': 'median_'+'_'.join(median['ways']), 'kind': 'barrier', 'height': MEDIAN_HEIGHT,
+                                   'points': [point(x, y) for x, y in part.coords],
+                                   'provenance': 'derived median barrier between paired carriageways; not observed'})
+                    counts['median_barriers'] += 1
     signals=[]
     for tls in net.getTrafficLights():
         for incoming,outgoing,index in tls.getConnections():
@@ -1407,19 +1509,20 @@ def build(cfg, root, context):
     if area_xy is not None:
         parking = parking.intersection(area_xy)
     green_out=[]
-    dna_building_cut = unary_union(osm_footprints) if dna else None
+    dna_building_cut = osm_buildings.union(osm_footprints) if dna else None
     cover_local, parking_local = scene.LocalCut(cover_cut), scene.LocalCut(parking)
+    # One cover per point of ground: priority order, earlier areas cut later ones.
+    greens = landcover.resolve(greens)
     for area in greens:
-        poly=parking_local.subtract_from(cover_local.subtract_from(area['poly']))
-        if is_rural:
-            poly=poly.difference(unary_union([a['cut'] for a in greens if 'cut' in a]))
+        poly=osm_buildings.robust(lambda g: parking_local.subtract_from(cover_local.subtract_from(g)), area['poly'])
         if area_xy is not None:
             poly=poly.intersection(area_xy)
         if dna and area['kind'] != 'water':
-            poly = poly.difference(dna_building_cut)
+            poly = osm_buildings.robust(lambda a, b: a.difference(b), poly, dna_building_cut)
         if poly.is_empty:
             continue
-        green_out.append({'id':area['id'],'kind':area['kind'],'triangles':[[point(x,y) for x,y in tri] for tri in scene.draped_triangles(poly)]})
+        level = water_levels.get(area['id']) if area['kind'] == 'water' else None
+        green_out.append({'id':area['id'],'kind':area['kind'],'triangles':[[point(x,y,level) for x,y in tri] for tri in scene.draped_triangles(poly)]})
         area['cut']=poly
         if area['kind'] in ('green','wood','orchard'):
             left,bottom,right,top=poly.bounds
@@ -1445,7 +1548,7 @@ def build(cfg, root, context):
                 trees.append(point(x,y))
                 tree_records.append({'position': trees[-1], 'provenance': 'osm', 'osm': 'node/'+n.get('id')})
                 counts['osm_trees']+=1
-    covered = unary_union([road_cut, parking, *[a['cut'] for a in greens if 'cut' in a]])
+    covered = osm_buildings.union([road_cut, parking, *[a['cut'] for a in greens if 'cut' in a]])
     ground=[]
     west,south,east,north=cfg['bbox']
     x0,y0=net.convertLonLat2XY(west,south); x1,y1=net.convertLonLat2XY(east,north)
@@ -1454,7 +1557,7 @@ def build(cfg, root, context):
     # Stitch the road profile vertices into the ground cut boundary: the draped triangles
     # then carry ribbon-profile stations and follow the same piecewise-linear slope as the
     # drawn road edges (GroundField snaps those vertices to the border segment heights).
-    ground_polys = scene.stitch_vertices(scene.polygons(area_box.difference(covered)), profile)
+    ground_polys = scene.stitch_vertices(scene.polygons(osm_buildings.robust(lambda a, b: a.difference(b), area_box, covered)), profile)
     ground=[[point(a,b) for a,b in tri] for poly in ground_polys for tri in scene.draped_triangles(poly)]
     parking_tris=[[point(a,b) for a,b in tri] for tri in scene.draped_triangles(parking)]
     paths=[{**pth,'points':xyz(pth['points'])} for pth in scene.paths(ways,nodes,tags,net.convertLonLat2XY,covered.difference(parking),ground_z)]
@@ -1525,8 +1628,9 @@ def build(cfg, root, context):
         world['road_elevation'] = {'version': 1, 'mode': 'distance_filtered',
                                    'provenance': 'derived/synthetic', 'sample_step_m': road_elevation.STEP}
     world['region_profile'] = cfg.get('region_profile', 'experimental')
-    if is_rural:
+    if fences:
         world['fences'] = fences
+    if is_rural:
         world['visual_profile'] = 'rural'
         world['traffic_count'] = cfg.get('traffic_count',20)
         world['map_boundary_cuts'] = map_clip_report
@@ -1535,7 +1639,7 @@ def build(cfg, root, context):
         world['area']=[[round(x-cx,3),0.0,round(-(y-cy),3)] for x,y in area_xy.exterior.coords]
     context.progress('tiles', 0.87)
     tile_count=write_world(world, context.world)
-    report={'counts':dict(counts),'elevation':elevation_report,'lanes':len(lanes),'junctions':len(junctions),'sliver_triangles_dropped':world.get('sliver_triangles_dropped',0),'traffic_lights':len(net.getTrafficLights()),'terrain_tiles':sorted(terrain.used),'assumptions':['OSM-derived lane widths/speeds and missing lanes may use SUMO defaults.','Signal phases are synthetic. Traffic demand is generated separately by the Godot adapter.','Road heights: coarse DEM smoothed along the road graph; bridge decks assumed 6.5 m (road) / 7 m (rail) above crossings, tunnels 3.5 m per layer, ramps limited to 6% (12% service). Not surveyed heights.','Building multipolygon relations are retained in source but rendering currently uses closed ways; holes/parts require review.','Initial rectangle includes neighboring streets; not an administrative boundary.','Road signs are derived from the SUMO network and OSM tags; Kyiv OSM has almost no traffic_sign nodes. Each record carries provenance = osm | derived. Signal phase programs are netconvert defaults, not observed Kyiv timings.'],'spawn':world['spawn'],'building_enrichment':enrichment_audit,'tiles':tile_count,**({'pois':poi_report} if poi_report else {})}
+    report={'counts':dict(counts),'elevation':elevation_report,'lanes':len(lanes),'junctions':len(junctions),'sliver_triangles_dropped':world.get('sliver_triangles_dropped',0),'traffic_lights':len(net.getTrafficLights()),'terrain_tiles':sorted(terrain.used),'assumptions':['OSM-derived lane widths/speeds and missing lanes may use SUMO defaults.','Signal phases are synthetic. Traffic demand is generated separately by the Godot adapter.','Road heights: coarse DEM smoothed along the road graph; bridge decks assumed 6.5 m (road) / 7 m (rail) above crossings, tunnels 3.5 m per layer, ramps limited to 6% (12% service). Not surveyed heights.','Building multipolygon relations are split into hole-free pieces; S3DB outlines covered by building:part are hidden; pyramidal/hipped/dome/onion roofs are derived solids within the footprint.','Initial rectangle includes neighboring streets; not an administrative boundary.','Road signs are derived from the SUMO network and OSM tags; Kyiv OSM has almost no traffic_sign nodes. Each record carries provenance = osm | derived. Signal phase programs are netconvert defaults, not observed Kyiv timings.'],'spawn':world['spawn'],'building_enrichment':enrichment_audit,'buildings_on_carriageway':clearance_audit,'roundabout_lanes':roundabout_report,'lane_count_suspects':lane_suspects,'tiles':tile_count,**({'pois':poi_report} if poi_report else {})}
     context.progress('surface_audit', .89)
     surfaces_report = surface_audit.audit(world, [world])
     write_json(BUILD/'surface_audit.json', surfaces_report)

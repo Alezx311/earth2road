@@ -67,6 +67,9 @@ static func make() -> Dictionary:
 	mats.green = surface("grass", 3.0, Color(0.9, 0.95, 0.85), Color("587a45"), {"macro_strength": 0.25, "macro_tint": Color(1.15, 1.05, 0.7), "roughness_bias": 0.25})
 	mats.wood = surface("grass", 3.0, Color(0.62, 0.72, 0.58), Color("3f5a36"), {"macro_strength": 0.3, "roughness_bias": 0.25})
 	mats.water = surface("", 1.0, Color.WHITE, Color("3d5e6b"), {"roughness_bias": -0.8})
+	# Sports grounds (playtest 2026-10-06, note 9): a brighter mown pitch and a tartan track.
+	mats.pitch = surface("grass", 2.0, Color(1.05, 1.2, 0.85), Color("4f8a3c"), {"macro_strength": 0.12, "roughness_bias": 0.2})
+	mats.track = surface("", 1.0, Color.WHITE, Color("9a4a3a"), {"macro_strength": 0.1, "roughness_bias": 0.1})
 	mats.roof = surface("gravel", 3.0, Color(0.42, 0.42, 0.43), Color("5b5d5f"), {"macro_strength": 0.2})
 	mats.dirt = surface("ground", 3.0, Color(1.0, 0.88, 0.7), Color("9b896c"), {"macro_strength":0.2})
 	mats.gravel = surface("gravel", 2.0, Color(0.95, 0.88, 0.73), Color("a99e87"), {"normal_strength":0.9})
