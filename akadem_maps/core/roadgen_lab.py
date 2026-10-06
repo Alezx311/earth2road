@@ -31,7 +31,8 @@ CASES = [
     {'id':'grade_cross', 'angles':[0,90,180,270], 'slope':[0,.03]},
     {'id':'grade_change', 'angles':[0,120,240], 'slope':[.025,.025]},
     {'id':'short_transition', 'angles':[0,90,180], 'length':18, 'expected':'fallback'},
-    {'id':'close_junctions', 'angles':[0,90,180], 'special':'close', 'expected':'fallback'},
+    # Close neighbours share their lane: each template keeps to its half (2026-10-05).
+    {'id':'close_junctions', 'angles':[0,90,180], 'special':'close', 'expected':'v2'},
     {'id':'divided_island', 'angles':[0,12,90,180], 'expected':'fallback'},
     {'id':'roundabout', 'angles':[0,90,180,270], 'special':'roundabout', 'expected':'fallback'},
     {'id':'five_arms', 'angles':[0,72,144,216,288], 'expected':'fallback'},

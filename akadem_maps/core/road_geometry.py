@@ -79,6 +79,16 @@ def smooth_turn(points, tolerance=.3):
     return result
 
 
+def junction_metadata(net, members, lane_metadata):
+    """Topology survives trimming/absorption of short approach meshes."""
+    records = [lane_metadata[lane.getID()] for member in members
+               for edge in net.getNode(member).getIncoming()+net.getNode(member).getOutgoing()
+               for lane in edge.getLanes() if lane.getID() in lane_metadata]
+    return {'nodes': sorted(members),
+            'ways': sorted({w for r in records for w in r['ways']}),
+            'levels': [list(s) for s in sorted({tuple(s) for r in records for s in r['levels']})]}
+
+
 def metadata(net, tags, refs):
     result = {}
     for edge in net.getEdges():
@@ -202,9 +212,57 @@ def make_height(original, main_mesh, main_area, line, start, end):
     return height
 
 
-def junction_surface(poly, adjoining, fallback):
-    """Constrained boundary + harmonic interior, after subtracting same-level roads."""
-    mesh = TriangleIndex((r['lane'], r.get('triangles', list(ribbon_triangles(r['points'], r['width']))), r['topology']) for r in adjoining)
+def harmonic(values, fixed, src, dst, count, tol=1e-6):
+    """Solve the graph Laplace equation for the free vertices (conjugate gradients).
+
+    Free vertices on the outline average their neighbours like interior ones, a
+    natural boundary: the surface between road mouths follows the roads instead
+    of an independent kerb estimate. Starting from `values`, a component without
+    any fixed vertex keeps its mean."""
+    free = ~fixed
+    if not free.any() or fixed.sum() == 0:
+        return values
+    n = len(values)
+    def apply(x):  # (D - W) x
+        return count*x-np.bincount(src, weights=x[dst], minlength=n)
+    base = values.copy()
+    base[free] = 0.
+    b = -apply(base)
+    x = values.copy()
+    x[fixed] = 0.
+    r = np.where(free, b-apply(x), 0.)
+    p = r.copy()
+    rr = float(r@r)
+    for _ in range(4*n):
+        if rr < tol*tol:
+            break
+        q = np.where(free, apply(p), 0.)
+        pq = float(p@q)
+        if pq <= 1e-30:
+            break
+        a = rr/pq
+        x += a*p
+        r -= a*q
+        new = float(r@r)
+        p = r+(new/rr)*p
+        rr = new
+    out = values.copy()
+    out[free] = x[free]
+    return out
+
+
+def junction_surface(poly, adjoining, fallback, free_boundary=False, anchors=()):
+    """Constrained boundary + harmonic interior, after subtracting same-level roads.
+
+    With `free_boundary` only the road mouths are fixed; the rest of the outline
+    is solved with the interior instead of pinned to `fallback`, whose inverse
+    distance blend bulges between approaches of different grade. `anchors` are
+    connected roads that overlap the junction without being cut from it; the
+    footprint is subtracted too. Merely pinning vertices above an overlapping
+    road still leaves triangles interpolating across its edge at another height.
+    """
+    roads = list(adjoining)+list(anchors) if free_boundary else adjoining
+    mesh = TriangleIndex((r['lane'], r.get('triangles', list(ribbon_triangles(r['points'], r['width']))), r['topology']) for r in roads)
     cut = union(mesh.polys)
     poly = union(scene.polygons(robust('difference', poly, cut)))
     knots = [p for pg in mesh.polys for p in pg.exterior.coords]
@@ -222,7 +280,7 @@ def junction_surface(poly, adjoining, fallback):
             row.append(lookup[key])
         ids.append(row)
     if not points:
-        return poly, [], fallback
+        return poly, [], lambda x,y:height_on(mesh,x,y,fallback(x,y)) if mesh.polys else fallback(x,y)
     values = np.array([fallback(*p) for p in points])
     fixed = np.zeros(len(points), dtype=bool)
     boundary = poly.boundary
@@ -231,7 +289,7 @@ def junction_surface(poly, adjoining, fallback):
         if mesh.polys and cut.distance(q) < .003:
             values[i] = height_on(mesh, *p, values[i])
             fixed[i] = True
-        elif boundary.distance(q) < 1e-7:
+        elif boundary.distance(q) < 1e-7 and not (free_boundary and mesh.polys):
             fixed[i] = True
     neighbors = [set() for _ in points]
     for tri in ids:
@@ -240,13 +298,15 @@ def junction_surface(poly, adjoining, fallback):
     src = np.array([i for i, ns in enumerate(neighbors) for _ in ns], dtype=int)
     dst = np.array([j for ns in neighbors for j in sorted(ns)], dtype=int)
     count = np.maximum(1, np.bincount(src, minlength=len(points)))
-    for _ in range(250):
+    for _ in range(0 if free_boundary else 250):
         avg = np.bincount(src, weights=values[dst], minlength=len(points))/count
         avg[fixed] = values[fixed]
         if np.max(np.abs(avg-values)) < 1e-5:
             values = avg
             break
         values = avg
+    if free_boundary:
+        values = harmonic(values, fixed, src, dst, count)
     triangles = [[(*points[i], float(values[i])) for i in tri] for tri in ids]
     output = TriangleIndex([('junction', triangles, {})])
     def height(x, y):

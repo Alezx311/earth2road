@@ -63,6 +63,32 @@ class SurfaceAuditTests(unittest.TestCase):
 
 
 class SeamTests(unittest.TestCase):
+    def test_absorbed_approach_keeps_junction_connected_to_its_street(self):
+        from types import SimpleNamespace
+        lane = SimpleNamespace(getID=lambda:'short_0')
+        edge = SimpleNamespace(getLanes=lambda:[lane])
+        node = SimpleNamespace(getIncoming=lambda:[], getOutgoing=lambda:[edge])
+        net = SimpleNamespace(getNode=lambda nid:node)
+        meta = {'short_0': {'ways':['street'], 'levels':[[0,False,False]]}}
+        topo = geometry.junction_metadata(net,['junction'],meta)
+        # The short strip has been absorbed: it is absent from adjoining meshes.
+        # A surviving next segment of the same street still constrains overlap.
+        next_road = road('street',[(0,0,2),(20,0,2)],nodes=('next','last'))
+        self.assertEqual(audit.relationship(topo,next_road['topology']),'connected')
+        _,tris,height = geometry.junction_surface(box(2,-1,8,1),[],lambda x,y:0.,
+                                                  free_boundary=True,anchors=[next_road])
+        self.assertFalse(tris)  # no second asphalt layer above the owning road
+        self.assertAlmostEqual(height(5,0),2.)
+        _,tris,height = geometry.junction_surface(box(2,-3,8,3),[],lambda x,y:0.,
+                                                  free_boundary=True,anchors=[next_road])
+        self.assertTrue(tris)
+        area = unary_union([Polygon([p[:2] for p in tri]) for tri in tris])
+        self.assertLess(area.intersection(box(2,-2,8,2)).area,1e-8)
+        self.assertAlmostEqual(height(5,0),2.)
+        meta['short_0']['levels'] = [[1,True,False]]
+        elevated = geometry.junction_metadata(net,['junction'],meta)
+        self.assertNotEqual(audit.relationship(elevated,next_road['topology']),'connected')
+
     def test_opposite_directions_share_one_correction(self):
         from akadem_maps.core.scene import offset_line
         # Only the forward lane touches the main road; the reverse one must follow it.
@@ -135,6 +161,20 @@ class SeamTests(unittest.TestCase):
                     self.assertAlmostEqual(z,.03*x,places=6)
         for x in (5, 13.5, 25):
             self.assertAlmostEqual(height(x,5),.03*x,places=5)
+
+    def test_free_junction_boundary_follows_the_roads(self):
+        # Two approaches at 0 m and 1 m; an independent kerb estimate (2.5 m)
+        # bulges the pinned outline, a natural boundary stays between the roads.
+        west = road('west', [(-20,0,0),(0,0,0)], width=6)
+        east = road('east', [(14,0,1),(34,0,1)], width=6)
+        _, pinned, _ = geometry.junction_surface(box(0,-3,14,3), [west,east], lambda x,y: 2.5)
+        _, free, height = geometry.junction_surface(box(0,-3,14,3), [west,east], lambda x,y: 2.5,
+                                                    free_boundary=True)
+        self.assertGreater(max(z for t in pinned for *_, z in t), 2.)
+        zs = [z for t in free for *_, z in t]
+        self.assertGreaterEqual(min(zs), -1e-6)
+        self.assertLessEqual(max(zs), 1+1e-6)
+        self.assertLess(abs(height(7,0)-.5), .1)
 
     def test_curve_has_fixed_endpoints_and_stays_in_corridor(self):
         from shapely.geometry import LineString

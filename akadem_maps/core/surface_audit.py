@@ -176,7 +176,7 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
                 pts = [((pa.x+pb.x)/2, (pa.y+pb.y)/2)]
             point = max(pts, key=lambda p: abs(at(mesh.planes[i], *p)-at(mesh.planes[k], *p)))
             h0, h1 = at(mesh.planes[i], *point), at(mesh.planes[k], *point)
-            delta = abs(h1-h0)
+            delta = float(abs(h1-h0))
             if delta <= reporting_floor:
                 continue
             key = (*pair, math.floor(point[0]/2), math.floor(point[1]/2))
@@ -260,7 +260,7 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
     groups = {}
     for category in ('connected', 'grade_separated', 'ambiguous'):
         subset = [r for r in records if r['classification'] == category]
-        groups[category] = {'contacts': len(subset), **{f'over_{cm}cm': sum(r['step_m'] > cm/100 for r in subset) for cm in (10, 30, 60)},
+        groups[category] = {'contacts': len(subset), **{f'over_{cm}cm': int(sum(r['step_m'] > cm/100 for r in subset)) for cm in (10, 30, 60)},
                             'max_m': max((r['step_m'] for r in subset), default=0.)}
     regressions = classify_regressions(index.get('id'), mesh, records)
     return {'version': 2, 'provenance': 'generated geometry; not surveyed Kyiv road heights',
@@ -268,17 +268,18 @@ def audit(index, tiles, lane_meta=None, junction_meta=None):
             'method': 'exact triangle contacts, maximum affine height difference; deduplicated per surface pair / 2 m cell',
             'coordinates': 'world=[east,up,south]; beamng=[east,north,up], before export vertical_offset',
             'triangles': len(mesh.polys), 'steps': groups,
-            'smooth': {'spacing_m': 2, 'over_2pct': len(changes), 'over_5pct': sum(r['change'] > .05 for r in changes),
+            'smooth': {'spacing_m': 2, 'over_2pct': len(changes), 'over_5pct': int(sum(r['change'] > .05 for r in changes)),
                        'worst': sorted(changes, key=lambda r: -r['change'])[:100], 'all': changes},
             'profile_smooth': {'spacing_m': 2, 'over_2pct':len(profile_changes),
-                               'over_5pct':sum(r['change'] > .05 for r in profile_changes)},
+                               'over_5pct':int(sum(r['change'] > .05 for r in profile_changes))},
             'absolute_grade': {'provenance':'generated; thresholds are warnings, not surveyed limits',
                                'limits':{'default':.06,'service':.12}, 'over_limit':len(surface_steep),
                                'worst':sorted(surface_steep,key=lambda r:-abs(r['grade']))[:100]},
             'profile_grade': {'over_limit':len(steep),'worst':sorted(steep,key=lambda r:-abs(r['grade']))[:100]},
             'cross_section': {'samples':cross_samples, 'missing_surface':cross_missing,
                               'missing_examples':cross_missing_examples,
-                              'over_6pct':len(crossfalls), 'worst':sorted(crossfalls,key=lambda r:-abs(r['grade']))[:100]},
+                              'over_6pct':len(crossfalls), 'worst':sorted(crossfalls,key=lambda r:-abs(r['grade']))[:100],
+                              'all':crossfalls},
             'lane_surface_errors': {'over_5cm': len(lane_surface_errors), 'worst': sorted(lane_surface_errors, key=lambda r: -r['error_m'])[:100]},
             'acceptance': 'blocked' if groups['connected']['over_60cm'] else 'pending',
             'worst': records[:100], 'contacts': records, 'regression_sites': regressions}

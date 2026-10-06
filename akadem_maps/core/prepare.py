@@ -332,7 +332,8 @@ def overlap_targets(road_ways, xy):
                 targets[nid] = (best[1], best[2], best[3], 1.0, True)
     return targets
 
-def road_node_heights(root, nodes, tags, sample, iterations=40, include_tracks=False, ground_override=None):
+def road_node_heights(root, nodes, tags, sample, iterations=40, include_tracks=False, ground_override=None,
+                      crest=False, dense_pairs=False):
     """One height per drivable OSM node. Every lane, junction and car takes its height
     from this profile (see RoadHeights), so all lanes of a road agree at each station.
 
@@ -432,7 +433,10 @@ def road_node_heights(root, nodes, tags, sample, iterations=40, include_tracks=F
                 below = ground_on(orefs, j, hit[1]) + structure_level(ot)*TUNNEL_DEPTH*(structure_level(ot) < 0)
                 need = below + BRIDGE_CLEARANCE[kind]
                 at = along[i] + (along[i+1]-along[i])*hit[0]
-                deck = [max(z, need-grade*abs(s-at)) for z, s in zip(deck, along)]
+                # v2 shapes the dense deck as a crest curve (road_elevation.deck_clearance);
+                # its ends must already stand that high.
+                drop = ((lambda d: float(road_elevation.crest_drop(d, grade))) if crest else (lambda d: grade*d))
+                deck = [max(z, need-drop(abs(s-at))) for z, s in zip(deck, along)]
         for nid, z in zip(refs, deck):
             offset[nid] = max(offset.get(nid, 0.0), z-ground[nid])
 
@@ -473,7 +477,11 @@ def road_node_heights(root, nodes, tags, sample, iterations=40, include_tracks=F
     # the roads joining them so a side street does not get a kink.
     closable = [n for n, p in partners.items()
                 if offset.get(n, 0.0) >= 0 and min(offset.get(p[0], 0.0), offset.get(p[1], 0.0)) >= 0]
-    for rnd in range(PAIR_CLOSE_ROUNDS):
+    # With dense_pairs (v2) the carriageway profiles were already averaged station by
+    # station (road_elevation.pair_carriageways). This node pass reads the partner as a
+    # chord between its OSM nodes, hundreds of metres apart on a highway, and pushed
+    # junction nodes up to 1.3 m off the paired profile.
+    for rnd in range(0 if dense_pairs else PAIR_CLOSE_ROUNDS):
         fixed = {n: 0.5*partners[n][3]*(across(height, partners[n])-height[n]) for n in closable}
         if rnd == 0:
             report['paired_gap_before_max_m'] = round(2*max((abs(c) for c in fixed.values()), default=0.0), 2)
@@ -718,7 +726,8 @@ def drop_slivers(world):
             before = len(item['triangles'])
             item = {**item, 'triangles': keep(item['triangles'])}
             dropped += before - len(item['triangles'])
-            if item['triangles'] or item.get('rings'):
+            # A cluster member keeps its record (no surface): its turning lanes' audit owner.
+            if item['triangles'] or item.get('rings') or item.get('cluster'):
                 out.append(item)
         world[field] = out
     return dropped
@@ -864,9 +873,12 @@ def build(cfg, root, context):
             net.convertLonLat2XY, height)
         node_heights, way_refs, elevation_report = road_node_heights(
             root, nodes, tags, lambda lon,lat: terrain.sample(lon,lat)-base,
-            include_tracks=is_rural, ground_override=ground_nodes)
+            include_tracks=is_rural, ground_override=ground_nodes, crest=True, dense_pairs=True)
         structure_ways = {wid for wid,w in ways.items() if structure_level(tags(w)) != 0}
         profiles = road_elevation.constrained_profiles(profiles, node_heights, structure_ways)
+        profile_report['deck_clearance'] = road_elevation.deck_clearance(
+            profiles, way_refs, {wid: surface_audit.structure(tags(ways[wid])) for wid in profiles},
+            BRIDGE_CLEARANCE['road'], MAX_RAMP_GRADE['default'])
         profile_report['max_shared_node_constraint_shift_m'] = round(max(
             (abs(node_heights[n]-z) for n,z in ground_nodes.items()),default=0.),4)
         elevation_report['profile'] = profile_report
@@ -1039,23 +1051,36 @@ def build(cfg, root, context):
         ranks = [road_meta[l.getID()]['rank'] for e in node.getIncoming()+node.getOutgoing()
                  for l in e.getLanes() if l.getID() in road_meta]
         return min(ranks, default=99), node.getID()
+    # A cluster template belongs to its first member; the others only take its heights.
+    patch_member = {m: nid for nid, p in road_patches.items() for m in p.get('members', [nid])}
     for node in sorted(net.getNodes(), key=priority):
+        templated = node.getID() in patch_member
+        members = road_patches[patch_member[node.getID()]]['members'] if node.getID() in road_patches else [node.getID()]
         shape = node.getShape()
         parts = [Polygon(shape).buffer(0)] if len(shape) >= 3 else []
         for lane_id in road_z.internal_by_node.get(node.getID(), []):
             lane = net.getLane(lane_id)
             if lane.allows('passenger') and len(road_z.shape(lane)) >= 2 and LineString(road_z.shape(lane)).length > 0.05:
                 parts.append(scene.strip_polygon(scene.lane_xyz(lane, road_z), lane.getWidth()+.1))
-        if not parts:
+        # A dead end without a turnaround has no SUMO junction area, but may have a template.
+        if not parts and not templated:
             continue
-        poly = road_geometry.union(parts).buffer(0)
-        if poly.is_empty:
+        poly = road_geometry.union(parts).buffer(0) if parts else Polygon()
+        if poly.is_empty and not templated:
             continue
+        if node.getID() in road_patches:
+            poly = road_patches[node.getID()]['poly']
         adjoining = [road_strips[int(k)] for k in strip_tree.query(poly.buffer(.01))
-                     if node.getID() in road_strips[int(k)]['topology']['nodes']]
+                     if set(members) & set(road_strips[int(k)]['topology']['nodes'])]
         levels = {tuple(s) for r in adjoining for s in r['topology']['levels']}
-        topology = {'nodes': [node.getID()], 'ways': sorted({w for r in adjoining for w in r['topology']['ways']}),
+        topology = {'nodes': sorted(members), 'ways': sorted({w for r in adjoining for w in r['topology']['ways']}),
                     'levels': [list(s) for s in sorted(levels)]}
+        if use_roadgen:
+            # A neighbouring template can consume a short approach completely.
+            # Its missing mesh must not erase the junction's source identity:
+            # otherwise same-street overlapping lanes are treated as unrelated.
+            topology = road_geometry.junction_metadata(net, members, road_meta)
+            levels = {tuple(s) for s in topology['levels']}
         # Mixed explicit structure levels are kept for audit, never silently joined by XY.
         compatible = adjoining if len(levels) <= 1 else []
         previous = {i for cell in cells(poly) for i in joined_grid.get(cell, [])}
@@ -1065,8 +1090,18 @@ def build(cfg, root, context):
         if node.getID() in road_patches:
             patch = road_patches[node.getID()]
             poly, surface_tris, z_at = patch['poly'], patch['triangles'], patch['height']
+        elif templated:
+            poly, surface_tris, z_at = Polygon(), [], road_patches[patch_member[node.getID()]]['height']
         else:
-            poly, surface_tris, z_at = road_geometry.junction_surface(poly, compatible, road_z.node_z[node.getID()])
+            # Same-street lanes of a neighbouring junction can reach over this one
+            # without being cut from it; the free (v2) surface must meet them.
+            cut_ids = {id(r) for r in compatible}
+            anchors = [road_strips[int(k)] for k in strip_tree.query(poly) if use_roadgen and
+                       id(road_strips[int(k)]) not in cut_ids and len(levels) <= 1 and
+                       surface_audit.relationship(topology, road_strips[int(k)]['topology']) == 'connected' and
+                       strip_polys[int(k)].intersection(poly).area > .01]
+            poly, surface_tris, z_at = road_geometry.junction_surface(poly, compatible, road_z.node_z[node.getID()],
+                                                                         free_boundary=use_roadgen, anchors=anchors)
         node_polys[node.getID()] = poly
         if surface_tris:
             record = {'lane':'junction:'+node.getID(), 'points':surface_tris[0], 'width':1.,
@@ -1098,8 +1133,11 @@ def build(cfg, root, context):
                     profile += [(x, y) for x, y in list(hole.coords)]
         junctions.append({'id':node.getID(),'bridge':bridge,'topology':topology,
                           'triangles':[[point(x,y,z) for x,y,z in tri] for tri in surface_tris]})
-        if node.getID() in road_patches:
-            junctions[-1].update(geometry='v2', family=road_patches[node.getID()]['family'])
+        if templated:
+            owner = road_patches[patch_member[node.getID()]]
+            junctions[-1].update(geometry='v2', family=owner['family'])
+            if len(owner['members']) > 1:
+                junctions[-1]['cluster'] = patch_member[node.getID()]
         if is_rural:
             surfaces = [edge_surface(e) for e in node.getIncoming()+node.getOutgoing() if e.getFunction()=='']
             junctions[-1]['surface'] = 'road' if 'road' in surfaces else ('gravel' if 'gravel' in surfaces else 'dirt')

@@ -73,6 +73,17 @@ class GraphTests(unittest.TestCase):
 
 
 class TemplateTests(unittest.TestCase):
+    def test_lane_areas_fill_pinholes_but_keep_real_islands(self):
+        # Densified ribbons left zero-area holes between triangles and lanes
+        # (536 Bilychi junctions rejected as "not a single ribbon").
+        outer = [(0,0),(20,0),(20,10),(0,10)]
+        speck = [(5,5),(5+1e-4,5),(5,5+1e-4)]
+        island = [(12,4),(14,4),(14,6),(12,6)]
+        area = roadgen._solid(Polygon(outer,[speck,island]))
+        self.assertEqual(area.geom_type,'Polygon')
+        self.assertEqual(len(area.interiors),1)
+        self.assertAlmostEqual(area.area,196.)
+
     def test_adaptive_curve_stays_inside_control_hull(self):
         controls=[(0,0),(5,0),(10,5),(10,10)]
         coarse=roadgen.bezier(*controls,.1)
@@ -140,6 +151,80 @@ class TemplateTests(unittest.TestCase):
         with self.assertRaisesRegex(roadgen.Unsupported,'structure'):
             roadgen.candidate(node,strips)
         self.assertEqual(before,strips)
+
+
+    def test_dead_end_gets_a_rounded_level_cap(self):
+        node,strips=synthetic((0,),[7],slope=(.05,0))
+        self.assertEqual(node['family'],'endcap')
+        patch=roadgen.candidate(node,strips)
+        # The cap reaches a half width past the last cross-section (lanes start at 4 m).
+        self.assertAlmostEqual(patch['poly'].bounds[0],4-3.5,delta=.1)
+        self.assertTrue(patch['poly'].covers(Point(4-3.4,0)))
+        # The approach keeps its grade; inside the cap it levels out without a step.
+        for x in (6,8,10):
+            self.assertAlmostEqual(patch['height'](x,0),.05*x,places=4)
+        cap=[patch['height'](x,0) for x in (4,3,2,1,.6)]
+        self.assertTrue(all(a>=b>=a-.06 for a,b in zip(cap,cap[1:])),cap)
+        self.assertLess(abs(cap[-1]-cap[-2])/.4,.02)
+
+    def test_through_road_keeps_its_profile_and_side_road_ramps(self):
+        # The through road climbs 5 % along x; the side road is level in y.
+        node,strips=synthetic((0,90,180),slope=(.05,0))
+        patch=roadgen.candidate(node,strips)
+        self.assertFalse(patch['planar'])
+        for x in (-6,-2,0,3,6):
+            # No crossfall across the through road inside the core.
+            self.assertAlmostEqual(patch['height'](x,-2),patch['height'](x,2),places=4)
+            self.assertAlmostEqual(patch['height'](x,0),.05*x,delta=.01)
+        # The side road meets its own approach at the outer socket.
+        side=next(a for a in patch['arms'] if a['direction'][1]>.9)
+        from akadem_maps.core.road_geometry import height_on
+        r=strips[side['lanes'][0]['lane']]
+        mesh=audit.TriangleIndex([('',audit.ribbon_triangles(r['points'],r['width']),{})])
+        for x,y in side['outer']:
+            self.assertAlmostEqual(patch['height'](x,y),height_on(mesh,x,y),places=5)
+
+    def test_flattest_pair_is_the_through_road(self):
+        # x climbs 8 %, y 1 %: the y road carries the core, so x sees 1 % crossfall.
+        node,strips=synthetic((0,90,180,270),slope=(.08,.01))
+        patch=roadgen.candidate(node,strips)
+        across_y=abs(patch['height'](1,0)-patch['height'](-1,0))/2
+        self.assertLess(across_y,.02)
+
+    def test_shared_lane_is_split_between_neighbours(self):
+        node,strips=synthetic(length=24)
+        for a in node['arms']:
+            a['other']='n'+a['id']
+        full=roadgen.candidate(node,strips)
+        half=roadgen.candidate(node,strips,shared={'n0'})
+        east=lambda p:next(a for a in p['arms'] if a['id']=='0')
+        self.assertFalse(east(full)['short'])
+        self.assertTrue(east(half)['short'])
+        # Lanes run from 4 m to 24 m: the template keeps to its half, minus the gap.
+        self.assertLessEqual(east(half)['outer_m'],14-roadgen.SHORT_GAP+1e-9)
+
+    def test_clusters_join_junctions_on_tiny_lanes_only(self):
+        def lane(lid,pts):
+            return {'lane':lid,'points':[(*p,0.) for p in pts],'width':3.,'topology':{'edge':lid}}
+        strips={'ab':lane('ab',[(0,0),(1.5,0)]),'bc':lane('bc',[(1.5,0),(40,0)]),
+                'a1':lane('a1',[(0,0),(0,30)]),'a2':lane('a2',[(0,0),(-30,0)]),'b1':lane('b1',[(1.5,0),(1.5,30)])}
+        def arm(lid,other,u):
+            return {'id':lid,'other':other,'direction':u,'width':3.,'ways':[lid],
+                    'lanes':[{'lane':lid,'incoming':False,'edge':lid,'width':3.}]}
+        graph={'junctions':[
+            {'id':'a','position':[0,0],'family':'X','levels':[[0,False,False]],'unmapped_ways':[],
+             'arms':[arm('ab','b',(1,0)),arm('a1','p',(0,1)),arm('a2','q',(-1,0))]},
+            {'id':'b','position':[1.5,0],'family':'X','levels':[[0,False,False]],'unmapped_ways':[],
+             'arms':[arm('ab','a',(-1,0)),arm('bc','c',(1,0)),arm('b1','r',(0,1))]},
+            {'id':'c','position':[40,0],'family':'endcap','levels':[[0,False,False]],'unmapped_ways':[],
+             'arms':[arm('bc','b',(-1,0))]}]}
+        groups=roadgen.clusters(graph,strips)
+        self.assertEqual([g['members'] for g in groups],[['a','b']])
+        g=groups[0]
+        self.assertEqual(g['absorbed'],['ab'])
+        self.assertEqual(sorted(a['id'] for a in g['arms']),['a1','a2','b1','bc'])
+        self.assertEqual((g['family'],g['shape']),('cluster','X'))
+        self.assertEqual(g['position'],[.75,0])
 
 
 class OfflineLabTests(unittest.TestCase):

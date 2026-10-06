@@ -101,7 +101,9 @@ Options (local map metres): `--timelapse-near=X,Z` centre, `--timelapse-fly=X1,Z
 street-level flight path (keep it on the street axis; more points follow a curved street),
 `--timelapse-cars=N` cars in the simulation before recording starts (large maps fill slowly),
 `--timelapse-title=TEXT`, `--timelapse-outro=TEXT`, `--timelapse-output=PATH` (fresh directory),
-`--timelapse-overlay=false` (clean frames for editing). Use an absolute output path or
+`--timelapse-overlay=false` (clean frames for editing), `--timelapse-close=D` (junction
+close-up: orbit the `--timelapse-near` point at about D metres, e.g. 75; the reveal wave and
+street flight stay within view). Use an absolute output path or
 `res://../logs/timelapse/my-take` for a path relative to the project.
 This is an animated reveal of an already generated map, not a recording of generator
 execution time. The game itself is unchanged without `--timelapse`.

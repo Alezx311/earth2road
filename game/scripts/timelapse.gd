@@ -10,7 +10,9 @@ extends Node
 ## Nothing here changes the game itself.
 ## Options: --timelapse-near=X,Z (centre, default: middle of the map), --timelapse-title=TEXT,
 ## --timelapse-fly=X1,Z1,X2,Z2[,X3,Z3…] (street-level flight path, may bend with the street),
-## --timelapse-outro=TEXT (last caption), --timelapse-cars=N (cars on the map before recording).
+## --timelapse-outro=TEXT (last caption), --timelapse-cars=N (cars on the map before recording),
+## --timelapse-close=D (a junction close-up: orbit the centre at about D metres, the reveal
+## wave and the street flight stay within view; use with --timelapse-near on the junction).
 
 const World = preload("res://scripts/world.gd")
 const Palette = preload("res://visuals/palette.gd")
@@ -45,6 +47,7 @@ var fly_from := Vector3.ZERO
 var fly_to := Vector3.ZERO
 var fly_path: Array = []          # street-level flight: two or more points along a street
 var extent := 1000.0              # map size, metres
+var close := 0.0                  # junction close-up camera distance, metres (0: whole map)
 var keys: Array = []              # camera keyframes [t, focus, heading, tilt, distance]
 var pieces: Array = []            # {"node", "start", "end", "motion", "base"}
 var stats := {}
@@ -160,8 +163,10 @@ func measure() -> void:
 	avenue = street_dir
 	var along := (center - street_point).dot(avenue)
 	var on_street := street_point + avenue * along
-	fly_from = on_street - avenue * 280.0
-	fly_to = on_street + avenue * 280.0
+	close = float(arg("close", "0"))
+	var reach := close * 1.2 if close > 0.0 else 280.0
+	fly_from = on_street - avenue * reach
+	fly_to = on_street + avenue * reach
 	# --timelapse-fly=X1,Z1,X2,Z2: an explicit street-level flight (e.g. down an avenue).
 	var fly := arg("fly", "")
 	if fly != "":
@@ -211,6 +216,18 @@ func build_keys() -> void:
 		[22.0, junction, h, -58, 190.0],
 		[25.0, junction, h, -50, 140.0],
 	]
+	if close > 0.0:
+		# The centre is the junction: a slow half orbit while asphalt, paint and curbs arrive.
+		d0 = close * 2.2
+		keys = [
+			[0.0, center, h - 80, -58, close * 1.9],
+			[6.0, center, h - 60, -54, close * 1.4],
+			[10.5, center, h - 40, -48, close],
+			[13.0, center, h - 25, -42, close * 0.85],
+			[16.0, center, h - 5, -32, close * 1.15],
+			[19.5, center, h + 15, -36, close],
+			[24.0, center, h + 30, -44, close * 0.8],
+		]
 	# Street-level flight: one key per path point, timed by distance, heading along the path.
 	var total := 0.0
 	for i in range(1, fly_path.size()):
@@ -327,7 +344,7 @@ func stage_window(key: String) -> Array:
 	return STAGES[0]
 
 func wave(d: float, from: float, to: float) -> float:
-	var sweep := clampf(extent * 0.45, 600.0, 2000.0)
+	var sweep := close * 1.5 if close > 0.0 else clampf(extent * 0.45, 600.0, 2000.0)
 	return from + maxf(0.0, to - from - ANIM) * minf(1.0, d / sweep)
 
 func add_piece(node: Node3D, key: String, at: Vector3) -> void:
@@ -369,7 +386,7 @@ func build_network() -> void:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.vertex_color_use_as_albedo = true
 	var cells := {}
-	var width := clampf(extent / 1800.0, 1.2, 3.0)
+	var width := 0.8 if close > 0.0 else clampf(extent / 1800.0, 1.2, 3.0)
 	for lane in main.data.lanes:
 		var pts: Array = lane.points
 		var color := speed_color(float(lane.speed))

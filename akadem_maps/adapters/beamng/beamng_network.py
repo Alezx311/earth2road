@@ -234,7 +234,9 @@ class RoadSurfaces:
             for road in tile.get('road_strips', []):
                 self.roads[road.get('lane')].append(road)
             for junction in tile.get('junctions', []):
-                self.junctions[junction['id']].append(junction)
+                # A v2 cluster template carries the surface of all its SUMO junctions.
+                for jid in {junction['id'], *junction.get('topology', {}).get('nodes', [])}:
+                    self.junctions[jid].append(junction)
 
     def for_edge(self, forward, back):
         from akadem_maps.core.surface_audit import TriangleIndex, ribbon_triangles
