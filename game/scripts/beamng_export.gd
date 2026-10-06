@@ -4,6 +4,8 @@ signal back
 const Ui = preload("res://scripts/ui_theme.gd")
 const Modal = preload("res://scripts/ui_modal.gd")
 const Picker = preload("res://scripts/location_picker.gd")
+const Estimates = preload("res://scripts/estimates.gd")
+const Mods = preload("res://scripts/beamng_mods.gd")
 const SETTINGS := "user://settings.cfg"
 const STAGES := {
 	"prepare": "Checking map data…", "geometry": "Exporting roads and scenery…",
@@ -28,6 +30,12 @@ const MODES := [
 ]
 var map_id := ""
 var map_title := ""
+## Set by the map menu's "Add to BeamNG" when no export exists yet.
+var install_requested := false
+var tiles := 0
+var install_box: CheckBox
+var install_hint: Label
+var install_button: Button
 var pid := -1
 var events_path := ""
 var cancel_path := ""
@@ -62,6 +70,8 @@ func _ready() -> void:
 	modal.bounds = Rect2(0.14, 0.08, 0.72, 0.84)
 	add_child(modal)
 	modal.closed.connect(request_close)
+	Estimates.load_table(Picker.project_root())
+	tiles = DirAccess.get_files_at("res://data/%s/tiles" % map_id).size()
 	var body: VBoxContainer = modal.body
 	var title := Ui.label(map_title + "  /  " + map_id, 22, Ui.TEXT, true)
 	title.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
@@ -111,15 +121,27 @@ func _ready() -> void:
 	details.hide()
 	body.add_child(Ui.button("Technical details", func(): details.visible = not details.visible))
 	body.add_child(details)
-	body.add_child(Ui.label("Copy the ZIP into your BeamNG.drive user folder's mods folder to install it.", 18, Ui.MUTED, true))
+	install_box = CheckBox.new()
+	install_box.text = "Install into the BeamNG mods folder"
+	install_box.add_theme_font_size_override("font_size", 18)
+	install_box.button_pressed = install_requested or bool(settings.get_value("beamng", "install", false))
+	install_box.toggled.connect(func(_on): update_install_hint())
+	body.add_child(install_box)
+	install_hint = Ui.label("", 18, Ui.MUTED, true)
+	install_hint.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	body.add_child(install_hint)
+	update_install_hint()
 	var results := HBoxContainer.new()
 	body.add_child(results)
 	open_button = Ui.button("Open folder", func(): OS.shell_open(zip_path.get_base_dir()))
 	copy_button = Ui.button("Copy ZIP path", func(): DisplayServer.clipboard_set(zip_path))
+	install_button = Ui.button("Install into BeamNG", install_zip)
 	results.add_child(open_button)
 	results.add_child(copy_button)
+	results.add_child(install_button)
 	open_button.hide()
 	copy_button.hide()
+	install_button.hide()
 	back_button = Ui.button("Back", request_close)
 	modal.footer.add_child(back_button)
 	modal.footer.add_child(Ui.expand())
@@ -131,7 +153,31 @@ func optimization() -> String:
 	return MODES[mode_menu.selected][0]
 
 func update_mode_note() -> void:
-	mode_note.text = tr(MODES[mode_menu.selected][2])
+	mode_note.text = tr(MODES[mode_menu.selected][2]) + "
+" + tr("Export time: %s") % 		Estimates.text("export", optimization(), tiles)
+
+func update_install_hint() -> void:
+	var mods := Mods.mods_dir()
+	if mods == "":
+		install_box.button_pressed = false
+		install_box.disabled = true
+		install_hint.text = tr("BeamNG mods folder not found. Choose it in the map menu.")
+	elif install_box.button_pressed:
+		install_hint.text = tr("The ZIP goes to %s; restart BeamNG to see the map.") % mods
+	else:
+		install_hint.text = tr("Copy the ZIP into your BeamNG.drive user folder's mods folder to install it.")
+
+## Copies the finished ZIP into BeamNG's mods folder; a running BeamNG may lock the old copy.
+func install_zip() -> void:
+	var err := Mods.install(map_id, zip_path)
+	if err == OK:
+		status.text = tr("Installed in BeamNG: %s") % Mods.installed(map_id)[0]
+		install_button.hide()
+	else:
+		status.text = tr("ZIP ready: %s") % zip_path + "
+" + Mods.error_text(err)
+		install_button.text = "Retry install"
+		install_button.show()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_TRANSLATION_CHANGED and mode_menu:
@@ -153,6 +199,7 @@ func set_busy(busy: bool) -> void:
 	destination.editable = not busy
 	browse.disabled = busy
 	mode_menu.disabled = busy
+	install_box.disabled = busy or Mods.mods_dir() == ""
 	start_button.disabled = busy
 	activity.visible = busy
 	back_button.text = "Cancel" if busy else "Back"
@@ -175,6 +222,7 @@ func start_export() -> void:
 	settings.load(SETTINGS)
 	settings.set_value("beamng", "destination", destination.text)
 	settings.set_value("beamng", "optimization", optimization())
+	settings.set_value("beamng", "install", install_box.button_pressed)
 	settings.save(SETTINGS)
 	events_path = root + "/logs/beamng_%d_%d.jsonl" % [OS.get_process_id(), Time.get_ticks_usec()]
 	cancel_path = events_path + ".cancel"
@@ -185,6 +233,7 @@ func start_export() -> void:
 	zip_path = ""
 	open_button.hide()
 	copy_button.hide()
+	install_button.hide()
 	details.text = events_path + ".log"
 	pid = OS.create_process(python, PackedStringArray([root + "/tools/export_beamng_gui.py",
 		"--map", map_id, "--destination", destination.text, "--events", events_path,
@@ -238,7 +287,7 @@ func read_events() -> void:
 
 func _process(delta: float) -> void:
 	if pid < 0: return
-	elapsed.text = tr("Elapsed: %d s") % ((Time.get_ticks_msec() - started) / 1000)
+	elapsed.text = tr("Elapsed: %d s") % ((Time.get_ticks_msec() - started) / 1000) + "  ·  " + 		tr("expected %s") % Estimates.span(Estimates.minutes("export", optimization(), tiles))
 	poll_clock += delta
 	if poll_clock < 0.25: return
 	poll_clock = 0.0
@@ -255,6 +304,11 @@ func _process(delta: float) -> void:
 		status.text = tr("ZIP ready: %s") % zip_path
 		open_button.show()
 		copy_button.show()
+		if install_box.button_pressed:
+			install_zip()
+		elif Mods.mods_dir() != "":
+			install_button.text = "Install into BeamNG"
+			install_button.show()
 		start_button.text = "Export again"
 		# A completed export wins a late cancellation; keep its location visible.
 	elif terminal.get("code", "") == "cancelled" or (cancelling and terminal.is_empty()):

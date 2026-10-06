@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import shutil
 import sys
+import time
 import traceback
 import uuid
 
@@ -18,6 +19,15 @@ from akadem_maps.context import atomic_directory, read_json, sha256, write_json
 from akadem_maps.adapters.beamng.export import validate_export
 from akadem_maps.adapters.beamng.beamng_geometry import optimization_mode
 from akadem_maps.adapters.beamng.export_beamng import export_map, deterministic_zip
+from akadem_maps.estimates import record
+
+TIMINGS = ROOT/'logs/timings.jsonl'
+
+
+def tile_count(mid, root=ROOT):
+    """Export size measure for estimates (akadem_maps/estimates.py)."""
+    tiles = Path(root)/'game/data'/mid/'tiles'
+    return sum(1 for p in tiles.iterdir() if p.is_file()) if tiles.is_dir() else 0
 
 
 def export_installed(mid, destination, events, *, root=ROOT, optimization='balanced'):
@@ -93,7 +103,11 @@ def main(argv=None):
                     watch_parent(os.getppid())
                 if args.cancel_file.exists():
                     raise KeyboardInterrupt
+                started = time.monotonic()
                 result = export_installed(args.map, args.destination, events, optimization=args.optimization)
+                tiles = tile_count(args.map)
+                if tiles:
+                    record(TIMINGS, 'export', result['optimization'], tiles, time.monotonic() - started, id=args.map)
                 if watcher:
                     watcher.set()
                 events.emit('result', **result)

@@ -1,5 +1,153 @@
 # Earth2Road handoff
 
+## 2026-10-07 — road builder switch, time estimates, BeamNG mods folder in the map menu (Claude)
+
+- Owner: 4×4 km with export takes about an hour; wants a switch with options and expected
+  time at generation and export, and the BeamNG mods folder in the game's map manager.
+  Owner chose: picker offers only Fast (legacy) and Roadgen v2 (Local Visual DNA stays in
+  config); "Remove from BeamNG" separate from "Delete map"; deletion is permanent.
+- Measured (existing logs): Bilychi 4×4 km legacy 14.6 min vs v2 68 min (network 24 min,
+  roads 25 min, roadgen alone 15.5 min); Khreshchatyk 2 km legacy 5.6 min vs v2 44 min;
+  BeamNG compact export 64 tiles 2.6 min, 111 tiles 7 min, 112 tiles with DNA 18 min.
+- `tools/generate_map.py --road-geometry legacy|v2` (default legacy) → `cfg.road_geometry`.
+  Picker: "Road builder" menu with note, remembered in `settings.cfg [generator]`; build
+  time estimate replaces the old fixed "10–30 minutes" text; elapsed/expected while running.
+- `akadem_maps/estimates.py`: minutes = overhead + rate × (km² | tiles) as a range; base
+  rates from the runs above; after ≥2 runs of a mode, `logs/timings.jsonl` (written by
+  generate_map and export_beamng_gui) replaces them. `tools/estimate.py` prints the table
+  for Godot (`game/scripts/estimates.gd`, with the same fallback constants).
+- Export dialog: export time per optimization mode, "Install into the BeamNG mods folder"
+  (copies `earth2road_<id>.zip` flat into mods via `.part` + rename; a ZIP locked by a
+  running BeamNG reports "Close BeamNG and retry" and offers Retry install).
+- Map menu: mods folder line (auto: `%LOCALAPPDATA%/BeamNG/BeamNG.drive/current/mods`, or
+  `userFolder` from BeamNG.drive.ini; Change…/Open folder), "· in BeamNG" mark, Add to
+  BeamNG (newest validated export, else export dialog preset to install), Remove from
+  BeamNG, Delete… (confirmation; disabled for the loaded map) → `tools/maps.py delete`:
+  game/data, data/build, out/generated/<id>[-stamp][_godot][.logs], legacy `<id>.osm`,
+  exports whose artifact.json names the id, both ZIP names in mods; junctions unlinked,
+  OSM snapshots kept. Continues past locked files and lists them.
+- Checks: full suite 467 OK, 1 skipped (`logs/modes-ui/unittest-01.log`);
+  `validate_ui.gd --offline` (tiny) passed with new checks (`validate_ui-07`);
+  `validate_beamng_export.gd --runtime` PASS (`validate_export-01`), install box forced
+  off so the real mods folder was not touched (verified: no tiny ZIP there). The QA tiny
+  timing line was removed from `logs/timings.jsonl`.
+- Failed experiments: Godot launched from Git Bash segfaults before any output (also on
+  `--quit`); from PowerShell it works. Relative `--log-file` crashed too (use absolute).
+  `Estimates.reload()` collided with the built-in `GDScript.reload`; renamed `load_table`.
+- Not verified: Add/Remove/Delete clicked by hand; estimate accuracy for v2 outside Kyiv.
+
+## 2026-10-07 — local Reddit devlog and BeamNG assembly captures (Codex)
+
+- Added ignored `/posts/` for drafts, style notes, archived copies and media. The
+  Ukrainian devlog covers the agreed 2026-09-27–10-06 interval (first recorded work
+  is 09-28). Existing drafts remain in place; copies and source provenance are local.
+- Added `tools/beamng_assembly.py` / `.lua` and `docs/BEAMNG_ASSEMBLY.md`: fresh
+  isolated BeamNG profiles, COLLADA partition without changing source exports,
+  staged placement of road pieces, camera capture and captioned silent MP4 encoding.
+  Generated surface corners retain their original position/normal/UV/material;
+  presentation chunks have no collision and are not playable release artifacts.
+  Normal exporter and existing uncommitted generator/game work were preserved.
+- Source: `out/road-fairing/after-04` + its compact BeamNG export, ZIP SHA-256
+  `31b6a7558c1c697ea949b613d8888b467a6a95a71b852749effcd5dc18b4e3c8`.
+  Junction `cluster_3229797051_436619362` (v2 X, Efremova/Osinnia).
+  Two full BeamNG 0.39.4 captures completed, exit 0: junction 624 animated objects,
+  street 1,565; each 750 frames, 25 s, 1920×1080/30 fps. Ukrainian captions explicitly
+  identify assembly visualization, not generation time. Files under
+  `posts/2026-10-06-devlog/video/`; raw evidence under `captures/`.
+- Geometry verification: all 58,187 triangles in the 14 partitioned junction
+  objects compared as expanded multisets: exact position/normal/UV/material and
+  multiplicity, recorded in `captures/junction-01/geometry-verification.json`.
+  New tests also verify compact/balanced files and rejection of incompatible indices.
+- Tests: full discovery 456 run, 2 failures, 1 skip, 427.846 s
+  (`captures/unittest.log`). Both failures were Godot subprocess 0xC0000005 under
+  the sandbox (asset props and vehicle availability); isolated unrestricted rerun
+  passed both, 0.932 s (`captures/godot-retest.log`). Effective result: 455 passed,
+  1 skipped. New partition tests: 2 passed again after final Python edits.
+- First probe completed six shots but rising from below terrain hid the motion;
+  final takes descend visibly from above. Probe retained as `captures/probe-01`.
+  An initial ad-hoc mesh comparison script failed on a blank JSONL line; corrected
+  and rerun successfully. No source geometry changed in either experiment.
+- No Reddit publication, Git commit, map installation or release acceptance implied.
+  Static control capture completed (2 frames, exit 0); restored scene visually
+  matches the original export at the same camera pose. Street mesh verification:
+  87,679 triangles in 19 source objects match exactly. Both MP4 files fully decode
+  to 750 frames with no black intervals; inspected one frame per second and full-size titles.
+- Optional Khreshchatyk capture stalled after texture import. Owner explicitly
+  stopped further capture/debug work to prioritize writing; owned PID 25784 was
+  terminated. No new Kyiv shots are claimed or linked. Final bundle has four
+  verified images, two videos, polished Ukrainian text, source evidence and local
+  `REVIEW.html`. The original draft is retained in `drafts/01-initial.uk.md`.
+- Empty manual-group JSONL initially acquired a newline and logged an empty-document
+  error; preparation now preserves empty files. Existing completed media is unaffected.
+  Other concurrent UI/estimate work appeared during this task and was untouched;
+  the full-suite result above applies to the 456 tests discovered at its start.
+
+## 2026-10-06 — playtest fixes (10 notes) + Khreshchatyk DNA test map (Claude)
+
+- New F9 defect marker in Godot (`game/scripts/defect_marker.gd`): frame, camera, car and the
+  point under the screen centre → ignored `logs/defects/<map>/`; `tools/defects.py` resolves
+  lon/lat, nearest SUMO edge/junction. Owner marked 10 notes on `bilychy_roadgen_v2`; summary,
+  findings and generator changes per note: [PLAYTEST_2026-10-06.md](PLAYTEST_2026-10-06.md).
+- Generator: `core/osm_buildings.py` (building multipolygons → hole-free pieces; S3DB outlines
+  hidden when parts cover ≥50 %, parts share style key/colours; OSM `building:colour`/`roof:colour`
+  in every mode; pyramidal/hipped/dome/onion roof solids, `roof:height`, `min_height`; one-storey
+  kiosks; footprints over the at-grade carriageway clipped, or dropped when >60 % (small <60 m²: >30 %) on it, → `audit.json`
+  `buildings_on_carriageway`). `core/landcover.py` (relation lakes/forests in every mode, `pitch`,
+  `track`, priority overlap resolution). `core/roundabouts.py` (one lane count per ring before
+  netconvert → `roundabout_lanes`). `road_profiles.lane_suspects` (report only →
+  `lane_count_suspects`). `road_elevation`: carriageway pairing by name/ref/main class, median
+  polylines for motorway/trunk pairs (derived barrier fences, open where carriageway reaches the
+  line), junction-mouth plateau for minor roads (half major width + 4 m, ≤4 % added grade).
+  `roadgen.clear_sidewalks`: sidewalks never over same-level carriageway, runs <4 m and walking
+  slivers dropped. `rural.dress` also runs for the urban private sector (no roof changes) and
+  reads jersey barriers/guard rails.
+- Godot: roof colour materials, raised parts closed underneath, water/pitch/track materials with
+  collision (water had none: the car fell through lakes), `--shots-file=` QA poses
+  (`tools/shots_file.py`). BeamNG: water/pitch/track surfaces (water was grass with trees on it),
+  no vegetation on non-green covers, fences exported, shared roof-colour materials, raised parts
+  closed underneath.
+- Corrections: first roundabout reading ("netconvert adds a lane") was wrong — the extra lane was
+  the guessed sidewalk. First full Khreshchatyk build (`world-01`) failed after 40 min with
+  `KeyError: '_tags'` (a visible outline lost its markers before its parts read them); fixed and
+  checked first on a 0.8×0.7 km cut (`smoke-02`, 1.5 min, both exports OK, Godot shots).
+- Not done: typical models for churches/fuel stations/shops; lane counts are not raised from
+  suspicion; BeamNG water is a surface, not a water volume.
+- Tests: new `test_osm_buildings`, `test_landcover`, `test_roundabouts`, `test_playtest_roads`.
+  Full suite before the Khreshchatyk build: 453 OK, 1 skipped (`logs/khreshchatyk-dna/unittest-01.log`);
+  final code: 454 OK, 1 skipped (`logs/khreshchatyk-dna/unittest-02.log`).
+- Khreshchatyk: `config/khreshchatyk_dna.json` (bbox of the old `khreshatyk` map, v2, DNA,
+  10 quick-travel anchors), profile `config/visuals/khreshchatyk_dna.json` (5 manual profiles,
+  42 anchors by a fixed rule, `logs/khreshchatyk-dna/make_profile.py`). Sources prepared offline
+  from the registered Ukraine PBF into `out/khreshchatyk-dna/inputs`.
+- Khreshchatyk builds: `world-01` failed (`KeyError: '_tags'`, above); `world-02` failed after
+  40 min with a GEOS `TopologyException` (no traceback captured; not reproduced on two cuts).
+  New geometry operations now retry on repaired, 1 mm-snapped geometry
+  (`osm_buildings.robust`); builds run with `AKADEM_MAPS_TRACEBACK=1`. `world-03` completed
+  (~45 min); review showed whole 5-storey buildings dropped next to over-wide yard roads and the
+  Dnipro draped up the slope → drop only when >60 % on the carriageway (small <60 m²: >30 %), and
+  flat water at the 10th DEM percentile inside each water polygon with the shore anchoring the
+  ground (`landcover.water_level/shore`). Trial BeamNG export of `world-03` was copied to the
+  normal BeamNG mods folder on owner request.
+- Final `out/khreshchatyk-dna/world-04` (34 tiles, 7,809 lanes): 2,351 buildings, 38 building
+  relations, 33 S3DB outlines hidden / 659 parts, shaped roofs 25 dome, 11 onion, 55 pyramidal,
+  72 hipped, 89 fallbacks; 670 footprints clipped and 92 dropped (all <60 m²) at the
+  carriageway; 23 landcover relations, 20 flat water levels (Dnipro 22.5 ha one level; shore
+  ground within 0.25 m of water level); 149 sidewalk runs cut, 227 walking slivers dropped;
+  470 urban fences; 69 paired carriageway ways, 0 medians (no motorway/trunk); lane suspects:
+  Bohdana Khmelnytskoho (trolleybus, lanes=2). DNA: 2,690 styled, 10 landmarks, 14 spawns.
+  Godot export installed as new map `khreshchatyk_dna` (not activated; replaced only the
+  `world-03` install of the same new ID, backup in `.cache/replaced/`). Shots with
+  `--shots-file` (`logs/khreshchatyk-dna/shots-04/`): St Michael's, St Sophia (white walls,
+  green roofs, gold domes), Maidan column and fountains, Dynamo track and pitches recognisable.
+  `tools/shots_file.py` takes the camera height from the nearest lane: two river poses ended
+  inside the hill (camera below terrain); not fixed.
+- Final BeamNG compact export `out/khreshchatyk-dna/beamng-02`: level `kyiv_khreshchatyk_dna`,
+  ZIP 30.4 MB, SHA-256 51692375…, 3,679 objects, 342 signals, 19,961 forest instances; height
+  audit nodes over 2 m: 19, max 7.33 m (not investigated). Copied over the trial ZIP in the
+  BeamNG mods folder (`earth2road_khreshchatyk_dna.zip`; no other mod touched). Runtime not verified.
+- Seen, not fixed: neighbouring footprints with different styles overlap on a facade
+  (Bessarabka block); surface audit acceptance remains `pending`; not driven yet.
+
 ## 2026-10-06 — Local Visual DNA for Bilychi, 21 quick-travel points (Claude)
 
 - Owner drove Podil DNA: "much better", quick-travel by points is convenient; some places

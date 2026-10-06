@@ -109,6 +109,27 @@ class PipelineTest(unittest.TestCase):
                       [{k: r[k] for k in ('phase', 'stage', 'progress')} for r in records if r['event'] == 'stage'])
 
 
+    def test_road_geometry_reaches_the_build_config(self):
+        seen = {}
+        def build(cfg, world, **_):
+            seen.update(cfg)
+        pipeline = {'build': build, 'export': lambda *a, **k: None, 'install': lambda *a, **k: {}}
+        with tempfile.TemporaryDirectory() as tmp:
+            stderr, sys.stderr = sys.stderr, io.StringIO()
+            try:
+                result = gm.generate(49.84, 24.03, 1.0, 'Lviv', Events(None), root=Path(tmp), pipeline=pipeline,
+                                     road_geometry='v2')
+                with self.assertRaises(ValueError):
+                    gm.generate(49.84, 24.03, 1.0, 'Lviv', Events(None), root=Path(tmp), pipeline=pipeline,
+                                road_geometry='v3')
+            finally:
+                sys.stderr = stderr
+        self.assertEqual(seen['road_geometry'], {'mode': 'v2'})
+        self.assertEqual(result['road_geometry'], 'v2')
+        from akadem_maps.core.roadgen import options
+        self.assertEqual(options(seen)['mode'], 'v2')
+
+
 class WatchParentTest(unittest.TestCase):
     def test_cancels_once_the_parent_is_gone(self):
         parents = iter([100, 100, 1])      # reparented to init: the game exited

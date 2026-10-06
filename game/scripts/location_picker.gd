@@ -33,7 +33,16 @@ const MIN_SIZE_KM := 0.3
 const MAX_SIZE_KM := 5.0
 const LARGE_KM := 2.5
 const Ui = preload("res://scripts/ui_theme.gd")
+const Estimates = preload("res://scripts/estimates.gd")
+const SETTINGS := "user://settings.cfg"
 const SIDE_W := 536.0
+## Road builders (tools/generate_map.py --road-geometry): id, name, note.
+const ROAD_MODES := [
+	["legacy", "Fast: classic roads",
+		"Previous road builder: flat junctions, roads follow the terrain directly. Best for trying a place out."],
+	["v2", "Roadgen v2: detailed roads",
+		"Smooth road elevation, bridges with clearance, level junctions, clean sidewalks and kerbs. Many times slower."],
+]
 ## Plain-language status per generator stage (tools/generate_map.py, akadem_maps/world.py);
 ## the raw phase/stage stays in the technical details.
 const STAGE_TEXT := {
@@ -80,6 +89,10 @@ var size_label: Label
 var size_warning: Label
 var name_edit: LineEdit
 var signs_box: CheckBox
+var road_menu: OptionButton
+var road_note: Label
+var elapsed_label: Label
+var started_ms := 0
 var status: Label
 var progress: ProgressBar
 var generate_button: Button
@@ -119,6 +132,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	DirAccess.make_dir_recursive_absolute(TILE_CACHE)
+	Estimates.load_table(project_root())
 	var bg := ColorRect.new()
 	bg.color = Ui.BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -212,7 +226,22 @@ func build_side() -> void:
 		update_size()
 		view.queue_redraw())
 	box.add_child(size_slider)
+	box.add_child(Ui.label("Road builder", 18, Ui.MUTED))
+	road_menu = OptionButton.new()
+	road_menu.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	for mode in ROAD_MODES:
+		road_menu.add_item(tr(mode[1]))
+	var settings := ConfigFile.new()
+	settings.load(SETTINGS)
+	var saved := str(settings.get_value("generator", "road_geometry", "legacy"))
+	road_menu.select(maxi(0, ROAD_MODES.map(func(m): return m[0]).find(saved)))
+	road_menu.item_selected.connect(func(_i): update_size())
+	box.add_child(road_menu)
+	road_note = Ui.label("", 18, Ui.MUTED, true)
+	road_note.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	box.add_child(road_note)
 	size_warning = Ui.label("", 18, Ui.MUTED, true)
+	size_warning.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	box.add_child(size_warning)
 	box.add_child(Ui.label("Map name", 18, Ui.MUTED))
 	name_edit = LineEdit.new()
@@ -285,6 +314,9 @@ func build_side() -> void:
 	progress.step = 0.001
 	progress.visible = false
 	side.add_child(progress)
+	elapsed_label = Ui.label("", 18, Ui.MUTED)
+	elapsed_label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	side.add_child(elapsed_label)
 	var buttons := HBoxContainer.new()
 	side.add_child(buttons)
 	back_button = Ui.button("Back", back_or_cancel)
@@ -522,8 +554,15 @@ func update_size() -> void:
 	if size_label == null:
 		return
 	size_label.text = tr("Area: %.1f × %.1f km (%.1f km²)") % [size_km, size_km, size_km * size_km]
-	size_warning.text = tr("Large area: may take 10–30 minutes and several GB of memory") if size_km > LARGE_KM else tr("Usually a few minutes")
-	size_warning.add_theme_color_override("font_color", Color("e08a6a") if size_km > LARGE_KM else Color("859ca7"))
+	var large := size_km > LARGE_KM
+	if road_menu:
+		road_note.text = tr(ROAD_MODES[road_menu.selected][2])
+		road_menu.disabled = pid >= 0
+	size_warning.text = tr("Build time: %s") % Estimates.text("build", road_geometry(), size_km * size_km)
+	if large:
+		size_warning.text += "
+" + tr("Large area: needs several GB of memory")
+	size_warning.add_theme_color_override("font_color", Color("e08a6a") if large else Color("859ca7"))
 	# Edges near the antimeridian or the poles cannot be built.
 	var b := area_bbox()
 	if generate_button:
@@ -597,6 +636,9 @@ func search_done(result: int, code: int, _headers: PackedStringArray, body: Pack
 
 # --- Generation -------------------------------------------------------------------
 
+func road_geometry() -> String:
+	return ROAD_MODES[road_menu.selected][0] if road_menu else "legacy"
+
 static func project_root() -> String:
 	return ProjectSettings.globalize_path("res://").trim_suffix("/").get_base_dir()
 
@@ -629,6 +671,12 @@ func start_data_action(action: String) -> void:
 		"--events", events_path, "--log", events_path + ".log", "--exit-with-parent",
 		"--parent-pid", str(OS.get_process_id()), "--cancel-file", cancel_path])
 	args.append_array(["--action", action, "--mode", "offline" if source_mode.selected == 1 else "auto"])
+	if action == "generate":
+		args.append_array(["--road-geometry", road_geometry()])
+		var settings := ConfigFile.new()
+		settings.load(SETTINGS)
+		settings.set_value("generator", "road_geometry", road_geometry())
+		settings.save(SETTINGS)
 	if local_package.selected > 0:
 		args.append_array(["--package", str(local_package.get_item_metadata(local_package.selected))])
 	if refresh_source.button_pressed and action in ["generate", "prepare"]:
@@ -655,6 +703,7 @@ func start_data_action(action: String) -> void:
 	finished = false
 	last_stage = ""
 	print("Map generator started (pid %d); full log: %s" % [pid, events_path + ".log"])
+	started_ms = Time.get_ticks_msec()
 	status.text = tr("Starting the generator…")
 	progress.value = 0.0
 	progress.visible = true
@@ -688,6 +737,10 @@ func _process(delta: float) -> void:
 		start_data_action("status")
 	if pid < 0 or finished:
 		return
+	if active_action == "generate":
+		var expected := Estimates.minutes("build", road_geometry(), size_km * size_km)
+		elapsed_label.text = tr("Elapsed: %d min · expected %s") % [(Time.get_ticks_msec() - started_ms) / 60000,
+			Estimates.span(expected)]
 	poll_clock += delta
 	if poll_clock < 0.25:
 		return
@@ -838,6 +891,7 @@ func fail(message: String) -> void:
 	finished = true
 	pid = -1
 	progress.visible = false
+	elapsed_label.text = ""
 	back_button.text = "Back"
 	back_button.disabled = false
 	status.text = message

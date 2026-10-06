@@ -98,6 +98,11 @@ func run() -> void:
 		game.map_menu.search.text = "__no_such_map__"
 		game.map_menu.filter_maps("__no_such_map__")
 		check(game.map_menu.list.get_node("Empty").visible, "empty search has visible recovery")
+		check(game.map_menu.notice != null and not game.map_menu.notice.visible, "map menu notice hidden until an action")
+		var current_row: HBoxContainer = game.map_menu.map_rows.filter(func(r): return r.tooltip_text.ends_with("/  " + game.map_menu.current))[0].get_parent() 			if game.map_menu.current != "" else game.map_menu.map_rows[0].get_parent()
+		check(current_row.get_child_count() >= 4, "map row has export, BeamNG and delete actions")
+		if game.map_menu.current != "":
+			check((current_row.get_child(current_row.get_child_count() - 1) as Button).disabled, "loaded map cannot be deleted")
 		await snap("maps-empty")
 		game.map_menu.open_picker()
 		await settle()
@@ -106,6 +111,13 @@ func run() -> void:
 		var side_scroll: ScrollContainer = picker.search.get_parent().get_parent().get_parent()
 		check(side_scroll.scroll_vertical == 0, "picker opens at the top (%d)" % side_scroll.scroll_vertical)
 		picker.name_edit.text = "QA preserved name"
+		check(picker.road_menu.item_count == 2, "picker offers both road builders")
+		var legacy_text: String = picker.size_warning.text
+		picker.road_menu.select(1)
+		picker.update_size()
+		check(picker.size_warning.text != legacy_text and picker.road_note.text != "", "road builder changes the estimate and note")
+		picker.road_menu.select(0)
+		picker.update_size()
 		await snap("generator")
 		# Complete-line JSONL consumption: a split write must not lose its event.
 		picker.events_path = "user://ui-regression.jsonl"
