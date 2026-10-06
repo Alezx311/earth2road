@@ -16,6 +16,7 @@ from pathlib import Path
 import time
 
 import osmium
+from akadem_maps.core.landmarks import category as landmark_category
 
 POI_TAGS = {'amenity': {'fuel'},
             'shop': {'supermarket', 'hypermarket', 'mall', 'doityourself', 'department_store'}}
@@ -47,14 +48,14 @@ def extract(pbf, out, bbox, polygon=None):
         if obj.is_node():
             if inside(obj.location):
                 inside_nodes.add(obj.id)
-                if obj.tags and poi(obj.tags):
+                if obj.tags and (poi(obj.tags) or landmark_category(obj.tags)):
                     member_nodes.add(obj.id)
         elif obj.is_way():
             if any(inside(nd.location) for nd in obj.nodes):
                 ways.add(obj.id)
         elif obj.is_relation():
             relation_members[obj.id] = [(m.type, m.ref) for m in obj.members]
-            if obj.tags.get('type') in ('restriction', 'multipolygon'):
+            if obj.tags.get('type') in ('restriction', 'multipolygon') or landmark_category(obj.tags):
                 relevant.add(obj.id)
                 for member in obj.members:
                     if member.type == 'n':

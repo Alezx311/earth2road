@@ -29,6 +29,7 @@ from akadem_maps.core import road_profiles
 from akadem_maps.core import corridor
 from akadem_maps.core import pois as poi_points
 from akadem_maps.core import rural
+from akadem_maps.core import local_dna, landmarks
 from akadem_maps.core import road_geometry, surface_audit, road_graph, roadgen, road_elevation
 
 
@@ -771,10 +772,13 @@ def write_world(world, folder):
             put(name, 'greens', {**{k: v for k, v in area.items() if k != 'triangles'}, 'triangles': tris})
     for p in world['trees']:
         put(key(p), 'trees', p)
+    for item in world.get('tree_records', []):
+        name = key(item['position'])
+        tiles[name].setdefault('tree_records', []).append(item)
     for item in world['signs']:
         put(key(item['position']), 'signs', item)
     world['sliver_triangles_dropped'] = dropped
-    index = {k: v for k, v in world.items() if k not in layout.TILED}
+    index = {k: v for k, v in world.items() if k not in layout.TILED and k != 'tree_records'}
     index['tile_size'] = TILE
     index['tiles'] = {name: [int(v) for v in name.split('_')] for name in sorted(tiles)}
     for name, tile in tiles.items():
@@ -1199,6 +1203,8 @@ def build(cfg, root, context):
     elevation_report['ground_anchor_points'] = len(anchors)
     buildings, greens, parking_polys, osm_footprints = [], [], [], []
     facade_fixes = visual_tags.overrides(context.resource('style.json'))
+    dna_cfg = cfg.get('local_visual_dna') or {}
+    dna = local_dna.Field(read_json(context.config_file(dna_cfg['file'])), geo_point, cfg['seed']) if dna_cfg else None
     counts = Counter()
     counts['underground_service_ways_excluded'] = underground_excluded
     clip = map_area
@@ -1235,6 +1241,8 @@ def build(cfg, root, context):
             mode = 'height' if 'height' in t else ('levels' if 'building:levels' in t else 'assumed')
             counts['building_height_'+mode]+=1
             item = {'id':wid,'points':coords,'height':max(2,min(h,180)),'height_source':mode,'levels':levels,**visual_tags.classify(wid,t,facade_fixes)}
+            if dna:
+                dna.apply(item, t)
             if 'shop' in t or 'amenity' in t or t.get('building') in ('retail','commercial','supermarket'):
                 item['ground_floor']='shop'
             footprint = Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)
@@ -1315,6 +1323,14 @@ def build(cfg, root, context):
                                          + len(exclusion['water_excluded']) + len(exclusion['duplicate_overlap_dropped']))
         counts['enrichment_candidates'] = len(features)
     fences, row_trees = [], []
+    if dna:
+        for b in buildings:
+            if 'local_style' not in b:
+                dna.apply(b, way_tags.get(str(b['id']), {}))
+            local_dna.roof(b)
+            if b.get('local_style', {}).get('roof_fallback'):
+                dna.counts['roof_fallbacks'] += 1
+            dna.counts['gabled_roofs'] += 'roof_triangles' in b
     if is_rural:
         fences, row_trees, gardens = rural.dress(buildings,way_tags,root,nodes,net,point,road_cut,
                                       area_xy if area_xy is not None else corridor.to_net(map_area,net))
@@ -1367,18 +1383,35 @@ def build(cfg, root, context):
         snapper=poi_points.Snapper(net,spawn_ok,rightmost)
         poi_records=poi_points.place(poi_kept,poi_cfg.get('anchors',[]),net,snapper,point,road_z.at_offset,poi_report)
         poi_report.update(candidates=len(found),kept=len(poi_kept),placed=len(poi_records))
+    landmark_report = None
+    if dna:
+        landmark_report = landmarks.discover(root, geo_point, corridor.contains(map_area))
+        landmark_place_report = {'pois_unsnapped': []}
+        snapped = poi_points.place(landmark_report['selected'], [], net,
+                                  poi_points.Snapper(net, spawn_ok, rightmost), point,
+                                  road_z.at_offset, landmark_place_report)
+        existing_osm = {p.get('osm') for p in poi_records}
+        for p in snapped:
+            p['id'] = 'landmark_' + p['osm'].replace('/', '_')
+            p['title'] = next(a['name'] for a in landmark_report['selected'] if a['osm'] == p['osm'])
+            if p['osm'] not in existing_osm:
+                poi_records.append(p)
+        landmark_report['unsnapped'] = landmark_place_report['pois_unsnapped']
+        landmark_report['spawn_ids'] = [p['id'] for p in snapped]
     import random
     rng_trees=random.Random(cfg['seed'])
     context.progress('trees', 0.78)
     # Planted trees: ~250 per km2 of map, at least 4000 (the original district cap).
     tree_cap=max(4000,int(map_area.area*111000*71000/1e6*250))
     trees=list(row_trees)
+    tree_records = [{'position': p, 'provenance': 'synthetic:rural'} for p in row_trees]
     # Landcover is cut out of the ground so grass never overlaps asphalt or other cover.
     cover_cut = road_cut.buffer(0.5)
     parking = unary_union(parking_polys).difference(cover_cut) if parking_polys else Polygon()
     if area_xy is not None:
         parking = parking.intersection(area_xy)
     green_out=[]
+    dna_building_cut = unary_union(osm_footprints) if dna else None
     cover_local, parking_local = scene.LocalCut(cover_cut), scene.LocalCut(parking)
     for area in greens:
         poly=parking_local.subtract_from(cover_local.subtract_from(area['poly']))
@@ -1386,6 +1419,8 @@ def build(cfg, root, context):
             poly=poly.difference(unary_union([a['cut'] for a in greens if 'cut' in a]))
         if area_xy is not None:
             poly=poly.intersection(area_xy)
+        if dna and area['kind'] != 'water':
+            poly = poly.difference(dna_building_cut)
         if poly.is_empty:
             continue
         green_out.append({'id':area['id'],'kind':area['kind'],'triangles':[[point(x,y) for x,y in tri] for tri in scene.draped_triangles(poly)]})
@@ -1393,15 +1428,26 @@ def build(cfg, root, context):
         if area['kind'] in ('green','wood','orchard'):
             left,bottom,right,top=poly.bounds
             attempts=min(500,int(poly.area/(90 if area['kind']=='wood' else 180)))
+            if dna:
+                # Independent per-area candidates: changing density never moves another area's trees.
+                area_rng = random.Random(local_dna.unit(cfg['seed'], area['id'], 'trees'))
+                attempts = min(1500, attempts*3)
             for _ in range(attempts):
-                x,y=rng_trees.uniform(left,right),rng_trees.uniform(bottom,top)
+                rng = area_rng if dna else rng_trees
+                x,y=rng.uniform(left,right),rng.uniform(bottom,top)
+                if dna:
+                    wp = point(x, y)
+                    if rng.random() >= dna.density(wp[0], wp[2])/3:
+                        continue
                 if poly.contains(Point(x,y)) and len(trees)<tree_cap:
                     trees.append(point(x,y))
+                    tree_records.append({'position': trees[-1], 'provenance': 'synthetic:green_fill'})
     for n in root.findall('node'):
         if tags(n).get('natural')=='tree':
             x,y=net.convertLonLat2XY(float(n.attrib['lon']),float(n.attrib['lat']))
             if clip.contains(Point(float(n.attrib['lon']),float(n.attrib['lat']))) and not road_cut.contains(Point(x,y)):
                 trees.append(point(x,y))
+                tree_records.append({'position': trees[-1], 'provenance': 'osm', 'osm': 'node/'+n.get('id')})
                 counts['osm_trees']+=1
     covered = unary_union([road_cut, parking, *[a['cut'] for a in greens if 'cut' in a]])
     ground=[]
@@ -1469,8 +1515,15 @@ def build(cfg, root, context):
         from akadem_maps.world import SYNTHETIC_ATTRIBUTION
         world['attribution'] = SYNTHETIC_ATTRIBUTION
     world['attribution'] = building_enrichment.attribution(kept, world['attribution'])
-    if poi_cfg.get('enabled'):
+    if poi_cfg.get('enabled') or dna:
         world['pois']=poi_records
+    if dna:
+        world['local_visual_dna'] = dna.report()
+        world['local_visual_dna']['landmarks'] = landmark_report
+        world['tree_records'] = tree_records
+        world['local_visual_dna']['counts']['osm_trees'] = counts['osm_trees']
+        world['local_visual_dna']['counts']['synthetic_trees'] = len(trees)-counts['osm_trees']
+        write_json(BUILD/'local_visual_dna.json', world['local_visual_dna'])
     world['id'] = cfg['id']
     if use_roadgen:
         world['road_elevation'] = {'version': 1, 'mode': 'distance_filtered',

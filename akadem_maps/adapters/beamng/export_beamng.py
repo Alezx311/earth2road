@@ -252,10 +252,19 @@ def building_mesh(building, facade, roof):
     mesh = Mesh()
     pts = [beam_point(p) for p in building['points']]
     floor = min(p[2] for p in pts)
-    top = floor + float(building['height'])
+    if building.get('local_style'):
+        floor = float(building.get('floor_height', floor))
+    top = floor + float(building.get('wall_height', building['height']) if building.get('local_style') else building['height'])
     base = float(building.get('base', 0))
     bottom = floor + base if base > 0 else floor - 1
-    for a, b, c in triangulate([(p[0], p[1], top) for p in pts]):
+    roof_faces = building.get('roof_triangles') if building.get('local_style') else None
+    for tri in roof_faces or []:
+        mesh.tri(roof, *(beam_point(p) for p in tri), up=True)
+    for tri in building.get('roof_gables', []) if roof_faces else []:
+        vertices = [beam_point(p) for p in tri]
+        mesh.tri(facade, *vertices)
+        mesh.tri(facade, *reversed(vertices))
+    for a, b, c in ([] if roof_faces else triangulate([(p[0], p[1], top) for p in pts])):
         mesh.tri(roof, a, b, c, True)
         if base > 0:
             mesh.tri(facade, (a[0], a[1], bottom), (c[0], c[1], bottom), (b[0], b[1], bottom))
@@ -686,7 +695,7 @@ def _triangle_points(triangles, count, rng):
         yield tuple(a[k] + (b[k] - a[k]) * u + (c[k] - a[k]) * v for k in range(3))
 
 
-def vegetation(tiles):
+def vegetation(tiles, dna=None):
     """Forest instances: mapped trees where OSM has them, filler inside green areas."""
     instances, counts = [], Counter()
     for tileid, tile in tiles:
@@ -696,18 +705,27 @@ def vegetation(tiles):
             instances.append((rng.choice(STREET_TREES), x, y, z,
                               rng.uniform(0, math.tau), rng.uniform(0.8, 1.25)))
             counts['trees_mapped'] += 1
+        if dna:
+            counts['trees_osm'] += sum(t['provenance'] == 'osm' for t in tile.get('tree_records', []))
+            counts['trees_synthetic_world'] += sum(t['provenance'] != 'osm' for t in tile.get('tree_records', []))
         for green in tile.get('greens', []):
+            if dna and green['kind'] not in ('wood', 'green', 'orchard'):
+                continue
             area = sum(abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
                        for a, b, c in ([beam_point(p) for p in tri] for tri in green['triangles']))
             wood = green.get('kind') == 'wood'
             fill = seeded('green', green['id'])
             trees = int(area / (70 if wood else 900))
             bushes = int(area / (45 if wood else 160))
-            for point in _triangle_points(green['triangles'], min(trees, 400), fill):
+            for point in _triangle_points(green['triangles'], min(trees, 400)*(3 if dna else 1), fill):
+                if dna and fill.random() >= dna.density(point[0], -point[1])/3:
+                    continue
                 instances.append((fill.choice(WOOD_TREES if wood else STREET_TREES), *point,
                                   fill.uniform(0, math.tau), fill.uniform(0.75, 1.3)))
                 counts['trees_filled'] += 1
-            for point in _triangle_points(green['triangles'], min(bushes, 600), fill):
+            for point in _triangle_points(green['triangles'], min(bushes, 600)*(3 if dna else 1), fill):
+                if dna and fill.random() >= dna.density(point[0], -point[1])/3:
+                    continue
                 instances.append((fill.choice(PARK_BUSHES), *point,
                                   fill.uniform(0, math.tau), fill.uniform(0.6, 1.2)))
                 counts['bushes'] += 1
@@ -1223,9 +1241,13 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         # Whole buildings merge into 250 m cells by footprint centre: thousands of
         # per-building TSStatics dominated level load time.
         building_cells = defaultdict(Mesh)
+        dna_styles = {}
         from akadem_maps.adapters.beamng.beamng_placement import audit_building
         for index_n, (bid, parts) in enumerate(building_items, 1):
             facade, roof = building_style(parts[0])
+            if parts[0].get('local_style'):
+                dna_styles[facade] = parts[0]['local_style']
+                UV[facade] = 1/6
             if str(parts[0].get('id')) in LANDMARKS:
                 counts['landmark_buildings'] += 1
             pts = [beam_point(p) for b in parts for p in b['points']]
@@ -1257,6 +1279,13 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         stage_event('dressing')
         materials = {**surface_materials(), **tree_materials(), **fixture_materials(level, level_id),
                      **panel_facade_materials(level, level_id)}
+        from akadem_maps.core.local_dna import facade_pixels, Field
+        for name, style in sorted(dna_styles.items()):
+            png(level/f'art/kyiv/{name}.color.png', 256, 256, facade_pixels(style))
+            materials[name] = {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                               'Stages': [{'baseColorMap': f'/levels/{level_id}/art/kyiv/{name}.color.png',
+                                           'roughnessFactor': .78}, {}, {}, {}],
+                               'annotation': 'BUILDINGS', 'materialTag0': 'building'}
         # Sign faces are Ukrainian (DSTU) artwork; other regions get no posted signs
         # rather than foreign-looking ones.
         ukrainian = config.get('region_profile', 'ukraine') == 'ukraine'
@@ -1279,7 +1308,13 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         objects += fuel_canopies(level, level_id, index.get('pois', []),
                                  lambda p: corridors.occupied(p, margin=0.6, roads_only=True), counts, corridors, optimization=optimization, metrics=metrics)
 
-        instances, vegcounts = vegetation(tiles)
+        dna_report = index.get('local_visual_dna')
+        dna_field = None
+        if dna_report:
+            positions = {(a['lon'], a['lat']): a['position'] for a in dna_report['visual_anchors']}
+            dna_field = Field({'version': 1, 'profiles': dna_report['profiles'], 'anchors': dna_report['visual_anchors']},
+                              lambda lon, lat: positions[(lon, lat)], dna_report['seed'])
+        instances, vegcounts = vegetation(tiles, dna_field)
         before = len(instances)
         kept=[]
         for v in instances:

@@ -195,6 +195,9 @@ def building_style(building):
     A landmark pin (config/landmarks.json) wins over the type palette. The pin
     names the real place and only selects a synthetic facade family.
     """
+    if building.get('local_style'):
+        from akadem_maps.core.local_dna import material_key
+        return material_key(building['local_style']), ('kyiv_roof_metal' if building.get('roof_triangles') else 'kyiv_roof_flat')
     pinned = LANDMARKS.get(str(building.get('id') or ''))
     if pinned and pinned.get('facade') in DRAWN_FACADES and pinned.get('roof') in ROOFS:
         return pinned['facade'], pinned['roof']

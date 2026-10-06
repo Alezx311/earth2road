@@ -1,0 +1,30 @@
+{
+  "id": "podil_dna",
+  "name": "Podil - Local Visual DNA",
+  "region_profile": "ukraine",
+  "center": [
+    30.5175,
+    50.4654
+  ],
+  "bbox": [
+    30.503413072939136,
+    50.45640940905038,
+    30.53158692706086,
+    50.47438887268061
+  ],
+  "boundary": {
+    "geojson": "config/areas/podil_dna_2km.geojson",
+    "buffer_m": 0
+  },
+  "seed": 311,
+  "terrain_zoom": 12,
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "traffic_count": 60,
+  "demand_pool": 100,
+  "note": "2 km metric square around Kontraktova Square. Manual experiment; not an administrative boundary.",
+  "local_visual_dna": {
+    "file": "config/visuals/podil_dna.json"
+  }
+}

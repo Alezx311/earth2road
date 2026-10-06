@@ -60,7 +60,7 @@ def export_world(world, output, *, overrides=None, level_id=None, optimization='
         for name in ('kyiv-manifest.json','kyiv-baseline.json','placement-corrections.json','building-conflicts.json'):
             shutil.move(str(level/name),str(technical/name))
         write_json(technical/'world.json',read_json(world/'world.json'))
-        for name in ('surface_audit.json', 'road_seams.json', 'road_graph.json', 'roadgen_report.json'):
+        for name in ('surface_audit.json', 'road_seams.json', 'road_graph.json', 'roadgen_report.json', 'local_visual_dna.json'):
             if (world/name).exists():
                 shutil.copy2(world/name, technical/name)
         common=('Original generated artwork and code: MIT, Earth2Road contributors.\n'

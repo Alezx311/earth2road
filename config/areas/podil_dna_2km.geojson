@@ -1,0 +1,39 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "role": "settlement",
+        "provenance": "synthetic experiment boundary in local azimuthal equidistant projection"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              30.503418413230406,
+              50.45640940905038
+            ],
+            [
+              30.531581586769587,
+              50.45640940905038
+            ],
+            [
+              30.53158692706086,
+              50.47438887268061
+            ],
+            [
+              30.503413072939136,
+              50.47438887268061
+            ],
+            [
+              30.503418413230406,
+              50.45640940905038
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

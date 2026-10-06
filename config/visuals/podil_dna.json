@@ -1,0 +1,316 @@
+{
+  "version": 1,
+  "profiles": {
+    "historic": {
+      "architecture": {
+        "historic": 0.8,
+        "brick": 0.2
+      },
+      "materials": {
+        "plaster": 0.8,
+        "brick": 0.2
+      },
+      "colors": {
+        "cream": 0.35,
+        "yellow": 0.3,
+        "pale_green": 0.2,
+        "brick": 0.15
+      },
+      "floors": {
+        "2": 0.25,
+        "3": 0.4,
+        "4": 0.25,
+        "5": 0.1
+      },
+      "roofs": {
+        "gabled": 0.8,
+        "flat": 0.2
+      },
+      "vegetation_density": 0.7,
+      "provenance": "manual hypothesis for an A/B experiment; not extracted from photographs or verified per building"
+    },
+    "mixed": {
+      "architecture": {
+        "historic": 0.25,
+        "brick": 0.4,
+        "panel": 0.35
+      },
+      "materials": {
+        "plaster": 0.3,
+        "brick": 0.4,
+        "concrete": 0.3
+      },
+      "colors": {
+        "beige": 0.35,
+        "grey": 0.4,
+        "brick": 0.25
+      },
+      "floors": {
+        "3": 0.2,
+        "5": 0.55,
+        "9": 0.25
+      },
+      "roofs": {
+        "gabled": 0.3,
+        "flat": 0.7
+      },
+      "vegetation_density": 1.2,
+      "provenance": "manual hypothesis for an A/B experiment; not extracted from photographs or verified per building"
+    },
+    "modern": {
+      "architecture": {
+        "modern": 0.75,
+        "brick": 0.25
+      },
+      "materials": {
+        "glass": 0.55,
+        "plaster": 0.3,
+        "brick": 0.15
+      },
+      "colors": {
+        "cream": 0.35,
+        "grey": 0.5,
+        "brick": 0.15
+      },
+      "floors": {
+        "4": 0.25,
+        "6": 0.5,
+        "9": 0.25
+      },
+      "roofs": {
+        "gabled": 0.1,
+        "flat": 0.9
+      },
+      "vegetation_density": 0.8,
+      "provenance": "manual hypothesis for an A/B experiment; not extracted from photographs or verified per building"
+    },
+    "industrial": {
+      "architecture": {
+        "industrial": 0.8,
+        "brick": 0.2
+      },
+      "materials": {
+        "brick": 0.4,
+        "metal": 0.35,
+        "concrete": 0.25
+      },
+      "colors": {
+        "grey": 0.65,
+        "brick": 0.35
+      },
+      "floors": {
+        "1": 0.35,
+        "2": 0.45,
+        "3": 0.2
+      },
+      "roofs": {
+        "gabled": 0.35,
+        "flat": 0.65
+      },
+      "vegetation_density": 0.5,
+      "provenance": "manual hypothesis for an A/B experiment; not extracted from photographs or verified per building"
+    }
+  },
+  "anchors": [
+    {
+      "id": "podil_visual_01",
+      "lon": 30.506234303491407,
+      "lat": 50.45820766464514,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_02",
+      "lon": 30.511867151713325,
+      "lat": 50.45820807360311,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_03",
+      "lon": 30.5175,
+      "lat": 50.45820820992243,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_04",
+      "lon": 30.52313284828667,
+      "lat": 50.45820807360311,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_05",
+      "lon": 30.528765696508586,
+      "lat": 50.45820766464514,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_06",
+      "lon": 30.50623344928343,
+      "lat": 50.4618035607505,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_07",
+      "lon": 30.511866724609327,
+      "lat": 50.46180396974629,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_08",
+      "lon": 30.5175,
+      "lat": 50.461804106078226,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_09",
+      "lon": 30.523133275390666,
+      "lat": 50.46180396974629,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_10",
+      "lon": 30.528766550716565,
+      "lat": 50.4618035607505,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_11",
+      "lon": 30.5062325949164,
+      "lat": 50.465399454621846,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_12",
+      "lon": 30.5118662974258,
+      "lat": 50.46539986365546,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_13",
+      "lon": 30.5175,
+      "lat": 50.4654,
+      "radius_m": 750,
+      "profile": "historic",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_14",
+      "lon": 30.523133702574192,
+      "lat": 50.46539986365546,
+      "radius_m": 750,
+      "profile": "modern",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_15",
+      "lon": 30.52876740508359,
+      "lat": 50.465399454621846,
+      "radius_m": 750,
+      "profile": "modern",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_16",
+      "lon": 30.506231740390273,
+      "lat": 50.46899534625923,
+      "radius_m": 750,
+      "profile": "mixed",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_17",
+      "lon": 30.51186587016274,
+      "lat": 50.46899575533068,
+      "radius_m": 750,
+      "profile": "mixed",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_18",
+      "lon": 30.5175,
+      "lat": 50.46899589168783,
+      "radius_m": 750,
+      "profile": "mixed",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_19",
+      "lon": 30.523134129837256,
+      "lat": 50.46899575533068,
+      "radius_m": 750,
+      "profile": "modern",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_20",
+      "lon": 30.52876825960972,
+      "lat": 50.46899534625923,
+      "radius_m": 750,
+      "profile": "modern",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_21",
+      "lon": 30.506230885705012,
+      "lat": 50.47259123566272,
+      "radius_m": 750,
+      "profile": "mixed",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_22",
+      "lon": 30.511865442820085,
+      "lat": 50.472591644772,
+      "radius_m": 750,
+      "profile": "mixed",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_23",
+      "lon": 30.5175,
+      "lat": 50.472591781141766,
+      "radius_m": 750,
+      "profile": "mixed",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_24",
+      "lon": 30.523134557179908,
+      "lat": 50.472591644772,
+      "radius_m": 750,
+      "profile": "industrial",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    },
+    {
+      "id": "podil_visual_25",
+      "lon": 30.528769114294985,
+      "lat": 50.47259123566272,
+      "radius_m": 750,
+      "profile": "industrial",
+      "provenance": "manual placement/profile hypothesis on 400 m metric grid; not street imagery"
+    }
+  ]
+}

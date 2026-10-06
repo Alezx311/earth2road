@@ -168,6 +168,9 @@ func free_at(p: Vector3, radius: float) -> bool:
 	return true
 
 func facade(b: Dictionary) -> void:
+	# DNA v0 uses batched procedural facade artwork, without per-window geometry.
+	if b.has("local_style"):
+		return
 	if b.get("visual_profile", "") == "rural":
 		rural_facade(b)
 		return

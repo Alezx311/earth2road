@@ -13,7 +13,7 @@ from .context import atomic_directory, contained, read_json, scratch_directory, 
 from .errors import NetworkError, NoRoads, OfflineMissing, SourceError
 
 # Bump whenever the Overpass/PBF object selection or reference closure changes.
-SELECTION = 'ways-pois-restrictions-multipolygons-recursive-v2'
+SELECTION = 'ways-pois-landmarks-restrictions-multipolygons-recursive-v3'
 OVERPASS_BUDGET = 180
 
 
@@ -123,10 +123,13 @@ def overpass(cfg, context, dest):
     timeout = min(120, int(cfg.get('overpass_timeout', 120)))
     maxsize = int(cfg.get('overpass_maxsize', 256 * 1024 * 1024))
     bbox = f'{s},{w},{n},{e}'
+    from .core.landmarks import TAGS
+    landmark_query = ''.join(f'{kind}["{key}"~"^({"|".join(sorted(values))})$"]({bbox});'
+                             for kind in ('node', 'relation') for key, values in sorted(TAGS.items()))
     q = (f'[out:xml][timeout:{timeout}][maxsize:{maxsize}];(way({bbox});'
          f'node["amenity"="fuel"]({bbox});'
          f'node["shop"~"^(supermarket|hypermarket|mall|doityourself|department_store)$"]({bbox});'
-         f'relation["type"="restriction"]({bbox});relation["type"="multipolygon"]({bbox}););'
+         f'{landmark_query}relation["type"="restriction"]({bbox});relation["type"="multipolygon"]({bbox}););'
          '(._;>>;);out body;')
     urls = list(dict.fromkeys([cfg['overpass']] + cfg.get('overpass_mirrors', [])))
     deadline = time.monotonic() + OVERPASS_BUDGET
@@ -182,6 +185,8 @@ def acquire(cfg, context, geometry):
             meta = read_json(stamp)
             if meta.get('sha256') != sha256(legacy):
                 raise SourceError('Explicit snapshot checksum mismatch')
+            if cfg.get('local_visual_dna') and meta.get('selection') != SELECTION:
+                raise SourceError('Local Visual DNA needs a snapshot with landmark selection v3; re-extract the source')
             if not shape(meta['coverage']).covers(shape(geometry)):
                 raise SourceError('Explicit snapshot does not cover the selected area')
             return legacy, meta

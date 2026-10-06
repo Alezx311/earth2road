@@ -182,6 +182,11 @@ road segments, lanes, junction instances і template families рахувати �
 
 ### 4. Stratum-підхід до будівель
 
+**Local Visual DNA v0 (2026-10-06):** opt-in реалізація й пілот Подолу описані в
+[LOCAL_VISUAL_DNA.md](LOCAL_VISUAL_DNA.md). Профілі задані вручну; перевіряємо будівлі,
+зелень і landmark-spawns. Результати A/B та runtime — у HANDOFF. Це не реалізація
+фотоаналізу, реконструкції пам'яток або повного Building Grammar/LOD backlog.
+
 - [ ] Не тягнути Stratum цілком як renderer.
 - [ ] Розібрати його підхід до процедурної архітектури.
 - [ ] Окремо подивитися концепції BuildingDNA / building grammar / LOD.

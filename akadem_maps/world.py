@@ -14,6 +14,13 @@ from .world_format import COORDINATES
 from . import __version__
 
 def validate_config(cfg):
+    dna = cfg.get('local_visual_dna')
+    if dna is not None:
+        if not isinstance(dna, dict) or not isinstance(dna.get('file'), str) or not dna['file']:
+            raise ValueError('local_visual_dna requires a profile file')
+        contained(Path.cwd(), dna['file'])
+        if cfg.get('visual_profile') == 'rural':
+            raise ValueError('local_visual_dna and visual_profile=rural cannot be combined')
     from .core.roadgen import options
     options(cfg)
     if 'corridor' in cfg:
@@ -124,6 +131,9 @@ def build_world(config, output, *, config_root=None, cache=None, inputs=None, of
     with atomic_directory(output) as stage:
         context = BuildContext(stage, raw, config_root, offline, resource_root, expected=expected,
                                emit=emit, diagnostics=output.parent/(output.name+'.logs'))
+        if cfg.get('local_visual_dna'):
+            from .core.local_dna import validate as validate_dna
+            validate_dna(read_json(context.config_file(cfg['local_visual_dna']['file'])))
         if inputs and (inputs/'corridor.geojson').exists():
             shutil.copy2(inputs/'corridor.geojson', stage/'corridor.geojson')
         elif (raw/(cfg['id']+'.corridor.geojson')).exists():

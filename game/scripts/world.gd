@@ -161,7 +161,7 @@ static func shared() -> Dictionary:
 ## (far tiles). collide: create trimesh collisions now, else queue them for add_collisions().
 func build(source: Dictionary, level := "full", collide := true) -> void:
 	data = source
-	mats = shared()
+	mats = shared().duplicate()
 	var full := level == "full"
 	for t in data.get("ground", []):
 		tri(vec(t[0]), vec(t[1]), vec(t[2]), "ground")
@@ -227,6 +227,19 @@ func build_deck_sides(sides: Array) -> void:
 		tri(l[i] + down, r[i + 1] + down, l[i + 1] + down, "bridge", false)
 
 func build_building(building: Dictionary) -> void:
+	var facade_kind := "facade"
+	if building.has("local_style"):
+		var style: Dictionary = building.local_style
+		var shade: String = str(style.get("color") if style.get("color") != null else "#b5b2aa")
+		var material_id := ["plaster", "brick", "concrete", "glass", "metal", "stone"].find(str(style.material))
+		facade_kind = "dna_facade_" + str(style.architecture) + "_" + str(material_id) + "_" + shade.substr(1)
+		if not mats.has(facade_kind):
+			var material: ShaderMaterial = mats.facade.duplicate()
+			material.set_shader_parameter("dna_enabled", true)
+			material.set_shader_parameter("dna_color", Color(shade))
+			material.set_shader_parameter("dna_architecture", ["historic", "brick", "panel", "modern", "industrial"].find(style.architecture))
+			material.set_shader_parameter("dna_material", material_id)
+			mats[facade_kind] = material
 	var pts: Array = building.points.duplicate()
 	var area := 0.0
 	for i in range(pts.size()):
@@ -262,7 +275,7 @@ func build_building(building: Dictionary) -> void:
 		var j := (i + 1) % pts.size()
 		var a := Vector3(pts[i][0], floor_y, pts[i][2])
 		var b := Vector3(pts[j][0], floor_y, pts[j][2])
-		wall(a, b, bottom - floor_y, top - floor_y, "facade", tint)
+		wall(a, b, bottom - floor_y, top - floor_y, facade_kind, tint)
 
 func commit(collide := true) -> void:
 	for key in buckets:
@@ -280,6 +293,9 @@ func commit(collide := true) -> void:
 			inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(inst)
 		var layer_kind: String = "building" if item.kind in ["facade", "roof", "roof_tile", "roof_metal"] else item.kind
+		if str(item.kind).begins_with("dna_facade_"):
+			layer_kind = "building"
+			inst.visibility_range_end = 5000
 		if COLLIDE.has(layer_kind):
 			pending_collisions.append([inst, layer_kind])
 	buckets.clear()

@@ -1,5 +1,233 @@
 # Earth2Road handoff
 
+## 2026-10-06 — Local Visual DNA, Podil pilot (Codex)
+
+- User selected a 2×2 km Podil pilot, manually authored profiles, buildings + greenery,
+  and OSM landmark spawns. Opt-in world v2 extension, shared by BeamNG and Godot;
+  detailed configuration and reproduction: [LOCAL_VISUAL_DNA.md](LOCAL_VISUAL_DNA.md).
+  Existing uncommitted road-generator work was preserved.
+- Added 25 visual anchors / 4 profile distributions; deterministic per-property
+  selection, coverage-edge fade, observed OSM priority, original procedural facade
+  textures, exact-footprint gables with total height preserved and explicit fallbacks.
+  Tree provenance separates OSM nodes from generated fill. Landmark ranking is a
+  heuristic; profiles are manual hypotheses, not photo analysis.
+- PBF/Overpass landmark selection v3 includes standalone landmarks and landmark
+  relations. Pilot re-extracted from the original full dated Ukraine PBF (877,501,127
+  bytes), not the older Kyiv cut. New snapshot: 5,357 ways, 106 relations, 35,668 nodes;
+  extraction 404 s. Both A/B worlds use this one snapshot and cached z12 DEM.
+- Completed unit/integration checks so far: `logs/local-dna/targeted-01.log` 37 OK;
+  `integration-02.log` 16 OK, including a synthetic building through world + both
+  exporters and a named landmark spawn. Empty tiny smoke alone had zero buildings;
+  it was insufficient, so a building-bearing fixture was added.
+- Failed experiments: first pilot config used the wrong config-root-relative path
+  (fixed before extraction); first density test assumed no edge fade (fixture corrected
+  to full overlapping coverage); first building export failed namespace validation
+  (`dna_fac_*` renamed through the existing `kyiv_*` resource namespace contract).
+  Sandboxed Godot editor settings failed and the headless rendering smoke crashed;
+  unrestricted editor import and smoke reruns completed with exit 0.
+- A/B worlds built: `out/local-dna/baseline-01`, `styled-01` (same spawn, 5,739 lanes;
+  styled: 1,784 styled buildings, 788 gabled, 266 roof fallbacks, 1 OSM + 863 synthetic
+  trees, 5 landmarks selected, 3 snapped spawns, 2 unsnapped). Codex's export script
+  (`logs/local-dna/export_pilot.py`) and its full-suite run were killed with the session
+  at 17:31 before finishing (no ZIP, no test summary).
+- Finished by Claude: styled BeamNG compact export `out/local-dna/styled-beamng-02`
+  (`logs/local-dna/export-styled-02.log`): level `kyiv_podil_dna`, ZIP 23.2 MB, SHA-256
+  0f8c5fdd…, 4,421 objects, 152 signals, 5,515 forest instances; height audit nodes
+  over 2 m: 33, max 11.28 m (not investigated). Full suite 433 OK, 1 skipped
+  (`logs/local-dna/unittest-claude-01.log`). Installed on owner request as
+  `mods/earth2road_podil_dna.zip` (new level; `earth2road_kyiv_podilskyi.zip` untouched).
+  Baseline BeamNG export, `tools/local_dna_compare.py` A/B capture and Godot exports
+  not run. Not driven yet; acceptance remains `pending`.
+
+## 2026-10-06 — road profile fairing on the 1 km Bilychi cut (Codex)
+
+- Owner feedback: junction appearance accepted, but longitudinal roads still wavy.
+  Scope is the general generator, not map-specific edits. Existing uncommitted work
+  was preserved; baseline copies of the two inspected modules are in ignored
+  `logs/road-fairing/`. No source OSM, configuration, template-family algorithm or
+  normal installed map was changed by this work.
+- Reproduction: fresh offline `out/road-fairing/before`, using
+  `config/bilychy_1km_v2.json` and `out/roadgen-v2/1km/elev-17/inputs`. Same network
+  and inputs throughout the experiment. `tools/elevation_bench.py` replays elevation
+  without a full world build, clips source profiles to the bbox and measures at 2 m
+  spacing. Source way lengths are not lane-km; mesh audit is reported separately.
+- Causes: the robust filter removed spikes but kept longer DEM undulations; an OSM
+  way can change independently filtered strokes at an internal node, producing a
+  jump within one sample interval; averaging a short driveway into a through road
+  repeatedly perturbed it; restoring old node anchors undid reconciled profiles.
+- Fix: a linear-time pentadiagonal curvature-penalty solve after robust filtering,
+  using a 30 m characteristic length or 0.8 times the class radius, whichever is
+  greater. Preserve linear grades, fair broad terrain, wrap closed strokes. Shared
+  heights prefer higher class/longer strokes; reconcile whole strokes before way
+  assembly, include source knots, and synchronize all resulting node heights.
+  No new dependency; v2 only, legacy heights remain unchanged.
+- Additional integration defect exposed by smoothing: when a neighbouring template
+  absorbed a short approach, a fallback junction lost its source-way identity and
+  failed to recognize overlapping pieces of the same street. Topology now comes
+  from network approaches, independent of surviving meshes. Such same-level road
+  overlaps are subtracted from fallback pavement, with their boundary heights used;
+  pinning only vertices had left triangles spanning different-height surfaces.
+- Profile comparison (`logs/road-fairing/comparison.json`, same 22,654 m sampled
+  ground ways): total grade variation/km 1.0959 -> 0.5327 (-51.4%), ascent+descent
+  635.36 -> 520.37 m (-18.1%), grade changes >2 percentage points 70 -> 56.
+  Ways >200 m: variation/km 1.0763 -> 0.5749 (-46.6%), ascent+descent
+  184.31 -> 154.25 m (-16.3%). Major roads: variation/km 0.7916 -> 0.5369.
+  Broad elevation trends intentionally remain. Plot: `logs/road-fairing/profiles-before-after.png`.
+- Failed/intermediate experiments retained locally: `fair-01` added fairing without
+  stroke reconciliation and increased final grade variation (1.15 -> 1.78/km);
+  `fair-02` reconciled strokes but old node anchors undid it (1.53/km);
+  `fair-03` synchronized anchors; `fair-04` added through-road priority. These early
+  metrics used original station spacing, so use `before-final`/`after-final` and
+  `comparison.json` for the final uniform-spacing comparison. World `after-02`
+  exposed a 1.439 m ambiguous fallback overlap at `254389925`; `after-03` restored
+  identity but vertex pinning still left 0.580 m. Neither is the final candidate.
+- Tests added: independent dense solve comparison, repeated waves, constant steep
+  grades, broad hills, sampling-density invariance, invalid samples, small closed
+  rings, stroke switching beside a 5 m source interval, driveway/through-road
+  hierarchy, and absorbed-approach overlap without a duplicate pavement layer.
+  Latest targeted run: 58 tests passed (`logs/road-fairing/targeted-04.log`). Earlier
+  full-suite attempts hit two Godot sandbox crashes/timeouts; isolated unrestricted
+  rerun passed both (`godot-retest.log`). Final full-suite and map checks below.
+- Final world `out/road-fairing/after-04`: same network SHA-256 as `before`, same
+  211 v2 / 86 fallback junctions and 1,949 lanes. Actual surface grade changes >5 pp
+  105 -> 74; >2 pp 996 -> 739; absolute-grade warning samples 1,508 -> 883;
+  crossfall >6% 198 -> 127. Connected steps >10 cm 1 -> 0, max 0.1651 -> 0.0895 m.
+  Ambiguous overlap max 0.5523 -> 0.3367 m, >30 cm contacts 12 -> 2 (none >60 cm).
+  Existing cross-section misses stay 263/29,930 and lane-centre errors stay 3;
+  two remaining >30 cm ambiguous contacts need separate topology investigation.
+  These are structural results, not an assertion that every road worldwide is fixed.
+  Full evidence: `logs/road-fairing/world-comparison.json`.
+
+## 2026-10-05 — roadgen-v2: smoother main roads, paired carriageways, bridge clearance (Claude)
+
+- Owner's drive of Bilychi-10: Zhytomyr highway / Beresteiskyi avenue wavy, the two directions
+  at different heights, the Beresteiskyi overpass over Kiltseva too low for a car. Measured:
+  clearance 2.1 m (legacy 3.3 m: decks only satisfied clearance at OSM nodes, straight between
+  nodes 150 m apart; the road beneath also humped up from DEM samples of the embankment).
+- Test map `config/bilychy_beresteiskyi_v2.json` (1.5×1 km along Beresteiskyi with both
+  overpasses, same offline inputs); builds `out/roadgen-v2/ber/` (`base` = start of this work).
+- `road_elevation`: filter radius by road class (`CLASS_RADIUS`: trunk 90 m … others 24);
+  samples within 14 m of a bridge deck untrusted for roads beneath (`smooth(trusted=)`);
+  `pair_carriageways` averages the dense profiles of antiparallel one-way ways of one name within
+  45 m (dominant partner per way, so a same-named slip road can't take over; Gaussian-spread
+  difference); `deck_clearance` lifts decks densely as a 60 m crest curve at 6 % to
+  BRIDGE_CLEARANCE above the final beneath profile. `prepare.road_node_heights(crest=True,
+  dense_pairs=True)` in v2: node decks use the same crest, the node-level pair closing (partner
+  read as a chord between sparse nodes, pushed junction nodes 1.3 m off) is skipped. Legacy unchanged.
+- Beresteiskyi map (base → e05): carriageway gap median 0.36 → 0.02 m, p90 1.15 → 0.38, max
+  4.75 → 1.44; overpass clearance 2.1 → 6.3–6.6 m (deck surface above road surface); major-road
+  grade breaks >2 pts 108 → 89. 1 km (elev-16 → 17): major breaks >2 pts 17 → 0, gap p90
+  1.53 → 0.21 m, crossfall >6 % 263 → 198, grade changes >5 pts 110 → 105.
+- Bilychi-11 (10 → 11): gap median 0.26 → 0.01 m, p90 0.92 → 0.28, max 4.82 → 1.83; all four
+  overpasses 6.3–6.6 m; connected steps >30 cm 8 → 2, >10 cm 11 → 10; crossfall >6 % 1100 →
+  1040; absolute grade over limit 10630 → 9589; major breaks >2 pts 277 → 255 but >5 pts 45 → 63
+  (new sites: west end of bridge `500943216` where node heights leave a 0.25 m deck shortfall that
+  is faded over the last 10 m; v2 split `26131518`). ZIP 65.8 MB, build 66 min.
+- Failed/changed during the work: a tent-shaped deck lift (sharp crest, 34 breaks on bridge
+  lanes) → crest curve; crest curve without matching node decks left 1.9 m end shortfalls →
+  shared `crest_drop`; per-station nearest partner jumped to a same-named slip road (0.3 m step).
+- Installed (owner request): `mods/kyiv_bilychy_roadgen_v2.zip` = Bilychi-11, `mods/kyiv_bilychy_1km_v2.zip`
+  = 1 km elev-17 (previous ZIPs remain in `out/`). Full suite 409 OK, 1 skipped
+  (`logs/ber/unittest-full.log`); new tests: untrusted samples, class radius, carriageway pairing,
+  deck clearance. Not driven yet.
+
+## 2026-10-05 — project knowledge reconciliation
+
+- Reconciled the repository documentation, current working-tree implementation/configs,
+  existing JSON reports and historical notes into an external linked knowledge base:
+  16 Markdown files (11 new, 5 updated). Personal notes and backups remain outside Git.
+- Distinguished implementation, completed builds, structural audits, installed versions
+  and runtime evidence. Preserved historical observations and explicitly marked stale
+  plan items, mixed map versions and results that lack a corresponding primary report.
+- Checks: pre-write hashes and regular-file/link checks; post-write content verification
+  for all 16 files; 79 new wiki links and 75 local source links resolved successfully.
+  Existing notes were backed up before replacement. No generator tests, map builds,
+  exports or engine checks were started for this documentation-only work unit.
+
+## 2026-10-05 — roadgen-v2: endcap/cluster templates, profiled cores, 1 km test map (Claude)
+
+- Fast iteration map: `config/bilychy_1km_v2.json`, a 1×1 km cut of Bilychi (world x −750…250,
+  z −500…500 of Bilychi-08) from the same verified OSM snapshot and z12 DEM; build offline with
+  `--cache out/elevation-v2/bilychy-08/inputs/raw` (~4.5 min, replay `tools/roadgen_lab.py
+  --prepared` ~1.5 min). Builds: `out/roadgen-v2/1km/` (`base` = code at session start).
+- Owner decision (DECISIONS): keep longitudinal DEM grades, smooth crossfall and local humps.
+- Templates (`roadgen`): **endcap** (dead end: last section + half circle, profile levels out
+  over the cap radius so turnarounds don't flip grade), **cluster** (junctions joined by lanes
+  < 9 m become one template: absorbed lanes and SUMO junction areas are core; up to 4 members,
+  6 arms, `complex` shapes allowed), **shared lanes** (two templates overlapping on one lane are
+  rebuilt to their half of it; shorter sockets: margin ≥1.5 m, transition ≥4 m), slit closing
+  between opposite lanes (≤30 cm), sections/stubs keep only the piece at the socket when a road
+  curves back. Families now 8 (T, X, Y, merge, split, transition, endcap, cluster) — still
+  parametric, not a prefab library.
+- Core heights: was one lstsq plane through all sockets (one road's grade = the other's
+  crossfall). Now the flattest pair of opposite arms (≤45°) keeps its profile across the core
+  (mean across lanes, cubic across the junction), other arms ramp to their own profile; the
+  transition then blends only the residual. Clusters/pairless cores: harmonic surface through
+  the outer sockets. Overlapping lanes at different heights: the band takes the lane whose
+  centreline is nearest. Fallback junctions (`junction_surface(free_boundary=True)`, v2 only):
+  only road mouths fixed (CG solve), plus connected lanes overlapping the junction as anchors.
+- Elevation: shared-node corrections fade over |Δ|/3% (12–60 m, `correction_field`), exact only
+  at shared/corrected nodes (they stopped at the next OSM node: 2 m tents).
+- Sidewalk collars only where an arm has a SUMO sidewalk (service dead ends had collars;
+  sidewalks 118 k → 55 k tris on 1 km). BeamNG navigation looks junction surfaces up by every
+  member of a cluster (unmatched nodes 774 → 95).
+- 1 km (base → elev-16): v2/fallback 47/250 → 211/86; connected steps >10 cm 1 → 1 (same legacy
+  overlap at fallback `8814372535`, 0.165 m); grade changes >5 points 119 → 110; crossfall >6%
+  624 → 263; lane-centre errors 4 → 3; cross-section misses 312 → 263; ZIP 7.83 → 7.95 MB;
+  build 3:17 → 4:22 (+~30 % roadgen). BeamNG nav: chord max 0.71 → 0.40 m, chords >5 cm
+  141 → 191 (engine node spacing; more transitions).
+- Bilychi 4×4 (08 → `out/elevation-v2/bilychy-10`): v2/fallback 532/1769 → 1669/632 (endcap 595,
+  T 588, X 144, cluster 111); connected steps >10 cm 25 → 11, >30 cm 8 → 8 (all old fallback/legacy
+  sites: roundabout `1200327578`, lane overlap `1224968999`/`556798997`, fallback Y/X pair
+  `12997711925`/`13075480239`), max 0.424 → 0.368 m; crossfall >6% 3023 → 1100; grade changes
+  >5 points 467 → 632; lane-centre errors 29 → 34 (2 new without surface, rest 5–11 cm);
+  cross-section misses 2412 → 1902. Build 62 min (was ~32): `stitch_mesh` scales with patches.
+- Trade-off seen only on 4×4: existing v2 X/T got +38/+29 internal grade breaks. A core levelled
+  along the flatter road makes the steeper road catch up within its transition (grade overshoot
+  ~(1+e/L)). Longer side transitions would help; not done.
+- Failed experiments: profiles from lane centreline points (binned, then per-lane averaged) —
+  worse than averaged rays (smooth >5: 176 vs 110 on 1 km), reverted; the useful part kept is
+  the lateral weight by arm area. Lab `close_junctions` control now resolves as v2 (expected
+  updated). A `git stash` of roadgen.py was run by mistake and popped back immediately.
+- Pre-existing, not fixed: service roads crossing without a shared node get a 0.55 m lane spike
+  from `align_strips` (`60252301#7_0`); a T at `1724206503` sits in a 1.5 m dip because an
+  approach comes from a way joined by netconvert without a shared OSM node (heights unconstrained).
+- Checks: lab `out/roadgen-v2/lab-claude-1` 24/24 expected (116 v2 / 16 fallback, was 52/80;
+  steps max 25 mm, lane errors 0); full suite 405 OK, 1 skipped (`logs/1km/unittest-full-2.log`),
+  new tests for endcap, through-road core, flattest pair, shared lane, clusters, correction field,
+  free junction boundary. BeamNG compact export of Bilychi-10 (`out/elevation-v2/bilychy-10-beamng`,
+  level `kyiv_bilychy_elevation_v2`): ZIP 66.3 MB (Bilychi-08 65.6 MB); nav chords max 3.39 → 1.02 m,
+  >5 cm 750 → 987, unmatched 539 → 458. Installed (owner request): `mods/kyiv_bilychy_roadgen_v2.zip`
+  = Bilychi-10 (replaced Bilychi-08, a copy stays in `out/elevation-v2/bilychy-08-beamng`) and
+  `mods/kyiv_bilychy_1km_v2.zip` (1 km elev-15, level `kyiv_bilychy_1km_v2`). Not driven yet.
+
+## 2026-10-05 — v2 template coverage regression, junction timelapses, Reddit draft (Claude)
+
+- Bilychi-07 had only 264 v2 / 2037 fallback junctions (first v2 build: 522/1779): 536
+  rejected as "transition is not a single ribbon". The dense elevation ribbons union with
+  zero-area pinholes between triangles and between lanes. `roadgen._solid` fills holes
+  < 1e-6 m² (`SPECK`) per lane and per arm union; real islands stay (12 remain, 0.2–1.4 m²).
+  The lab had the same regression hidden: Codex's 50/82 "two supporting junctions differ"
+  is back to 52/80 (lab-07). Test `test_lane_areas_fill_pinholes_but_keep_real_islands`.
+- Bilychi-08 (`out/elevation-v2/bilychy-08`): 532 v2 / 1769 fallback (T 366, X 101,
+  transition 25, Y 15, split 13, merge 12); connected steps >10 cm 25, max 0.424 m, none
+  >60 cm; grade changes >5 points 467; crossfall >6% 3023 (Bilychi-07 1667) — more v2
+  cores on slopes, where one road's grade is the other's crossfall; not investigated further.
+  Full suite 398 OK, 1 skipped (`logs/elevation-unittest-claude-3.log`).
+- Installed: Godot `game/data/bilychy_roadgen_v2` = Bilychi-08 (backups in
+  `.cache/replaced/`); BeamNG `mods/kyiv_bilychy_roadgen_v2.zip` (level
+  `kyiv_bilychy_elevation_v2`, SHA-256 b1e73bc8…). The owner had renamed the Bilychi-07 ZIP to
+  that name and removed the older Bilychi ZIPs; the Bilychi-07 ZIP was moved to
+  `out/elevation-v2/replaced-mods/` so only one ZIP holds the level.
+- Timelapse: `--timelapse-close=D` (game/scripts/timelapse.gd) orbits `--timelapse-near` at
+  about D m, shrinks the reveal wave and the street flight to that scale. First take
+  (close 110, Bilychi-07) crashed Godot (0xC0000005) at frame 506 during the street
+  flight; the eight later takes (close 75/80) completed 630 frames each.
+  Takes: `logs/timelapse/junctions-2026-10-05-c/` (Bilychi-08, both X junctions are v2).
+- Reddit draft `docs/REDDIT_POST.uk.md` (roads/junctions); media in
+  `out/reddit-ua/roadgen-v2/`: 72 s montage, four 42 s takes, eight before/after pairs
+  (pairs are from the 2026-10-03 shots, i.e. pre-elevation v2). Not published.
+
 ## 2026-10-05 — roadgen-v2 elevation: real-map regressions (Claude)
 
 - Codex's Bilychi-03 ran pre-final code (started 22:10, last edits 22:18) and died with its

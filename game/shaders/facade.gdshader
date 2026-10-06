@@ -5,6 +5,10 @@ shader_type spatial;
 uniform sampler2D wall_noise : filter_linear_mipmap, repeat_enable;
 uniform sampler2D wall_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform bool has_normal = false;
+uniform bool dna_enabled = false;
+uniform vec4 dna_color : source_color = vec4(0.7, 0.7, 0.65, 1.0);
+uniform int dna_architecture = 0; // historic, brick, panel, modern, industrial
+uniform int dna_material = 0; // plaster, brick, concrete, glass, metal, stone
 varying vec3 wn;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 void vertex() { wn = (MODEL_MATRIX * vec4(NORMAL,0.0)).xyz; }
@@ -12,6 +16,7 @@ void fragment() {
 	float family = floor(COLOR.b * 5.0 + 0.5);
 	vec3 colors[6] = vec3[](vec3(.65,.64,.59), vec3(.48,.34,.25), vec3(.76,.72,.60), vec3(.66,.68,.66), vec3(.64,.61,.53), vec3(.55,.55,.51));
 	vec3 wall = colors[int(family)] * (0.93 + COLOR.r * 0.12);
+	if(dna_enabled) wall = dna_color.rgb;
 	float floor_height = 3.0;
 	vec2 cell = floor(UV / vec2(3.3, floor_height));
 	vec2 f = fract(UV / vec2(3.3, floor_height));
@@ -19,14 +24,23 @@ void fragment() {
 	wall *= .91 + .13 * grime;
 	wall *= mix(.76,1.0,smoothstep(0.0,2.0,UV.y));
 	float seams = max(1.0-step(.012,f.x),1.0-step(.018,f.y));
-	if(family < .5) wall *= 1.0 - seams * .19;
-	if(family > .5 && family < 1.5) {
+	if(dna_enabled ? dna_material == 2 : family < .5) wall *= 1.0 - seams * .19;
+	if(dna_enabled ? dna_material == 1 : (family > .5 && family < 1.5)) {
 		vec2 brick = fract(vec2(UV.x / .27 + mod(floor(UV.y/.09),2.0)*.5, UV.y/.09));
 		float mortar = max(1.0-step(.045,brick.x),1.0-step(.07,brick.y));
 		wall = mix(wall,vec3(.46,.43,.37),mortar*.6);
 	}
 	float window = step(.22,f.x)*step(f.x,.78)*step(.32,f.y)*step(f.y,.82);
 	float inner = step(.24,f.x)*step(f.x,.76)*step(.34,f.y)*step(f.y,.80);
+	if(dna_enabled) {
+		float lo = dna_architecture == 0 ? .24 : (dna_architecture >= 3 ? .08 : .18);
+		float hi = dna_architecture == 0 ? .64 : (dna_architecture >= 3 ? .92 : .82);
+		float bottom = dna_architecture == 4 ? .35 : .22;
+		float top = dna_architecture == 0 ? .85 : .78;
+		window = step(lo,f.x)*step(f.x,hi)*step(bottom,f.y)*step(f.y,top);
+		inner = step(lo+.025,f.x)*step(f.x,hi-.025)*step(bottom+.025,f.y)*step(f.y,top-.025);
+		if(dna_architecture == 0 && f.y < .09) wall = vec3(.82,.79,.72);
+	}
 	float mullion = 1.0-step(.014,abs(f.x-.5));
 	float frame = window*(1.0-inner + inner*mullion);
 	float shop = COLOR.g*step(.25,UV.y)*step(UV.y,2.8);
