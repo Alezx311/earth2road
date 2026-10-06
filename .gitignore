@@ -12,6 +12,7 @@ dist/
 out/
 logs/
 graphify-out/
+/posts/
 # Generated worlds, downloaded inputs and engine exports
 data/
 game/data/
