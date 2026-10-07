@@ -111,5 +111,38 @@ class KioskAndCarriagewayTests(unittest.TestCase):
         self.assertEqual({r['id']: r['action'] for r in audit}, {'edge': 'clipped', 'mid': 'dropped'})
 
 
+class RobustTests(unittest.TestCase):
+    def test_failing_precision_snap_falls_through_to_next_repair(self):
+        from unittest import mock
+        import shapely
+        from shapely.errors import GEOSException
+        calls = []
+        def op(g):
+            calls.append(g)
+            if len(calls) < 3:
+                raise GEOSException('TopologyException')
+            return g.area
+        def broken_snap(g, grid):
+            raise GEOSException('IllegalArgumentException: Points of LinearRing do not form a closed linestring')
+        with mock.patch.object(shapely, 'set_precision', broken_snap):
+            self.assertEqual(ob.robust(op, box(0, 0, 2, 2)), 4)
+        self.assertEqual(len(calls), 3)  # original, make_valid, then buffer(0) after both snaps failed
+
+    def test_unrecoverable_inputs_are_dumped_for_repro(self):
+        import os, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from shapely import wkb
+        from shapely.errors import GEOSException
+        def op(g):
+            raise GEOSException('always')
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {'AKADEM_MAPS_GEOS_DUMP': tmp}):
+            with self.assertRaises(GEOSException):
+                ob.robust(op, box(0, 0, 1, 1))
+            dumped = list(Path(tmp).glob('robust-*/0.wkb'))
+            self.assertEqual(len(dumped), 1)
+            self.assertTrue(wkb.loads(dumped[0].read_bytes()).equals(box(0, 0, 1, 1)))
+
+
 if __name__ == '__main__':
     unittest.main()

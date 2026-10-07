@@ -65,6 +65,44 @@ class SidewalkTests(unittest.TestCase):
         _, areas, report = roadgen.clear_sidewalks([], [sliver], road)
         self.assertEqual((areas, report['walking_slivers_dropped']), ([], 1))
 
+    def test_local_area_windows_and_nearest_match_global_geometry(self):
+        import random
+        from shapely.geometry import Point, box
+        from shapely.ops import nearest_points, unary_union
+        from akadem_maps.core.osm_buildings import LocalArea
+        random.seed(5)
+        area = unary_union([box(i*90-3, 0, i*90+3, 700) for i in range(8)] + [box(0, 300, 700, 306)])
+        local = LocalArea(area, cell=150)
+        for _ in range(40):
+            x, y, r = random.uniform(-50, 750), random.uniform(-50, 750), random.uniform(1, 120)
+            window = box(x-r, y-r, x+r, y+r)
+            self.assertAlmostEqual(local.within(*window.bounds).symmetric_difference(area.intersection(window)).area, 0, places=6)
+            p = Point(x, y)
+            self.assertAlmostEqual(local.nearest(p).distance(nearest_points(p, area)[1]), 0, places=6)
+        self.assertIsNone(LocalArea(box(0, 0, 0, 0).buffer(-1)).nearest(Point(0, 0)))
+
+    def test_local_clearance_matches_whole_carriageway_buffer(self):
+        # Detroit 07.10.2026: buffering the whole city per sidewalk stalled the build.
+        import math
+        from shapely.geometry import box, LineString
+        from shapely.ops import unary_union
+        from akadem_maps.core import roadgen
+        blocks, size = 8, 80.0                      # 640 m: crosses several clearance cells
+        roads = unary_union([box(i*size-4, 0, i*size+4, blocks*size) for i in range(blocks+1)]
+                            + [box(0, j*size-4, blocks*size, j*size+4) for j in range(blocks+1)]
+                            + [LineString([(0, 0), (blocks*size, blocks*size)]).buffer(6)])
+        strips = [{'points': [(i*size, j*size+5.2, 0), (i*size+40, j*size+5.5, 1), (i*size+80, j*size+5.2, 0)], 'width': w}
+                  for i in range(blocks) for j in range(1, blocks) for w in (1.5, 3.0)]
+        got, _, _ = roadgen.clear_sidewalks(strips, [], roads)
+        core = roads.buffer(-roadgen.SIDEWALK_OVERLAP)
+        want = [run for s in strips for run in roadgen._runs_clear_of(
+            s['points'], core.buffer(s['width']/2), max(roadgen.SIDEWALK_MIN_RUN, s['width']))]
+        self.assertEqual(len(got), len(want))
+        for a, b in zip(got, want):
+            self.assertEqual(len(a['points']), len(b))
+            # GEOS buffer approximation differs by a few cm with input size; kerb tolerance is 15 cm.
+            self.assertLess(max(math.dist(p, q) for p, q in zip(a['points'], b)), 0.1)
+
 
 if __name__ == '__main__':
     unittest.main()

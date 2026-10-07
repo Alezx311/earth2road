@@ -792,6 +792,30 @@ def write_world(world, folder):
     write_json(folder/'index.json', index)
     return len(tiles)
 
+TUNNEL_WATER_SHARE = 0.5
+
+
+def tunnels_under_water(net, edge_level, water_polys):
+    """Tunnel edges (OSM layer < 0) running mostly under mapped water are not drawn.
+
+    The tunnel is drawn TUNNEL_DEPTH below the DEM, but under a river the coarse DEM is
+    the blurred bed, so the Detroit–Windsor Tunnel surfaced as a strip across the water
+    and cut a gap into it (07.10.2026). Lanes stay in the network for traffic and AI."""
+    if not water_polys:
+        return set()
+    from shapely.prepared import prep
+    water = unary_union([p for p in water_polys if not p.is_empty])
+    near = prep(water)
+    hidden = set()
+    for edge in net.getEdges():
+        if edge.getFunction() != '' or edge_level.get(edge.getID(), 0) >= 0:
+            continue
+        shape = LineString(edge.getLanes()[0].getShape())
+        if shape.length > 0 and near.intersects(shape) and shape.intersection(water).length > TUNNEL_WATER_SHARE*shape.length:
+            hidden.add(edge.getID())
+    return hidden
+
+
 def build(cfg, root, context):
     BUILD = context.build
     road_options = roadgen.options(cfg)
@@ -1000,6 +1024,14 @@ def build(cfg, root, context):
                 (ramps if segs[start] else spans).append(points[start:i+1])
                 start = i
         return ramps, spans
+    # Lakes and forests mapped as multipolygon relations, in every map mode (playtest note 5).
+    relation_areas = landcover.relation_covers(root, nodes, net.convertLonLat2XY, map_area, is_rural)
+    water_sources = [(a['id'], a['poly']) for a in relation_areas if a['kind'] == 'water']
+    for wid, w in ways.items():
+        refs = [nd.attrib['ref'] for nd in w.findall('nd')]
+        if len(refs) >= 4 and refs[0] == refs[-1] and all(r in nodes for r in refs) and landcover.kind(tags(w), is_rural) == 'water':
+            water_sources.append((wid, Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)))
+    hidden_tunnels = tunnels_under_water(net, edge_level, [poly for _, poly in water_sources])
     lanes, road_strips, anchors, edges, profile = [], [], [], [], []
     ramp_strips, span_strips = [], []
     for edge in net.getEdges(withInternal=True):
@@ -1013,7 +1045,7 @@ def build(cfg, root, context):
                 continue
             item = {'id':lane.getID(),'edge':edge.getID(),'width':lane.getWidth(), 'speed':lane.getSpeed(),'internal':internal,'service':edge.getType()=='highway.service','points':road_z.points(lane,point)}
             lanes.append(item)
-            if edge.getFunction() == '':
+            if edge.getFunction() == '' and edge.getID() not in hidden_tunnels:
                 strip = {**prepared_strips[lane.getID()], 'bridge':on_bridge,'internal':False,
                          'lane':lane.getID(), 'edge':edge.getID(), 'osm_way':lane.getParam('origId','')}
                 if is_rural:
@@ -1188,15 +1220,8 @@ def build(cfg, root, context):
                             # terrain is not excavated under an elevated plaza either.
                             *[p for area in walk_areas if not area.get('bridge') for ring in area['rings'] if not (p := scene.planar(ring)).is_empty]])
     dem = lambda x, y: height(x, y)
-    # Lakes and forests mapped as multipolygon relations, in every map mode (playtest note 5).
-    relation_areas = landcover.relation_covers(root, nodes, net.convertLonLat2XY, map_area, is_rural)
     # Water is flat at a low DEM percentile; its shore anchors the ground to that level.
     water_levels = {}
-    water_sources = [(a['id'], a['poly']) for a in relation_areas if a['kind'] == 'water']
-    for wid, w in ways.items():
-        refs = [nd.attrib['ref'] for nd in w.findall('nd')]
-        if len(refs) >= 4 and refs[0] == refs[-1] and all(r in nodes for r in refs) and landcover.kind(tags(w), is_rural) == 'water':
-            water_sources.append((wid, Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)))
     shore_cut = road_cut.buffer(3.0)
     for wid, poly in water_sources:
         for piece in osm_buildings.polygons(poly):
@@ -1230,7 +1255,8 @@ def build(cfg, root, context):
         junctions.append({'id': f'deck_median_{tx}_{tz}', 'bridge': True, 'triangles': tris})
     elevation_report['deck_median_m2'] = round(sum(Polygon([p[:2] for p in t]).area for t in medians), 1)
     ground_height[0] = ground_z
-    markings = scene.markings(net, road_z, edge_level)
+    markings = scene.markings(net, road_z, edge_level, skip=hidden_tunnels)
+    elevation_report['tunnel_edges_hidden_under_water'] = len(hidden_tunnels)
     if is_rural:
         # Untagged village markings are unknown. Keep the carriageway unpainted.
         markings = []

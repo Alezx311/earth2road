@@ -30,6 +30,15 @@ class LocalCutTests(unittest.TestCase):
         small = box(0, 0, 10, 10)
         self.assertIs(scene.LocalCut(small).around(LineString([(1, 1), (2, 2)])), small)
 
+    def test_area_fully_under_the_cut_chains_into_the_next_cut(self):
+        # Detroit 4 km 07.10.2026: a 44 m² green fully under the road cover became empty,
+        # then the parking cut built box(NaN...) from its bounds and stopped the build.
+        green = Point(45, 0).buffer(3)               # inside the first street of the grid
+        left = self.local.subtract_from(green)
+        self.assertTrue(left.is_empty)
+        self.assertTrue(self.local.subtract_from(left).is_empty)
+        self.assertTrue(self.local.around(left).is_empty)
+
     def test_lines_match_direct_difference(self):
         rng = random.Random(311)
         for _ in range(200):

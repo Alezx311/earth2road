@@ -16,6 +16,7 @@ from shapely.prepared import prep
 from shapely.strtree import STRtree
 
 from . import road_elevation, road_geometry as geometry, road_graph, scene, surface_audit as audit
+from .osm_buildings import LocalArea
 
 SUPPORTED = {'T', 'X', 'Y', 'merge', 'split', 'transition', 'endcap', 'cluster'}
 # Junctions joined by lanes shorter than this become one cluster template.
@@ -989,6 +990,7 @@ def clear_sidewalks(strips, areas, carriageway):
         return strips, areas, {'sidewalk_runs_cut': 0, 'walking_slivers_dropped': 0}
     core = carriageway.buffer(-SIDEWALK_OVERLAP)
     near = prep(core)
+    local = LocalArea(core)
     out, cut = [], 0
     for s in strips:
         if s.get('structure_level', 0) or s.get('bridge'):
@@ -998,7 +1000,10 @@ def clear_sidewalks(strips, areas, carriageway):
         if poly.is_empty or not near.intersects(poly):
             out.append(s)
             continue
-        runs = _runs_clear_of(s['points'], core.buffer(s['width']/2), max(SIDEWALK_MIN_RUN, s['width']))
+        x0, y0, x1, y1 = poly.bounds
+        m = s['width']  # ≥ the buffer distance below
+        obstacle = local.within(x0-m, y0-m, x1+m, y1+m).buffer(s['width']/2)
+        runs = _runs_clear_of(s['points'], obstacle, max(SIDEWALK_MIN_RUN, s['width']))
         cut += 1
         out += [{**s, 'points': run} for run in runs]
     kept, dropped = [], 0

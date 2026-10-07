@@ -46,20 +46,96 @@ SMALL_DROP_SHARE = 0.3
 MIN_OVERLAP_M2 = 0.5
 
 
+ROBUST_GRIDS = (1e-3, 1e-2)  # m
+
+
 def robust(fn, *geoms):
-    """Run a shapely operation; on a GEOS topology error retry on repaired geometry
-    snapped to a 1 mm grid (an invalid OSM ring must not stop a 40-minute build)."""
+    """Run a shapely operation; on a GEOS error retry on repaired geometry: made valid,
+    then snapped to 1 mm and 1 cm grids, then buffer(0) (an invalid OSM ring must not stop
+    a 40-minute build). Every repair step is guarded, since set_precision itself can raise.
+    If all fail, the inputs are written as WKB to $AKADEM_MAPS_GEOS_DUMP (when set): a
+    failure seen only on a full-size map then reproduces in seconds."""
     from shapely import make_valid, set_precision
     from shapely.errors import GEOSException
     try:
         return fn(*geoms)
-    except GEOSException:
-        return fn(*(set_precision(make_valid(g), 1e-3) for g in geoms))
+    except GEOSException as error:
+        first = error
+    steps = [lambda g: make_valid(g)]
+    steps += [lambda g, grid=grid: set_precision(make_valid(g), grid) for grid in ROBUST_GRIDS]
+    steps += [lambda g: make_valid(g).buffer(0)]
+    for step in steps:
+        try:
+            return fn(*(step(g) for g in geoms))
+        except GEOSException:
+            continue
+    _dump_geometries(geoms)
+    raise first
+
+
+def _dump_geometries(geoms):
+    import os
+    import time
+    folder = os.environ.get('AKADEM_MAPS_GEOS_DUMP')
+    if not folder:
+        return
+    from pathlib import Path
+    path = Path(folder)/f'robust-{time.strftime("%Y%m%d-%H%M%S")}-{os.getpid()}'
+    path.mkdir(parents=True, exist_ok=True)
+    for k, g in enumerate(geoms):
+        (path/f'{k}.wkb').write_bytes(g.wkb)
 
 
 def union(geoms):
     geoms = list(geoms)
     return robust(lambda *g: unary_union(list(g)), *geoms) if geoms else Polygon()
+
+
+LOCAL_CELL = 200.0  # m
+
+
+class LocalArea:
+    """A large area cut once into grid cells; ``within`` returns its part inside a box.
+
+    Detroit 4 km (07.10.2026): buffering or unioning the whole city carriageway once per
+    sidewalk or house stalled the build for hours. Operations that only depend on the
+    area near a small shape give the same result on a window with a sufficient margin."""
+
+    def __init__(self, area, cell=LOCAL_CELL):
+        from shapely.geometry import box
+        self.cell, self.pieces = cell, {}
+        if area.is_empty:
+            return
+        x0, y0, x1, y1 = area.bounds
+        for i in range(math.floor(x0/cell), math.floor(x1/cell)+1):
+            for j in range(math.floor(y0/cell), math.floor(y1/cell)+1):
+                piece = robust(lambda a, b: a.intersection(b), area, box(i*cell, j*cell, (i+1)*cell, (j+1)*cell))
+                if not piece.is_empty:
+                    self.pieces[i, j] = piece
+
+    def within(self, x0, y0, x1, y1):
+        from shapely.geometry import box
+        c = self.cell
+        parts = [self.pieces[i, j] for i in range(math.floor(x0/c), math.floor(x1/c)+1)
+                 for j in range(math.floor(y0/c), math.floor(y1/c)+1) if (i, j) in self.pieces]
+        return robust(lambda a, b: a.intersection(b), union(parts), box(x0, y0, x1, y1)) if parts else Polygon()
+
+    def nearest(self, point, start=50.0):
+        """Nearest point of the area to ``point`` (None if empty): grow a window until a hit
+        lies within its radius, which makes it the global nearest point."""
+        from shapely.ops import nearest_points
+        if not self.pieces:
+            return None
+        r = start
+        while True:
+            near = self.within(point.x-r, point.y-r, point.x+r, point.y+r)
+            if not near.is_empty:
+                hit = nearest_points(point, near)[1]
+                if hit.distance(point) <= r:
+                    return hit
+            if r > 1e6:
+                return None
+            r *= 2
 
 
 def number(value):

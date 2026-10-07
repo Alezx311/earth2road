@@ -174,11 +174,14 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area, house=No
     def poly_xy(b):
         poly = Polygon([(p[0]-zero[0], zero[2]-p[2]) for p in b['points']])
         return poly if poly.is_valid else poly.buffer(0)
-    from .osm_buildings import robust, union
+    from .osm_buildings import LocalArea, robust, union
     footprint = union(poly_xy(b) for b in buildings) if buildings else Polygon()
     forbidden = union([road_cut.buffer(1.2), footprint.buffer(0.8)])
+    # Each yard only depends on what lies inside its own ring: query local windows
+    # instead of unioning city-wide geometry per house (Detroit 4 km, 07.10.2026).
+    near_forbidden, near_road = LocalArea(forbidden), LocalArea(road_cut)
     fences, trees, gardens = [], [], []
-    seen = Polygon()
+    seen = {}  # 100 m cell -> earlier yard rings (buffered)
     for b in buildings:
         tags = way_tags.get(str(b['id']), {})
         if roofs:
@@ -196,17 +199,21 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area, house=No
         if not area.covers(ring):
             continue
         # Keep a wide doorway/driveway opening toward the nearest road.
-        from shapely.ops import nearest_points
-        home, street = nearest_points(plot.centroid, road_cut)
-        entry = LineString([home,street]).buffer(2.5)
-        blocked = union([forbidden,entry,seen])
+        home = plot.centroid
+        street = near_road.nearest(home)
+        entry = LineString([home,street]).buffer(2.5) if street is not None else Polygon()
+        x0, y0, x1, y1 = ring.bounds
+        cells = [(i, j) for i in range(math.floor(x0/100), math.floor(x1/100)+1) for j in range(math.floor(y0/100), math.floor(y1/100)+1)]
+        earlier = {id(r): r for c in cells for r in seen.get(c, ())}.values()
+        blocked = union([near_forbidden.within(x0-1, y0-1, x1+1, y1+1), entry, *earlier])
         garden = robust(lambda a, b: a.difference(b), ring, blocked)
         if not garden.is_empty:
             gardens.append({'id':'garden_'+str(b['id']), 'kind':'garden','poly':garden,
                             'provenance':'synthetic garden near observed footprint; parcel unknown'})
             # One modest garden tree, not a claim of an observed tree position.
             location = garden.representative_point()
-            if location.distance(forbidden)>1.2:
+            close = near_forbidden.within(location.x-1.5, location.y-1.5, location.x+1.5, location.y+1.5)
+            if close.is_empty or location.distance(close)>1.2:
                 trees.append(point(location.x,location.y))
         lines = robust(lambda a, b: a.difference(b), ring.boundary, blocked)
         for line in ([lines] if lines.geom_type == 'LineString' else getattr(lines,'geoms',[])):
@@ -214,7 +221,10 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area, house=No
                 continue
             fences.append({'id':str(b['id']), 'points':[point(x,y) for x,y in line.coords],
                            'height':1.1, 'provenance':'synthetic setback fence; parcel unknown'})
-        seen = union([seen, ring.buffer(0.5)])
+        grown = ring.buffer(0.5)
+        gx0, gy0, gx1, gy1 = grown.bounds
+        for c in [(i, j) for i in range(math.floor(gx0/100), math.floor(gx1/100)+1) for j in range(math.floor(gy0/100), math.floor(gy1/100)+1)]:
+            seen.setdefault(c, []).append(grown)
     # Observed shelterbelts are lines, not forests. Fill their lines at a fixed spacing.
     for w in root.findall('way'):
         tags = {t.get('k'):t.get('v') for t in w.findall('tag')}
@@ -227,11 +237,14 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area, house=No
                 if part.geom_type != 'LineString': continue
                 for i in range(int(part.length/9)+1):
                     p = part.interpolate(i*9)
-                    if not forbidden.covers(p): trees.append(point(p.x,p.y))
+                    if not near_forbidden.within(p.x-1, p.y-1, p.x+1, p.y+1).covers(p): trees.append(point(p.x,p.y))
         if tags.get('barrier') in BARRIER_HEIGHT:
             # Road barriers stand right at the kerb; property fences keep a setback.
             gap = 0.3 if tags['barrier'] in ('jersey_barrier', 'guard_rail') else 1.2
-            line = robust(lambda a, b, c: a.intersection(b).difference(c), LineString(coords), area, road_cut.buffer(gap))
+            alignment = LineString(coords)
+            x0, y0, x1, y1 = alignment.bounds
+            kerb = near_road.within(x0-gap-1, y0-gap-1, x1+gap+1, y1+gap+1).buffer(gap)
+            line = robust(lambda a, b, c: a.intersection(b).difference(c), alignment, area, kerb)
             for part in ([line] if line.geom_type=='LineString' else getattr(line,'geoms',[])):
                 if part.geom_type=='LineString' and part.length>1:
                     fences.append({'id':w.get('id'), 'points':[point(x,y) for x,y in part.coords],

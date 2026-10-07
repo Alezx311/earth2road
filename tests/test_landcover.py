@@ -47,5 +47,26 @@ class LandcoverTests(unittest.TestCase):
         self.assertFalse(any(40 < p[0] < 60 and p[1] < 1 for line in lines for p in line))
 
 
+class TunnelUnderWaterTests(unittest.TestCase):
+    def test_only_tunnels_mostly_under_water_are_hidden(self):
+        # Detroit 07.10.2026: the Detroit–Windsor Tunnel surfaced as a strip across the river.
+        from types import SimpleNamespace as NS
+        from shapely.geometry import box
+        from akadem_maps.core.prepare import tunnels_under_water
+        def edge(eid, shape, function=''):
+            lane = NS(getShape=lambda: shape)
+            return NS(getID=lambda: eid, getFunction=lambda: function, getLanes=lambda: [lane])
+        river = box(0, 0, 1000, 300)
+        edges = [edge('tunnel', [(500, -50), (500, 350)]),       # 300 of 400 m under water
+                 edge('portal', [(500, -200), (500, 20)]),       # tunnel mostly on land
+                 edge('bridge', [(600, -50), (600, 350)]),
+                 edge('road', [(700, -50), (700, 350)]),
+                 edge(':internal', [(500, 0), (500, 10)], 'internal')]
+        net = NS(getEdges=lambda: edges)
+        level = {'tunnel': -1, 'portal': -1, 'bridge': 1, 'road': 0}
+        self.assertEqual(tunnels_under_water(net, level, [river]), {'tunnel'})
+        self.assertEqual(tunnels_under_water(net, level, []), set())
+
+
 if __name__ == '__main__':
     unittest.main()

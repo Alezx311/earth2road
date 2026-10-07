@@ -60,12 +60,16 @@ class LocalCut:
     def around(self, other):
         if self.tree is None:
             return self.geom
+        if other.is_empty:  # empty bounds are NaN; box(NaN...) raises (Detroit 4 km, 07.10.2026)
+            return Polygon()
         hits = self.tree.query(box(*other.bounds).buffer(1.0))
         return unary_union([self.leaves[i] for i in hits]) if len(hits) else Polygon()
 
     def subtract_from(self, other):
         if self.tree is None:
             return other.difference(self.geom)
+        if other.is_empty:  # e.g. a green area already fully under the road cover cut
+            return other
         # A - (B u C) = (A - B) - C: no union of the tiles per query.
         for i in self.tree.query(box(*other.bounds).buffer(1.0)):
             if other.is_empty:
@@ -194,7 +198,7 @@ def reverse_edge(net, edge):
     return None
 
 
-def markings(net, road_z, structure_of):
+def markings(net, road_z, structure_of, skip=()):
     """Painted lines as polylines {points, width, dash}. Derived from SUMO topology;
     patterns are assumed (Ukrainian urban style), not surveyed."""
     out = []
@@ -218,7 +222,7 @@ def markings(net, road_z, structure_of):
                 return
             out.append({'points': pts, 'width': width, 'dash': dash or [], 'kind': kind, 'provenance': 'generated'})
     for edge in net.getEdges():
-        if edge.getFunction() != '' or edge.getType() in UNMARKED:
+        if edge.getFunction() != '' or edge.getType() in UNMARKED or edge.getID() in skip:
             continue
         lanes = sorted([l for l in edge.getLanes() if l.allows('passenger')], key=lambda l: l.getIndex())
         if not lanes:
