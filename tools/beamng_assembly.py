@@ -31,6 +31,82 @@ def write(path, value):
     Path(path).write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
+def validate_scene(scene):
+    """Validate optional director settings before creating a capture directory."""
+    def vector(v):
+        return isinstance(v, list) and len(v) == 3 and all(isinstance(x, (float, int)) and math.isfinite(x) for x in v)
+    if scene.get('kind') not in ('junction', 'street', 'city'):
+        raise ValueError('kind must be junction, street or city')
+    if not vector(scene.get('center')) or not math.isfinite(scene.get('radius', 0)) or scene.get('radius', 0) <= 0:
+        raise ValueError('Expected a finite center and positive radius')
+    size = scene.get('resolution', [1920, 1080])
+    if not isinstance(size, list) or len(size) != 2 or any(type(n) is not int or n < 256 or n > 3840 or n % 2 for n in size):
+        raise ValueError('resolution must contain two even dimensions from 256 to 3840')
+    ss = scene.get('supersampling', 1)
+    if type(ss) is not int or not 1 <= ss <= 4 or size[1] % (2*ss):
+        raise ValueError('supersampling must be 1..4 and divide the height into an even window dimension')
+    previous = -1
+    for key in scene.get('camera_path', []):
+        t = key.get('time', -1)
+        if not isinstance(t, (int, float)) or not math.isfinite(t) or not 0 <= t <= 25 or t <= previous:
+            raise ValueError('camera_path times must increase within 0..25 seconds')
+        if not vector(key.get('pos')) or not vector(key.get('look')) or math.dist(key['pos'], key['look']) < .01:
+            raise ValueError('Camera needs distinct finite pos and look vectors')
+        if not isinstance(key.get('fov'), (int, float)) or not 10 <= key['fov'] <= 120:
+            raise ValueError('Each camera key needs fov in degrees, 10..120')
+        previous = t
+    if 'camera_path' in scene and (not scene['camera_path'] or scene['camera_path'][0]['time'] != 0):
+        raise ValueError('camera_path must start at zero')
+
+
+# BeamNG 0.39.4 widens windows narrower than 13:20 (a 540×960 request became 624×960).
+MIN_WINDOW_ASPECT = 0.65
+
+
+def capture_geometry(scene):
+    """Captured frame and engine window sizes for a scene.
+
+    ``supersampling`` is a per-axis factor k; the engine's own superSampling multiplies the
+    pixel count, so it receives k². A frame narrower than the engine's minimum aspect is
+    captured wider at the same height and later cropped centrally to ``resolution``: the
+    vertical FOV, and so the matched camera, stays the same."""
+    width, height = scene.get('resolution', [1920, 1080])
+    k = scene.get('supersampling', 1)
+    step = 2*k
+    capture = [step*math.ceil(max(width, height*MIN_WINDOW_ASPECT)/step), height]
+    return capture, [n // k for n in capture]
+
+
+def camera_pose(keys, t):
+    """Smoothstep keyframes; also used to record independently reviewable camera data."""
+    left = keys[0]
+    for right in keys[1:]:
+        if t < right['time']:
+            u = max(0, min(1, (t-left['time'])/(right['time']-left['time'])))
+            u = u*u*(3-2*u)
+            return {**{k: [a+(b-a)*u for a,b in zip(left[k],right[k])] for k in ('pos','look')},
+                    'fov': left['fov']+(right['fov']-left['fov'])*u}
+        left = right
+    return {k: left[k] for k in ('pos', 'look', 'fov')}
+
+
+def city_stage(name):
+    """Assembly stage of a city export object; None keeps it in place from the first frame."""
+    if '__kyiv_ground_' in name:
+        # The generated ground is the land itself. Hidden until the props stage, the bare
+        # level terrain and the river plane showed through as dark patches (Detroit, 07.10.2026).
+        return None
+    if '__kyiv_buildings_' in name:
+        return 'buildings'
+    if '__kyiv_surface_' in name:
+        return 'roads'
+    if '__kyiv_walk_' in name:
+        return 'walks'
+    if '__kyiv_paint_' in name:
+        return 'marks'
+    return 'props'
+
+
 def partition_dae(path, classify):
     """Return documents by classifier key, preserving every indexed corner exactly.
 
@@ -109,11 +185,19 @@ def prepare(args):
     if hashlib.sha256((source/artifact['zip']).read_bytes()).hexdigest() != artifact['sha256']:
         raise ValueError('Export ZIP hash differs from artifact.json')
     scene = read(args.scene)
+    validate_scene(scene)
     world = args.world.resolve()
     idx = read(world/'index.json')
+    if artifact['map'] != idx['id']:
+        raise ValueError('World and export map IDs differ')
+    export_manifest = read(source/'reports/kyiv-manifest.json')
+    if export_manifest['base_height'] != idx['base_height'] or export_manifest['sumo_center_offset'] != idx['offset']:
+        raise ValueError('World and export coordinate systems differ')
+    if (source/'reports/world.json').is_file() and read(source/'reports/world.json') != read(world/'world.json'):
+        raise ValueError('World and export build manifests differ')
     level_id = artifact['level_id']
     # This is a visual replay of this exact world, not a re-export of today's code.
-    if not args.static:
+    if not args.static and scene['kind'] != 'city':
         report = read(world/'roadgen_report.json')
         if report != read(source/'reports/roadgen_report.json'):
             raise ValueError('World and export roadgen reports differ')
@@ -136,7 +220,7 @@ def prepare(args):
         for obj in objects:
             name = obj.get('name', '')
             position = obj.get('position', [0, 0, 0])
-            split = not args.static and obj.get('class') == 'TSStatic' and any(k in name for k in ('__kyiv_surface_', '__kyiv_walk_', '__kyiv_paint_'))
+            split = not args.static and scene['kind'] != 'city' and obj.get('class') == 'TSStatic' and any(k in name for k in ('__kyiv_surface_', '__kyiv_walk_', '__kyiv_paint_'))
             if split:
                 if obj.get('rotationMatrix') != [1, 0, 0, 0, 1, 0, 0, 0, 1] or obj.get('scale') != [1, 1, 1]:
                     raise ValueError('Capture partition expects unrotated, unit-scale export chunks')
@@ -181,21 +265,27 @@ def prepare(args):
             else:
                 result.append(obj)
                 if not args.static and obj.get('class') == 'TSStatic' and math.hypot(position[0]-cx, position[1]-cy) < radius+150:
-                    stage = 'buildings' if '__kyiv_buildings_' in name else 'props'
-                    animated.append({'name': name, 'stage': stage, 'position': position, 'center': position[:2]})
+                    stage = city_stage(name) if scene['kind'] == 'city' else ('buildings' if '__kyiv_buildings_' in name else 'props')
+                    if stage is not None:
+                        animated.append({'name': name, 'stage': stage, 'position': position, 'center': position[:2]})
         items.write_text('\n'.join(json.dumps(o) for o in result)+ ('\n' if result else ''), encoding='utf-8')
     ext = mod/'lua/ge/extensions'
     ext.mkdir(parents=True)
     shutil.copy2(ROOT/'tools/beamng_assembly.lua', ext/'earth2roadassembly.lua')
-    cfg = {**scene, 'level': level_id, 'parts': animated, 'fps': 30, 'frames': 750}
+    capture_size, window = capture_geometry(scene)
+    cfg = {**scene, 'level': level_id, 'parts': animated, 'fps': 30, 'frames': 750,
+           'capture_size': capture_size, 'window': window, 'engine_supersampling': scene.get('supersampling', 1)**2}
     write(profile/'earth2road-assembly.json', cfg)
     (profile/'settings').mkdir(parents=True)
-    write(profile/'settings/settings.json', {'GraphicDisplayResolutions': '1920 1080', 'GraphicFullscreen': False,
+    # BeamNG restores WindowPlacement after start; a stale placement shrank a 540×960 window.
+    write(profile/'settings/settings.json', {'GraphicDisplayResolutions': ' '.join(map(str, window)), 'GraphicFullscreen': False,
+          'WindowPlacement': f'0 1 -1 -1 -1 -1 0 0 {window[0]} {window[1]}',
           'GraphicOverallQuality': 'Normal', 'AudioMasterVol': 0, 'fpsLimitBackgroundEnabled': False,
           'PostFXMotionBlurEnabled': False})
     audit.update(source_export=str(source), source_world=str(world), artifact_sha256=artifact['sha256'],
                  junction=scene.get('junction'), animated=len(animated), scene=scene,
-                 note='Presentation only. Exact original indexed corners; cells group triangle centroids, not physical construction units.')
+                 note=('Presentation only. Original export batches and mesh bytes preserved; staged replay, not generation time.'
+                       if scene['kind']=='city' else 'Presentation only. Exact original indexed corners; cells group triangle centroids, not physical construction units.'))
     write(out/'preparation.json', audit)
     print(json.dumps(audit, ensure_ascii=False), flush=True)
 
@@ -212,6 +302,9 @@ def capture(args):
         raise FileExistsError('Capture already exists; prepare a fresh take')
     cfg['frames'] = args.frames
     cfg['sample_times'] = args.sample_times
+    if cfg.get('camera_path'):
+        times = args.sample_times or [n/cfg['fps'] for n in range(args.frames)]
+        cfg['camera_frames'] = [camera_pose(cfg['camera_path'], t) for t in times]
     write(profile/'earth2road-assembly.json', cfg)
     exe = args.exe.resolve()
     # Windows startup flags keep the helper hidden; only this owned process is terminated.
@@ -231,9 +324,20 @@ def capture(args):
     result = read(profile/'earth2road-assembly-result.json')
     result['exit_code'] = process.returncode
     result['saved_frames'] = len(list((profile/'screenshots/assembly').glob('frame_*.jpg')))
+    if cfg.get('camera_frames'):
+        result['camera_first'] = cfg['camera_frames'][0]
+        result['camera_last'] = cfg['camera_frames'][-1]
     write(out/'result.json', result)
     print(json.dumps(result), flush=True)
     expected = len(args.sample_times) if args.sample_times else args.frames
+    first = profile/'screenshots/assembly/frame_0000.jpg'
+    if first.is_file() and cfg.get('resolution'):
+        from PIL import Image
+        with Image.open(first) as im:
+            result['frame_size'] = list(im.size)
+        write(out/'result.json', result)
+        if result['frame_size'] != cfg.get('capture_size', cfg['resolution']):
+            raise RuntimeError(f"Captured {result['frame_size']} instead of {cfg.get('capture_size')}; the engine window was resized")
     if process.returncode or result.get('status') != 'complete' or result['saved_frames'] != expected:
         raise RuntimeError('Incomplete capture; see result and isolated engine log')
 
@@ -245,6 +349,18 @@ def encode(args):
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():
         raise FileExistsError(out)
+    if args.clean:
+        frames = sorted(args.input.glob('frame_*.jpg'))
+        if not frames or any(p.name != f'frame_{i:04d}.jpg' for i,p in enumerate(frames)):
+            raise ValueError('Expected a contiguous frame sequence starting at zero')
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        subprocess.run([ffmpeg, '-v', 'error', '-framerate', '30', '-i', str(args.input/'frame_%04d.jpg'),
+                        '-frames:v', str(len(frames)), '-an', '-c:v', 'libx264', '-crf', '19',
+                        '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(out)], check=True)
+        print(out)
+        return
+    if args.kind not in ('junction', 'street'):
+        raise ValueError('Captioned legacy encoding requires --kind junction|street; director videos use --clean')
     missing = [n for n in range(750) if not (args.input/f'frame_{n:04d}.jpg').is_file()]
     if missing:
         raise ValueError(f'Incomplete 750-frame take; first missing frame: {missing[0]}')
@@ -297,7 +413,8 @@ def main():
     enc = sub.add_parser('encode')
     enc.add_argument('--input', type=Path, required=True)
     enc.add_argument('--output', type=Path, required=True)
-    enc.add_argument('--kind', choices=('junction', 'street'), required=True)
+    enc.add_argument('--kind', choices=('junction', 'street'))
+    enc.add_argument('--clean', action='store_true', help='No overlays/audio; keep captured resolution and frame count')
     args = p.parse_args()
     {'prepare': prepare, 'capture': capture, 'encode': encode}[args.command](args)
 

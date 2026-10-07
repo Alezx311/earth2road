@@ -57,3 +57,51 @@ quality, performance, AI correctness or whole-map acceptance.
 The default captions clearly identify BeamNG and say that this is an assembly
 visualization, not generation time. The captions include OSM/Terrain attribution.
 The current Ukrainian edit is dated 06.10.2026; update its labels for a new devlog.
+
+## Director captures (portable, no captions)
+
+Read [DIRECTOR.md](DIRECTOR.md) for the editorial/source workflow. Existing
+junction/street scenes and captioned encoding retain their behavior.
+
+`kind: "city"` animates the existing export's TSStatic batches without splitting
+or rewriting their meshes, so it also supports legacy worlds without a v2 junction
+report. Terrain and the generated ground
+meshes (`__kyiv_ground_`) remain visible from the first frame. Roads resolve at 0–7 s, buildings at 5–15 s,
+props at 12–16 s, forests at 16 s. This is a staged replay, not generation time.
+Use a radius covering the desired district; batching can straddle its boundary.
+
+Optional `resolution: [1080,1920]` sets the output frame size. BeamNG 0.39.4 measured
+(07.10.2026): a window cannot be taller than the desktop (1080×1920 on a 1440p screen
+became 3620×1421), cannot be narrower than 13:20 (540×960 became 624×960), and
+`createScreenshot2` `superSampling` multiplies the **pixel count** (×2 gave ×√2 per side).
+So set `supersampling: 2` (a per-axis factor k): the tool opens a 624×960 window, passes
+k² = 4 to the engine and captures 1248×1920; `director_edit.py` crops the centre
+1080 columns without scaling. The vertical FOV, and a matched camera, are unchanged.
+`capture` fails when the saved frame size differs from the expected capture size.
+`camera_path` contains increasing keys `{time,pos,look,fov}`, starting at zero.
+Positions/look targets use BeamNG XYZ; `fov` is the engine's **vertical** FOV in degrees
+(verified by projecting known anchors onto a probe, 07.10.2026).
+`tools/director_camera.py --world WORLD --export EXPORT --lon LON --lat LAT
+--altitude METRES` converts an estimated absolute GPS camera altitude and position
+using that world's projection and the export's vertical offset.
+Hold a shot by repeating its pose at a later time; smoothstep interpolates the
+next segment. `capture` writes the exact sampled `camera_frames` into the profile
+config, including at arbitrary `--sample-times`. The path overrides legacy views.
+Probe the actual result before recording a complete take: OS window limits or
+engine version can affect resolution/FOV. Never silently stretch a mismatched take.
+
+```powershell
+.venv/Scripts/python.exe tools/beamng_assembly.py prepare --world out/world --export out/export --scene posts/scene.json --output posts/probe --static
+.venv/Scripts/python.exe tools/beamng_assembly.py capture --output posts/probe --sample-times 0 16 23
+# Prepare a separate fresh animated take after accepting the probe.
+.venv/Scripts/python.exe tools/beamng_assembly.py capture --output posts/take --frames 690
+.venv/Scripts/python.exe tools/beamng_assembly.py encode --input posts/take/user/current/screenshots/assembly --output posts/clean.mp4 --clean
+.venv/Scripts/python.exe tools/director_edit.py --recipe posts/edit.json --output posts/final.mp4
+```
+
+The edit JSON contains `photo`, `frames` (paths relative to the recipe),
+`frame_count`, `resolution`, normalized `crop: [left,top,width,height]`,
+`photo_seconds` (default 2), `transition_seconds` (default .4), `credit` and
+`source_url`. Crop aspect must match the output. Photo and capture are blended
+without captions or audio; credits are also stored as MP4 metadata, which does
+not replace the accompanying public source credits. Preserve the original photo.

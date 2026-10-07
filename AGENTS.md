@@ -8,3 +8,5 @@
 6. Keep downloads, engine binaries, generated maps, caches, credentials and personal notes out of Git.
 7. Use `python -m unittest discover -s tests -v`; map/runtime checks are documented in CONTRIBUTING.
 8. Preserve compatibility with `akadem_maps`, existing world formats and map IDs.
+9. For social-video scenarios and showcase captures, read `docs/DIRECTOR.md`.
+   The portable skill entry point is `skills/earth2road-director/SKILL.md`.

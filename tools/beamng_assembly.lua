@@ -8,6 +8,14 @@ local function save() jsonWriteFile('earth2road-assembly-result.json',result,tru
 local function change(p) phase=p; age=0 end
 local function ease(x) x=math.max(0,math.min(1,x)); return x*x*(3-2*x) end
 local function camera(t)
+  if cfg.camera_frames then
+    local view=cfg.camera_frames[math.min(frame+1,#cfg.camera_frames)]
+    local pos,target=vec3(view.pos),vec3(view.look)
+    local q=quatFromDir(target-pos,vec3(0,0,1))
+    core_camera.setFOV(0,view.fov)
+    core_camera.setPosRot(0,pos.x,pos.y,pos.z,q.x,q.y,q.z,q.w)
+    return
+  end
   if cfg.views then
     local view=cfg.views[math.min(#cfg.views,math.floor(t)+1)]
     local pos,target=vec3(view.pos),vec3(view.look)
@@ -31,7 +39,7 @@ local function place(t)
     if cfg.kind=='street' then wave=math.max(0,math.min(1,(p.center[1]-cfg.center[1]+cfg.radius)/(2*cfg.radius)))
     else wave=math.min(1,(vec3(p.center[1],p.center[2],0)-vec3(cfg.center[1],cfg.center[2],0)):length()/cfg.radius) end
     local at=w[1]+wave*(w[2]-w[1])
-    local progress=t<3 and 1 or ease((t-at)/0.65)
+    local progress=(cfg.kind~='city' and t<3) and 1 or ease((t-at)/0.65)
     if progress==0 then p.object:setHidden(true)
     else
       p.object:setPosition(vec3(p.position)+vec3(0,0,w[3]*(1-progress)))
@@ -41,12 +49,15 @@ local function place(t)
   -- Forests are engine batches: show them once scenery is complete.
   for _,name in ipairs(scenetree.findClassObjects('Forest')) do
     local obj=scenetree.findObject(name)
-    if obj then obj:setHidden(#parts>0 and t>=3 and t<20.5) end
+    if obj then obj:setHidden(#parts>0 and t>=(cfg.kind=='city' and 0 or 3) and t<(cfg.kind=='city' and 16 or 20.5)) end
   end
 end
 function M.onInit()
   setExtensionUnloadMode(M,'manual')
   cfg=jsonReadFile('earth2road-assembly.json'); save()
+  if cfg.kind=='city' then
+    windows={roads={0,6,18},walks={2,7,12},marks={4,8,2},buildings={5,14,55},props={12,15,8}}
+  end
 end
 function M.onUpdate(dt)
   total=total+dt; age=age+dt
@@ -64,6 +75,10 @@ function M.onUpdate(dt)
     result.version=beamng_versionb; result.objects=#parts
     if #result.missing>0 then result.status='missing_objects'; save(); shutdown(1); return end
     result.status='capturing'; save()
+    if cfg.window then
+      -- Re-apply the window size: placement restore after start can resize the window.
+      pcall(function() GFXDevice.setVideoMode({width=cfg.window[1],height=cfg.window[2],refreshRate=60,displayMode='Window'}) end)
+    end
     camera(0); place(0); change('warmup')
   elseif phase=='warmup' and age>12 then change('pose')
   elseif phase=='pose' then
@@ -76,7 +91,7 @@ function M.onUpdate(dt)
   elseif phase=='render' then
     waits=waits+1
     if waits>=4 and (not cfg.views or age>3) then
-      createScreenshot2({filename=string.format('screenshots/assembly/frame_%04d',frame),writeJPG=true,superSampling=1})
+      createScreenshot2({filename=string.format('screenshots/assembly/frame_%04d',frame),writeJPG=true,superSampling=cfg.engine_supersampling or 1})
       change('saved')
     end
   elseif phase=='saved' then

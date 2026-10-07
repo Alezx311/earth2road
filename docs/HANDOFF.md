@@ -1,5 +1,43 @@
 # Earth2Road handoff
 
+## 2026-10-08 — director guide, Detroit photo-match pilot, 4 km build fixes (Codex → Claude)
+
+- Owner: social clips need a portable "director" any agent can read (scale and
+  recognizable places over fine detail, clean footage, explanation only on request), and
+  a photo → in-game match test on a new place: Detroit, US audience. Started by Codex,
+  continued by two Claude sessions (the second after a power cut).
+- `docs/DIRECTOR.md` (canonical), `docs/DIRECTOR_SCENARIO.md`, `skills/earth2road-director/`
+  (thin wrapper), AGENTS.md pointer. `tools/director_camera.py` (lon/lat/alt → BeamNG XYZ
+  with the world's projection and export offset), `tools/director_edit.py` (photo crop →
+  cross-fade → capture, no captions/audio, credit in MP4 metadata). `beamng_assembly`:
+  `kind: city` replays an export's TSStatic batches, `camera_path` keys {time,pos,look,fov}
+  (vertical FOV), `resolution` + `supersampling`; BeamNG 0.39.4 window limits measured and
+  documented in BEAMNG_ASSEMBLY (1248×1920 capture, centre crop to 1080 without scaling).
+- 4 km Detroit exposed generator costs/failures 1 km maps did not:
+  `clear_sidewalks` buffered the whole city carriageway per sidewalk (roads >85 min → 20);
+  `rural.dress` unioned city-wide geometry per house (buildings >60 min → 2–3).
+  `osm_buildings.LocalArea` cuts a large area into 200 m cells and answers `within`/
+  `nearest` locally; results compared identical on the test maps. `robust()` now retries
+  make_valid → 1 mm → 1 cm grids → buffer(0) and dumps WKB to `$AKADEM_MAPS_GEOS_DUMP`.
+  `LocalCut` handles empty geometry (trees stage crashed on greens fully under a road).
+  Rivers: `tunnels_under_water` hides tunnel edges (layer < 0) running >50 % under mapped
+  water — the Detroit–Windsor Tunnel surfaced as a strip across the river. Lanes stay for
+  traffic; `tunnel_edges_hidden_under_water` in the elevation report.
+- Assembly `city`: generated ground (`__kyiv_ground_`) was staged as a prop and hidden until
+  12–15 s, exposing bare terrain and the water plane during the matched hold (take-09).
+  `city_stage` now keeps it in place; misdiagnosed first as cached shadows (probes 07–15).
+- Result: world-09 (33.9 min, 100 tiles, 46,368 lanes), beamng-09 (16.2 min, ZIP
+  `24547eb4dd0b…`), take-10 690/690 frames → `posts/2026-10-07-detroit/video/detroit-10.mp4`,
+  24.6 s, 1080×1920, 738 frames fully decoded, no audio, no black intervals. Camera fit
+  RMS 4.29 px (approximate composition, not measured registration). Details and known
+  limitations in that folder's `qa.md`. Not published; nothing uploaded.
+- Checks: full suite 481 OK, 1 skipped (`logs/director/unittest-03.log`), after all changes.
+- Failed/aborted: world-01 killed at roads, world-02 built by a stale 02.10 wheel (river as
+  ground), 03–07 stopped/crashed during the fixes, world-09 first run killed by a power cut.
+  Two Godot tests failed only inside the Codex sandbox; outside it they pass.
+- Not verified: driving/runtime of the Detroit map, real-time playback of the video,
+  `LocalArea` speedups on maps other than Detroit and the 1–2 km scale maps.
+
 ## 2026-10-07 — road builder switch, time estimates, BeamNG mods folder in the map menu (Claude)
 
 - Owner: 4×4 km with export takes about an hour; wants a switch with options and expected
