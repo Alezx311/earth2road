@@ -1,0 +1,61 @@
+{
+  "id": "singapore_kampong_glam",
+  "name": "Singapore - Kampong Glam & Little India",
+  "note": "2 km square over Bugis, Kampong Glam and Little India: shophouse streets, Sultan Mosque, Parkview Square. Roadgen v2, Local Visual DNA, quick-travel points chosen manually from well-known places; not an administrative boundary. Singapore drives on the left; the generator lays lanes right-hand (no left-hand support). Terrain: cleaned DEM cache (logs/singapore/clean_dem.py) — the Terrarium tiles here contain tower roofs; heights are a derived assumption.",
+  "bbox": [
+    103.847,
+    1.295,
+    103.865,
+    1.313
+  ],
+  "center": [
+    103.856,
+    1.304
+  ],
+  "overpass": "https://overpass-api.de/api/interpreter",
+  "overpass_maxsize": 268435456,
+  "overpass_mirrors": [
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ],
+  "region_profile": "experimental",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "traffic_count": 60,
+  "demand_pool": 100,
+  "local_visual_dna": {
+    "file": "config/visuals/singapore_kampong_glam_dna.json",
+    "landmark_limit": 10
+  },
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Sultan Mosque · Kampong Glam",
+        "lon": 103.859,
+        "lat": 1.3023
+      },
+      {
+        "name": "Tekka Centre · Little India",
+        "lon": 103.8508,
+        "lat": 1.3062
+      },
+      {
+        "name": "Sri Veeramakaliamman Temple",
+        "lon": 103.8525,
+        "lat": 1.3077
+      },
+      {
+        "name": "Parkview Square",
+        "lon": 103.8571,
+        "lat": 1.3008
+      }
+    ],
+    "note": "Bugis Junction and Mustafa Centre come from OSM mall points; National Library and Sim Lim Square have no road the spawn rules accept within 150 m and were dropped."
+  }
+}

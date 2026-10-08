@@ -1,0 +1,66 @@
+{
+  "id": "singapore_marina_bay",
+  "name": "Singapore - Marina Bay",
+  "note": "2 km square around Marina Bay: CBD, Civic District, Marina Bay Sands, Gardens by the Bay. Roadgen v2, Local Visual DNA, quick-travel points chosen manually from well-known places; not an administrative boundary. Singapore drives on the left; the generator lays lanes right-hand (no left-hand support). Terrain: cleaned DEM cache (logs/singapore/clean_dem.py) — the Terrarium tiles here contain tower roofs; heights are a derived assumption.",
+  "bbox": [
+    103.8495,
+    1.276,
+    103.8675,
+    1.294
+  ],
+  "center": [
+    103.8585,
+    1.285
+  ],
+  "overpass": "https://overpass-api.de/api/interpreter",
+  "overpass_maxsize": 268435456,
+  "overpass_mirrors": [
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ],
+  "region_profile": "experimental",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "traffic_count": 60,
+  "demand_pool": 100,
+  "local_visual_dna": {
+    "file": "config/visuals/singapore_marina_bay_dna.json",
+    "landmark_limit": 10
+  },
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Marina Bay Sands",
+        "lon": 103.8607,
+        "lat": 1.2834
+      },
+      {
+        "name": "Padang · City Hall",
+        "lon": 103.8516,
+        "lat": 1.2905
+      },
+      {
+        "name": "Gardens by the Bay",
+        "lon": 103.8651,
+        "lat": 1.28
+      },
+      {
+        "name": "Raffles Place",
+        "lon": 103.85,
+        "lat": 1.2831
+      },
+      {
+        "name": "Singapore Flyer",
+        "lon": 103.863,
+        "lat": 1.2911
+      }
+    ],
+    "note": "Gardens by the Bay, Raffles Place and Singapore Flyer points moved 190-220 m to the nearest road the spawn rules accept; Merlion, Esplanade, Fullerton, Helix Bridge and Lau Pa Sat have no such road within 150 m (bridges, short CBD blocks) and were dropped."
+  }
+}
