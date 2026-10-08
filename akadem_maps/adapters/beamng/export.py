@@ -36,13 +36,13 @@ def validate_level(level):
         raise ValueError('DAE materials without definition: '+', '.join(sorted(missing)[:20]))
     return result
 
-def export_world(world, output, *, overrides=None, level_id=None, optimization='balanced'):
+def export_world(world, output, *, overrides=None, level_id=None, optimization='balanced', texture_style='procedural'):
     world=Path(world).resolve()
     validate_world(world)
     cfg=read_json(world/'config.json')
     mid=cfg['id']
     with atomic_directory(output) as stage:
-        report=export_map(mid,stage/'mod',level_id=level_id,overrides=overrides,world_dir=world,namespace=True,package_zip=False,optimization=optimization)
+        report=export_map(mid,stage/'mod',level_id=level_id,overrides=overrides,world_dir=world,namespace=True,package_zip=False,optimization=optimization,texture_style=texture_style)
         level=stage/'mod/levels'/report['level_id']
         info=read_json(level/'info.json')
         info['version']=__version__

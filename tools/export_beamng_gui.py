@@ -30,7 +30,7 @@ def tile_count(mid, root=ROOT):
     return sum(1 for p in tiles.iterdir() if p.is_file()) if tiles.is_dir() else 0
 
 
-def export_installed(mid, destination, events, *, root=ROOT, optimization='balanced'):
+def export_installed(mid, destination, events, *, root=ROOT, optimization='balanced', texture_style='procedural'):
     """Publish one fresh run directory only after its ZIP passes validation."""
     if not re.fullmatch('[a-z0-9_]+', mid):
         raise ValueError('Invalid map id')
@@ -53,7 +53,8 @@ def export_installed(mid, destination, events, *, root=ROOT, optimization='balan
     zip_name = f'earth2road_{mid}.zip'
     with atomic_directory(output) as stage:
         report = export_map(mid, stage/'mod', source_root=root, namespace=True,
-                            package_zip=False, emit=events.emit, optimization=optimization)
+                            package_zip=False, emit=events.emit, optimization=optimization,
+                            texture_style=texture_style)
         level = stage/'mod/levels'/report['level_id']
         info = read_json(level/'info.json')
         index = read_json(source/'index.json')
@@ -71,9 +72,9 @@ def export_installed(mid, destination, events, *, root=ROOT, optimization='balan
         events.emit('stage', stage='validate_zip')
         validate_export(stage/zip_name)
         write_json(stage/'artifact.json', {'map': mid, 'level_id': report['level_id'],
-                   'zip': zip_name, 'sha256': sha256(stage/zip_name), 'optimization': optimization,
+                   'zip': zip_name, 'sha256': sha256(stage/zip_name), 'optimization': optimization, 'texture_style': texture_style,
                    'runtime_verified': False})
-    return {'id': mid, 'output': str(output), 'zip': str(output/zip_name), 'optimization': optimization,
+    return {'id': mid, 'output': str(output), 'zip': str(output/zip_name), 'optimization': optimization, 'texture_style': texture_style,
             'runtime_verified': False}
 
 
@@ -86,6 +87,7 @@ def main(argv=None):
     parser.add_argument('--parent-pid', type=int, required=True)
     parser.add_argument('--cancel-file', type=Path, required=True)
     parser.add_argument('--optimization', type=optimization_mode, default='balanced', help='legacy, balanced, compact, or balanced+writer/kerbs/terrain')
+    parser.add_argument('--texture-style', default='procedural', help='facade textures: an id from config/visuals/texture_styles.json')
     args = parser.parse_args(argv)
     args.log.parent.mkdir(parents=True, exist_ok=True)
     watcher = None
@@ -104,7 +106,8 @@ def main(argv=None):
                 if args.cancel_file.exists():
                     raise KeyboardInterrupt
                 started = time.monotonic()
-                result = export_installed(args.map, args.destination, events, optimization=args.optimization)
+                result = export_installed(args.map, args.destination, events, optimization=args.optimization,
+                                          texture_style=args.texture_style)
                 tiles = tile_count(args.map)
                 if tiles:
                     record(TIMINGS, 'export', result['optimization'], tiles, time.monotonic() - started, id=args.map)

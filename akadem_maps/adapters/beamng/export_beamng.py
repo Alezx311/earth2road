@@ -29,6 +29,7 @@ from akadem_maps.adapters.beamng.beamng_assets import (DRAWN_FACADES, FOREST_ITE
 from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point, features, optimization_mode, cross, dashed, normal, sub, triangulate
 from akadem_maps.adapters.beamng.beamng_network import road_height_audit, road_network, signals, stable_id
 from akadem_maps.adapters.beamng.beamng_terrain import GroundTerrain, write_substrate
+from akadem_maps.adapters.beamng.beamng_yards import materials as yard_materials, yard_props
 
 ROOT = Path(__file__).resolve().parents[3]
 VERSION = 2
@@ -248,7 +249,8 @@ def fixture_materials(level, level_id):
 
 # --- geometry ---------------------------------------------------------------
 
-def building_mesh(building, facade, roof):
+def building_mesh(building, facade, roof, end=None):
+    """`end`: material for the end walls of an elongated block (texture_styles.end_walls)."""
     mesh = Mesh()
     pts = [beam_point(p) for p in building['points']]
     floor = min(p[2] for p in pts)
@@ -272,8 +274,10 @@ def building_mesh(building, facade, roof):
             mesh.tri(facade, (a[0], a[1], bottom), (c[0], c[1], bottom), (b[0], b[1], bottom))
     if sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(pts, pts[1:] + pts[:1])) < 0:
         pts.reverse()
-    for a, b in zip(pts, pts[1:] + pts[:1]):
-        mesh.wall((a[0], a[1], floor), (b[0], b[1], floor), bottom - floor, top - floor, facade)
+    from .texture_styles import end_walls
+    ends = end_walls(pts) if end else [False]*len(pts)
+    for (a, b), is_end in zip(zip(pts, pts[1:] + pts[:1]), ends):
+        mesh.wall((a[0], a[1], floor), (b[0], b[1], floor), bottom - floor, top - floor, end if is_end else facade)
     return mesh
 
 
@@ -594,11 +598,25 @@ def canopy_mesh(centre, angle):
     return mesh
 
 
-def fuel_canopies(level, level_id, pois, occupied, counts, corridors=None, *, optimization='balanced', metrics=None):
-    """One canopy per fuel quick-travel point that has a clear forecourt."""
+# A mapped canopy (typical model of building=roof at a fuel station) within this
+# distance of the quick-travel point replaces the synthetic one.
+MAPPED_CANOPY_RADIUS = 60.0
+
+
+def fuel_canopies(level, level_id, pois, occupied, counts, corridors=None, *, optimization='balanced', metrics=None,
+                  mapped=()):
+    """One canopy per fuel quick-travel point that has a clear forecourt.
+
+    ``mapped`` are (x, z) centres of OSM canopies drawn as buildings; a point near one
+    gets no synthetic canopy.
+    """
     objects = []
     for poi in pois:
         if poi.get('kind') != 'fuel':
+            continue
+        x, z = poi['position'][0], poi['position'][2]
+        if any(math.hypot(x-cx, z-cz) < MAPPED_CANOPY_RADIUS for cx, cz in mapped):
+            counts['fuel_canopies_mapped'] += 1
             continue
         def envelope(centre, angle):
             a=math.radians(angle)
@@ -877,15 +895,43 @@ def _drawn_facade_pixels(name):
     raise KeyError(name)
 
 
-def panel_facade_materials(level, level_id):
-    """Author the windowed wall textures the shared BeamNG sets do not provide."""
+def fresh_png(level, level_id, stem, suffix, size, pixels):
+    """Write a square generated texture under a content-digest name; return its game path.
+    BeamNG caches converted textures by path, so a re-export with a changed facade under the
+    same name kept showing the old image (seen 2026-10-08 with the loggia sheets)."""
+    digest = hashlib.sha256(bytes(pixels)).hexdigest()[:10]
+    png(level / f'art/kyiv/{stem}_{digest}{suffix}', size, size, pixels)
+    return f'/levels/{level_id}/art/kyiv/{stem}_{digest}{suffix}'
+
+
+def panel_facade_kind(name):
+    """Photo-style tile kind of an exporter facade (texture_styles.py)."""
+    return 'brick' if name.endswith('_brick') else ('loggia' if PANEL_FACADES[name][2] == 'balcony' else 'panel')
+
+
+def facade_material(name, colour_map):
+    return {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+            'Stages': [{'baseColorMap': colour_map, 'roughnessFactor': 0.78, 'metallicFactor': 0.0}, {}, {}, {}],
+            'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+
+
+def panel_facade_materials(level, level_id, texture_style='procedural'):
+    """Author the windowed wall textures the shared BeamNG sets do not provide. A photo texture
+    style (texture_styles.py) builds them from its pack instead of drawing them."""
+    from . import texture_styles
     materials = {}
     for name, (base, glass, style) in PANEL_FACADES.items():
-        png(level / f'art/kyiv/{name}.png', FACADE_PX, FACADE_PX,
-            _facade_pixels(base, glass, style, name))
+        if texture_style == 'procedural':
+            path = fresh_png(level, level_id, name, '.png', FACADE_PX, _facade_pixels(base, glass, style, name))
+        else:
+            kind = panel_facade_kind(name)
+            px, _metres = texture_styles.tile_size(kind)
+            path = fresh_png(level, level_id, name, '.png', px, texture_styles.tile_for(kind, base, name))
+            materials[name+'_end'] = facade_material(name+'_end', fresh_png(
+                level, level_id, name+'_end', '.png', texture_styles.TILE_PX, texture_styles.end_pixels(kind, base, name)))
         materials[name] = {
             'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
-            'Stages': [{'baseColorMap': f'/levels/{level_id}/art/kyiv/{name}.png',
+            'Stages': [{'baseColorMap': path,
                         'roughnessFactor': 0.78, 'metallicFactor': 0.0}, {}, {}, {}],
             'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
     for name in DRAWN_FACADES:
@@ -1082,9 +1128,11 @@ def deterministic_zip(root, path):
 GROUPS = ('KyivGenerated', 'KyivNavigation', 'KyivProps', 'KyivSignals', 'KyivSky', 'KyivManual')
 
 
-def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True, emit=None, optimization='balanced'):
+def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True, emit=None, optimization='balanced', texture_style='procedural'):
     from .optimization import ExportMetrics, simplify_ground
+    from . import texture_styles
     optimization = optimization_mode(optimization)
+    texture_styles.resolve(texture_style)     # fail before any work when the pack is missing
     feature = features(optimization)
     metrics = ExportMetrics(optimization)
     def stage_event(stage):
@@ -1256,13 +1304,24 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         # Whole buildings merge into 250 m cells by footprint centre: thousands of
         # per-building TSStatics dominated level load time.
         building_cells = defaultdict(Mesh)
-        dna_styles, roof_colours = {}, {}
+        dna_styles, roof_colours, facade_kinds = {}, {}, {}
+        mapped_canopies = []
         from akadem_maps.adapters.beamng.beamng_placement import audit_building
         for index_n, (bid, parts) in enumerate(building_items, 1):
             facade, roof = building_style(parts[0])
             if parts[0].get('local_style'):
                 dna_styles[facade] = parts[0]['local_style']
                 UV[facade] = 1/6
+            end = None
+            if texture_style != 'procedural':
+                kind = (panel_facade_kind(facade) if facade in PANEL_FACADES else
+                        texture_styles.dna_kind(dna_styles[facade], facade) if facade in dna_styles else None)
+                if kind == 'loggia':
+                    UV[facade] = 1/texture_styles.LOGGIA_SHEET_M
+                if kind in ('panel', 'loggia', 'brick'):
+                    end = facade + '_end'
+                    UV[end] = 1/6
+                    facade_kinds[facade] = kind
             if str(parts[0].get('id')) in LANDMARKS:
                 counts['landmark_buildings'] += 1
             pts = [beam_point(p) for b in parts for p in b['points']]
@@ -1277,13 +1336,16 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                     roof_colours[part_roof] = b['roof_color']
                     UV[part_roof] = 1/3
                 try:
-                    part = building_mesh(b, facade, part_roof)
+                    part = building_mesh(b, facade, part_roof, end)
                 except ValueError as e:
                     errors.append({'building': b['id'], 'error': str(e)})
                     continue
                 for mat, faces in part.faces.items():
                     cell.faces[mat].extend(faces)
                     cell.uvs[mat].extend(part.uvs[mat])
+            if (parts[0].get('typical') or {}).get('kind') == 'fuel_canopy':
+                mapped_canopies.append((sum(p[0] for p in parts[0]['points'])/len(parts[0]['points']),
+                                        sum(p[2] for p in parts[0]['points'])/len(parts[0]['points'])))
             counts['buildings'] += 1
             counts['facade_' + facade.removeprefix('kyiv_fac_')] += 1
             if index_n % 500 == 0 or index_n == len(building_items):
@@ -1299,13 +1361,22 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         del building_parts, building_items, building_cells
         stage_event('dressing')
         materials = {**surface_materials(), **tree_materials(), **fixture_materials(level, level_id),
-                     **panel_facade_materials(level, level_id)}
+                     **panel_facade_materials(level, level_id, texture_style), **yard_materials()}
         from akadem_maps.core.local_dna import facade_pixels, Field
         for name, style in sorted(dna_styles.items()):
-            png(level/f'art/kyiv/{name}.color.png', 256, 256, facade_pixels(style))
+            if texture_style == 'procedural':
+                path = fresh_png(level, level_id, name, '.color.png', 256, facade_pixels(style))
+            else:
+                colour = [int(str(style.get('color') or '#b5b2aa')[i:i+2], 16)/255 for i in (1, 3, 5)]
+                kind = texture_styles.dna_kind(style, name)
+                px, _metres = texture_styles.tile_size(kind)
+                path = fresh_png(level, level_id, name, '.color.png', px, texture_styles.tile_for(kind, colour, name))
+                if name in facade_kinds:
+                    materials[name+'_end'] = facade_material(name+'_end', fresh_png(
+                        level, level_id, name+'_end', '.color.png', texture_styles.TILE_PX,
+                        texture_styles.end_pixels(kind, colour, name)))
             materials[name] = {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
-                               'Stages': [{'baseColorMap': f'/levels/{level_id}/art/kyiv/{name}.color.png',
-                                           'roughnessFactor': .78}, {}, {}, {}],
+                               'Stages': [{'baseColorMap': path, 'roughnessFactor': .78}, {}, {}, {}],
                                'annotation': 'BUILDINGS', 'materialTag0': 'building'}
         metal_roof = ROOFS['kyiv_roof_metal'][0]
         for name, hexa in sorted(roof_colours.items()):
@@ -1334,7 +1405,14 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         objects += lamps
         counts['street_lamps'] = len(lamps)
         objects += fuel_canopies(level, level_id, index.get('pois', []),
-                                 lambda p: corridors.occupied(p, margin=0.6, roads_only=True), counts, corridors, optimization=optimization, metrics=metrics)
+                                 lambda p: corridors.occupied(p, margin=0.6, roads_only=True), counts, corridors, optimization=optimization, metrics=metrics,
+                                 mapped=mapped_canopies)
+        # Courtyards (core/yards.py): benches, bins, playground kits; never the parked cars.
+        yard_cells, yard_bushes, yard_counts = yard_props(tiles, SURFACE_CELL)
+        for (ix, iy), mesh in sorted(yard_cells.items()):
+            objects.append(write_static(level, level_id, stable_id('kyiv_yards', (ix, iy)), mesh,
+                                        ((ix + 0.5) * SURFACE_CELL, (iy + 0.5) * SURFACE_CELL, 0.0), category='props'))
+        counts.update(yard_counts)
 
         dna_report = index.get('local_visual_dna')
         dna_field = None
@@ -1343,6 +1421,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
             dna_field = Field({'version': 1, 'profiles': dna_report['profiles'], 'anchors': dna_report['visual_anchors']},
                               lambda lon, lat: positions[(lon, lat)], dna_report['seed'])
         instances, vegcounts = vegetation(tiles, dna_field)
+        instances += yard_bushes
         before = len(instances)
         kept=[]
         for v in instances:
@@ -1475,6 +1554,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                 attribution += '\n' + file.read_text(encoding='utf8')
         (level / 'ATTRIBUTION.txt').write_text(attribution, encoding='utf8')
         report = {'format_version': VERSION, 'map': mid, 'level_id': level_id, 'counts': dict(counts), 'optimization': optimization,
+                  'texture_style': texture_style,
                   'source_files': sources, 'coordinate_transform': 'BeamNG(x,y,z) = World(x,-z,y+vertical_offset)',
                   'vertical_offset': lift,
                   'sumo_location': location, 'sumo_center_offset': index['offset'],

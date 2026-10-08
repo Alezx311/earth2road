@@ -154,6 +154,14 @@ class AssetTests(unittest.TestCase):
         deck = [z for tri in mesh.faces['kyiv_fac_cladding'] for p in tri for z in (p[2],)]
         self.assertGreater(min(deck), centre[2] + 4.5)
 
+    def test_mapped_canopy_replaces_the_synthetic_one(self):
+        from collections import Counter
+        from akadem_maps.adapters.beamng.export_beamng import fuel_canopies
+        counts = Counter()
+        pois = [{'id': 'n1', 'kind': 'fuel', 'position': [0, 1, 0], 'angle': 0}]
+        self.assertEqual(fuel_canopies(None, 'x', pois, lambda p: True, counts, mapped=[(20, 10)]), [])
+        self.assertEqual((counts['fuel_canopies_mapped'], counts['fuel_canopies_skipped']), (1, 0))
+
     def test_uv_scales_cover_every_drawn_material(self):
         scales = uv_scales()
         self.assertTrue(set(surface_materials()) <= set(scales))

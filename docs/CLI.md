@@ -64,6 +64,10 @@ lowercase letters, digits and `_`; by default it is `kyiv_<map id>`. `tools/expo
 --world <folder> --output <folder>` does the same for older scripts; its `--map` takes an
 installed map ID such as `tiny`, not a path.
 
+`--texture-style ID` (default `procedural`) bakes a texture style from
+`config/visuals/texture_styles.json` into the facade textures; a style whose pack is not
+imported is an error, not a fallback. The export dialog in the game offers the same choice.
+
 `--optimization balanced` (default) shares identical vertices in the DAE files, merges flat
 ground (≤5 cm height error, tile edges kept exact) and gives sidewalks a simplified collision
 mesh without the curb bevel. `--optimization legacy` writes the previous unoptimized geometry.

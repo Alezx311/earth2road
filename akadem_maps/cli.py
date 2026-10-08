@@ -73,6 +73,7 @@ def parser():
     e.add_argument('--overrides',type=Path);e.add_argument('--offline',action='store_true')
     e.add_argument('--level-id')
     e.add_argument('--optimization', type=optimization_mode, default='balanced', help='BeamNG geometry: legacy, balanced, compact, or balanced+writer/kerbs/terrain')
+    e.add_argument('--texture-style', default='procedural', help='BeamNG facades: an id from config/visuals/texture_styles.json (procedural, panelka, …)')
     i=sub.add_parser('install',help='Copy a Godot export into a game checkout (explicit, never implicit)')
     i.add_argument('--target',choices=('godot',),required=True)
     i.add_argument('--export',type=Path,required=True);i.add_argument('--root',type=Path,default=Path.cwd())
@@ -127,7 +128,7 @@ def main(argv=None):
                     result=export_world(args.world,args.output,offline=args.offline)
                 else:
                     from .adapters.beamng.export import export_world
-                    result=export_world(args.world,args.output,overrides=args.overrides,level_id=args.level_id,optimization=args.optimization)
+                    result=export_world(args.world,args.output,overrides=args.overrides,level_id=args.level_id,optimization=args.optimization,texture_style=args.texture_style)
             elif args.command=='capture':
                 from .adapters.beamng.export_beamng import capture_edits
                 if args.output.exists():
