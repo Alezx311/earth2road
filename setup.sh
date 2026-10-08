@@ -2,8 +2,17 @@
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 mkdir -p .tools .cache logs
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo 'Python 3.11+ is required (3.14 is the pinned, validated version).'; exit 1; }
-python3 -m venv .venv
+# Pinned packages have 64-bit wheels for CPython 3.11-3.14 only (libsumo/pyproj/shapely: no 3.15 yet).
+pycheck='import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 14) and sys.maxsize > 2**32 else 1)'
+if ! { [[ -x .venv/bin/python ]] && .venv/bin/python -c "$pycheck" 2>/dev/null; }; then
+  py=''
+  for cand in python3.14 python3.13 python3.12 python3.11 python3; do
+    if command -v "$cand" >/dev/null && "$cand" -c "$pycheck" 2>/dev/null; then py=$cand; break; fi
+  done
+  [[ -n "$py" ]] || { echo '64-bit Python 3.11-3.14 is required (3.14 is the pinned, validated version).'; exit 1; }
+  rm -rf .venv
+  "$py" -m venv .venv
+fi
 .venv/bin/python -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
 source tools/godot.sh
 if [[ ! -x "$godot" ]]; then

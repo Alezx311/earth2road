@@ -29,8 +29,17 @@ def mod_names(mid):
     return [f'earth2road_{mid}.zip', f'akadem_drive_{mid}.zip']
 
 
+def is_junction(path):
+    if hasattr(os.path, 'isjunction'):
+        return os.path.isjunction(path)
+    try:  # Python 3.11: no os.path.isjunction
+        return os.lstat(path).st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
+    except (OSError, AttributeError):
+        return False
+
+
 def is_link(path):
-    return path.is_symlink() or (hasattr(os.path, 'isjunction') and os.path.isjunction(path))
+    return path.is_symlink() or is_junction(path)
 
 
 def targets(mid, root=ROOT, mods_dir=None, exports_dir=None):

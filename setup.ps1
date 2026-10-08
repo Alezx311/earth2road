@@ -17,11 +17,38 @@ Replace-Stub '.venv'
 Replace-Stub '.tools'
 New-Item -ItemType Directory -Force -Path .tools, .cache, logs | Out-Null
 
-$py = Get-Command python -ErrorAction Stop
-& $py.Source -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
-if ($LASTEXITCODE -ne 0) { throw "Python 3.11+ is required (3.14 is the pinned, validated version)." }
-& $py.Source -m venv .venv
+# Wheels for the pinned packages exist for 64-bit CPython 3.11-3.14 only (SUMO: win_amd64 only;
+# libsumo/pyproj/shapely: no 3.15 yet). The first `python` on PATH may be another version, so try
+# the py launcher's 3.14..3.11 first.
+$pyCheck = "import sys, sysconfig; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 14) and sysconfig.get_platform() == 'win-amd64' else 1)"
+function Test-Python([string[]]$Cmd) {
+    if (-not (Get-Command $Cmd[0] -ErrorAction SilentlyContinue)) { return $false }
+    $rest = @($Cmd | Select-Object -Skip 1) + @('-c', $pyCheck)
+    # 'py -3.13' without 3.13 writes to stderr; under Stop, PowerShell 5.1 would throw on it.
+    $ErrorActionPreference = 'Continue'
+    try { & $Cmd[0] @rest 2>$null | Out-Null } catch { return $false }
+    return $LASTEXITCODE -eq 0
+}
 $venvPy = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
+if (-not (Test-Python @($venvPy))) {
+    $py = $null
+    foreach ($cand in @(@('py', '-3.14'), @('py', '-3.13'), @('py', '-3.12'), @('py', '-3.11'), @('python', '-I'))) {
+        if (Test-Python $cand) { $py = $cand; break }
+    }
+    if (-not $py) {
+        throw "64-bit Python 3.11-3.14 is required (3.14 is the pinned, validated version). Install it: winget install --exact --id Python.Python.3.14 --scope user"
+    }
+    $pyExe = $py[0]
+    $pyArgs = @($py | Select-Object -Skip 1)
+    Write-Host "Using Python: $(& $pyExe @pyArgs -c 'import sys; print(sys.version.split()[0], sys.executable)')"
+    # A .venv left by a failed run may come from an unsupported Python (3.15, 32-bit, ARM64); rebuild it.
+    if (Test-Path -LiteralPath '.venv') {
+        Write-Host 'Removing .venv built with an unsupported Python'
+        Remove-Item -LiteralPath '.venv' -Recurse -Force
+    }
+    & $pyExe @pyArgs -m venv .venv
+    if ($LASTEXITCODE -ne 0) { throw "python -m venv failed" }
+}
 if (-not (Test-Path -LiteralPath $venvPy)) {
     throw "venv python missing at $venvPy"
 }
