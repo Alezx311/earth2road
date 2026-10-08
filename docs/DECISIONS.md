@@ -8,6 +8,25 @@
   covers Podil buildings/greenery and landmark spawns, without imagery/CV or 3D
   reconstruction. See LOCAL_VISUAL_DNA.md for the interface and limitations.
 
+- Typical models by building type (2026-10-08) are derived geometry, used only where
+  OSM has no detail: a church/mosque/fuel canopy/shop hall without `building:part`
+  items or `roof:shape` gets a recognizable form (nave + drum/onion + bell tower,
+  spire, dome + minaret, raised deck on posts, 4.5 m retail storeys). Tagged heights
+  and colours always win; every derived record says `typical.provenance`. An untagged
+  Christian church is Orthodox in the `ukraine` region profile and Western elsewhere.
+  The form is extra building records (S3DB-like parts), so adapters need no new code.
+- Courtyard dressing (2026-10-08, owner): parked cars, entrance benches/bins, shrubs along
+  apartment walls and playground equipment are synthetic, each anchored to an observed OSM
+  feature (surface parking, yard service road near an apartment block, entrance node, wall,
+  playground). They live in `visual_props` and are drawn by Godot only. Parked cars are never
+  exported to BeamNG (CPU/GPU load there); other yard props may follow later as a separate
+  decision. S3DB `building:min_level` counts as 3 m storeys when `min_height` is absent.
+- Texture styles (2026-10-08, owner): facade looks are switchable packs, not baked into the world.
+  Godot switches them at run time (global shader uniform `facade_style`); BeamNG gets the chosen
+  one baked at export (`--texture-style`, default `procedural`). In a photo style every facade
+  family uses the pack (no procedural walls left among photo ones). Packs the owner downloads by
+  hand live in ignored `texture_packs/`; import tools write ignored `game/assets/textures` with
+  per-file SHA-256 and licence. Styles are visual only and must be named as such in posts.
 - Public project/distribution/CLI/repository: Earth2Road / `earth2road`
   (github.com/Alezx311/earth2road). The only CLI is `earth2road`; `akadem_maps` (Python
   package) and `AKADEM_*` (environment) are internal technical names.

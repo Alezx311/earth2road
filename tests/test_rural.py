@@ -64,6 +64,15 @@ class RuralGeometryTests(unittest.TestCase):
             self.assertLess(item['wall_height'],item['height'])
             self.assertEqual(item['roof_source'],'synthetic')
 
+    def test_tree_row_outside_the_map_area_is_skipped(self):
+        # An empty intersection is a LineString too; it used to reach LocalArea as an empty point.
+        from akadem_maps.core import rural as core_rural
+        source = ET.fromstring('<osm><way id="1"><nd ref="1"/><nd ref="2"/><tag k="natural" v="tree_row"/></way></osm>')
+        net = type('Net', (), {'convertLonLat2XY': staticmethod(lambda x, y: (x, y))})()
+        fences, trees, gardens = core_rural.dress([], {}, source, {'1': (500., 0.), '2': (600., 0.)}, net,
+                                                  lambda x, y: [x, 0., -y], Polygon(), Polygon.from_bounds(0, 0, 100, 100))
+        self.assertEqual((fences, trees, gardens), ([], [], []))
+
     def test_explicit_flat_roof_stays_flat(self):
         b={'id':'a','points':[[0,0,0],[8,0,0],[8,0,6],[0,0,6]],'height':4.8}
         rural.roof(b,{'roof:shape':'flat'})

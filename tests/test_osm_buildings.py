@@ -34,6 +34,15 @@ class RelationTests(unittest.TestCase):
         self.assertTrue(all(not p.interiors for p in pieces))
         self.assertAlmostEqual(sum(p.area for p in pieces), 96.0, places=3)
 
+    def test_courtyard_in_real_lon_lat_keeps_the_building(self):
+        # prepare.py cuts footprints in degrees; an absolute area threshold dropped School 288.
+        outer = Polygon([(30.35, 50.46), (30.3507, 50.46), (30.3507, 50.4605), (30.35, 50.4605)])
+        inner = [(30.3502, 50.4601), (30.3505, 50.4601), (30.3505, 50.4604), (30.3502, 50.4604)]
+        shape = Polygon(outer.exterior.coords, [inner])
+        pieces = ob.hole_free(shape)
+        self.assertTrue(pieces and all(not p.interiors for p in pieces))
+        self.assertAlmostEqual(sum(p.area for p in pieces)/shape.area, 1.0, places=6)
+
 
 class PartTests(unittest.TestCase):
     def test_outline_covered_by_parts_is_hidden_and_parts_know_it(self):

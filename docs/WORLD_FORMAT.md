@@ -10,13 +10,28 @@ Adapters (`export --target godot|beamng`) only read it; they never modify it.
 | `world.json` | Manifest: `format: "akadem-world"`, `version: 2`, `id`, `generator`, `seed`, `coordinates`, `licenses`, `tools` (Python, platform, package and netconvert versions) and `files` — SHA-256 of every file except `netconvert.log`. |
 | `config.json` | The normalised config the world was built from. |
 | `index.json` | Map header: `version`, `id`, `name`, `bbox`, `offset`, `base_height`, `tile_size`, `tiles`, `lanes`, `signals`, `tls`, `spawn`, `shots`, `region_profile`, `attribution`, `network_sha256`. |
-| `tiles/<i>_<j>.json` | Geometry per tile: `road_strips`, `markings`, `sidewalks`, `walkingareas`, `junctions`, `buildings`, `greens`, `parking`, `paths`, `trees`, `ground`, `signs`, `fences`. |
+| `tiles/<i>_<j>.json` | Geometry per tile: `road_strips`, `markings`, `sidewalks`, `walkingareas`, `junctions`, `buildings`, `greens`, `parking`, `paths`, `trees`, `ground`, `signs`, `fences`, `visual_props`. |
 | `network.net.xml` | SUMO network (comments stripped so equal inputs give equal bytes). |
 | `corrected.osm`, `sources.json`, `audit.json` | OSM after tag corrections, source provenance, build report and assumptions. |
 | `inputs/` | Everything needed to rebuild offline: `config.json`, `raw/` (OSM, DEM tiles, optional corridor), `resources/`, `config_root/` files used, and `manifest.json` with SHA-256 and tool versions. |
 
 `validate --target world` re-hashes every file, checks the network hash, that the spawn
 lane exists and that every tile parses. Any mismatch is an error, not a warning.
+
+Buildings may carry `typical` = `{kind, provenance: "derived:typical_model", version,
+role?, fallback?}` (`akadem_maps/core/building_types.py`). Kinds: `church_orthodox`,
+`church_western`, `mosque`, `fuel_canopy`, `mall`, `retail`. A record with a `role`
+(`dome`, `bell_tower`, `minaret`, `post`) is a derived part sharing the main building's
+`id` and `style_key`; it has the same fields as an S3DB part (`base`, `roof_triangles`,
+`local_style`, `roof_color`). `audit.json` → `typical_models` lists every typed building,
+including those kept as mapped because OSM has parts or `roof:shape`.
+
+`visual_props` (`akadem_maps/core/yards.py`) are synthetic courtyard items: `{kind, position,
+yaw, radius, provenance: "synthetic:yard", rule, source}`; `parked_car` adds `model` (a
+passenger entry of `config/vehicles.json`) and `size` [w, h, l]. `yaw` turns the item's local
++Z (car length, bench backrest) in Godot's Y rotation. Kinds: `parked_car`, `bench`, `bin`,
+`shrub`, `swing`, `slide`, `sandbox`, `climber`, `carousel`. Godot only; the BeamNG adapter
+ignores the field. Counts: `audit.json` → `yard_*`.
 
 ## Coordinates
 

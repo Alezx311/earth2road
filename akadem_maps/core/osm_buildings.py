@@ -180,10 +180,14 @@ def polygons(shape):
     return [g for g in getattr(shape, 'geoms', []) if isinstance(g, Polygon)]
 
 
-def hole_free(poly, depth=0):
-    """Hole-free pieces covering ``poly``: cut through each courtyard and recurse."""
+def hole_free(poly, depth=0, min_area=None):
+    """Hole-free pieces covering ``poly``: cut through each courtyard and recurse.
+    Slivers below 1e-4 of the outline are dropped; relative, because callers pass lon/lat
+    (a school is ~5e-7 deg²) as well as metres."""
     if not poly.interiors or depth > 12:
         return [Polygon(poly.exterior)]
+    if min_area is None:
+        min_area = Polygon(poly.exterior).area*1e-4
     hole = Polygon(poly.interiors[0])
     x = hole.representative_point().x
     _, y0, _, y1 = poly.bounds
@@ -191,8 +195,8 @@ def hole_free(poly, depth=0):
     out = []
     for half in (robust(lambda a, b: a.intersection(b), poly, left), robust(lambda a, b: a.difference(b), poly, left)):
         for piece in polygons(half.buffer(0)):
-            if piece.area > 0.05:
-                out += hole_free(piece, depth+1)
+            if piece.area > min_area:
+                out += hole_free(piece, depth+1, min_area)
     return out
 
 

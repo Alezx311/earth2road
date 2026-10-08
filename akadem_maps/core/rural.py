@@ -184,7 +184,7 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area, house=No
     seen = {}  # 100 m cell -> earlier yard rings (buffered)
     for b in buildings:
         tags = way_tags.get(str(b['id']), {})
-        if roofs:
+        if roofs and 'typical' not in b:   # typical models (building_types) keep their own roofs
             roof(b, tags)
         kind = tags.get('building') or b.get('building_type') or 'yes'
         if house is not None:
@@ -234,7 +234,7 @@ def dress(buildings, way_tags, root, nodes, net, point, road_cut, area, house=No
         if tags.get('natural') == 'tree_row':
             line = LineString(coords).intersection(area)
             for part in ([line] if line.geom_type=='LineString' else getattr(line,'geoms',[])):
-                if part.geom_type != 'LineString': continue
+                if part.geom_type != 'LineString' or part.is_empty: continue   # row outside the area
                 for i in range(int(part.length/9)+1):
                     p = part.interpolate(i*9)
                     if not near_forbidden.within(p.x-1, p.y-1, p.x+1, p.y+1).covers(p): trees.append(point(p.x,p.y))

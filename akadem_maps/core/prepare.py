@@ -28,8 +28,8 @@ from akadem_maps.core import building_enrichment
 from akadem_maps.core import road_profiles
 from akadem_maps.core import corridor
 from akadem_maps.core import pois as poi_points
-from akadem_maps.core import rural
-from akadem_maps.core import local_dna, landmarks, osm_buildings, landcover, roundabouts
+from akadem_maps.core import rural, yards
+from akadem_maps.core import local_dna, landmarks, osm_buildings, landcover, roundabouts, building_types
 from akadem_maps.core import road_geometry, surface_audit, road_graph, roadgen, road_elevation
 
 
@@ -783,6 +783,8 @@ def write_world(world, folder):
         tiles[name].setdefault('tree_records', []).append(item)
     for item in world['signs']:
         put(key(item['position']), 'signs', item)
+    for item in world.get('visual_props', []):
+        put(key(item['position']), 'visual_props', item)
     world['sliver_triangles_dropped'] = dropped
     index = {k: v for k, v in world.items() if k not in layout.TILED and k != 'tree_records'}
     index['tile_size'] = TILE
@@ -1309,24 +1311,40 @@ def build(cfg, root, context):
             for part in osm_buildings.hole_free(piece):
                 building_inputs.append((rid, t, list(part.exterior.coords)[:-1]))
     building_footprints = {}
+    region = cfg.get('region_profile', 'experimental')
+    type_context = building_types.context_objects(root, nodes, net.convertLonLat2XY, tags)
     def add_building(bid, t, ring):
         footprint = Polygon([net.convertLonLat2XY(*q) for q in ring]).buffer(0)
         if footprint.is_empty or footprint.geom_type != 'Polygon':
             return
         coords = [geo_point(*q) for q in ring]
         counts['buildings']+=1
+        # Typical model by type (churches, fuel canopies, shop halls); tags of a fuel area or
+        # a place-of-worship node around the footprint count as its own.
+        typed = building_types.with_context(t, footprint, type_context)
+        kind = building_types.kind(typed, footprint.area, region)
         default_levels = (2 if t.get('building')=='apartments' else 1) if is_rural else (5 if t.get('building')=='apartments' else 2)
         if not is_rural and 'building:levels' not in t and 'height' not in t:
             default_levels = osm_buildings.assumed_levels(t, footprint.area, default_levels)
         levels = number(t.get('building:levels'),default_levels)
         h = number(t.get('height'),levels*3+(1.8 if is_rural else 0))
         mode = 'height' if 'height' in t else ('levels' if 'building:levels' in t else 'assumed')
+        typical_base = None
+        override = building_types.heights(kind, t, default_levels) if kind else None
+        if override:
+            levels, h, typical_base = override
         counts['building_height_'+mode]+=1
         item = {'id':bid,'points':coords,'height':max(2,min(h,180)),'height_source':mode,'levels':levels,**visual_tags.classify(bid,t,facade_fixes)}
-        item['_tags'], item['_part'] = t, 'building:part' in t and 'building' not in t
+        item['_tags'], item['_part'], item['_kind'] = typed, 'building:part' in t and 'building' not in t, kind
+        # S3DB: min_height in metres, else building:min_level storeys skipped (same 3 m storey
+        # as the height); without it a part on a podium starts at the ground and z-fights.
         min_height = osm_buildings.number(t.get('min_height'))
+        if min_height is None and osm_buildings.number(t.get('building:min_level')):
+            min_height = osm_buildings.number(t.get('building:min_level'))*3
         if min_height and 0 < min_height < item['height']-0.5:
             item['base'] = min_height
+        if typical_base and 0 < typical_base < item['height']:
+            item['base'] = typical_base
         if 'shop' in t or 'amenity' in t or t.get('building') in ('retail','commercial','supermarket'):
             item['ground_floor']='shop'
         osm_footprints.append(footprint)
@@ -1415,9 +1433,25 @@ def build(cfg, root, context):
     # removed) before the parts that inherit from it.
     facts = [(b.get('_tags') or way_tags.get(str(b['id']), {}), b.get('_parent')) for b in buildings]
     facts = [(t, parent, parent.get('_tags') if parent else None) for t, parent in facts]
+    s3db_parents = {id(b['_parent']) for b in buildings if b.get('_parent') is not None}
+    typical_parts, typical_audit = [], []
     for b, (t, parent, parent_tags) in zip(buildings, facts):
         if parent:
             b['style_key'] = str(parent['id'])
+        kind = b.pop('_kind', None)
+        if kind:
+            why = building_types.blocked(t, b, s3db_parents)
+            if why:
+                counts['typical_kept_osm'] += 1
+                typical_audit.append({'id': b['id'], 'kind': kind, 'action': 'kept', 'reason': why})
+            else:
+                extra, why = building_types.apply(b, kind, t, region)
+                typical_parts += extra
+                counts['typical_'+kind] += 1
+                counts['typical_parts'] += len(extra)
+                counts['typical_fallbacks'] += bool(why)
+                typical_audit.append({'id': b['id'], 'kind': kind, 'action': 'typical', 'parts': len(extra),
+                                      **({'fallback': why} if why else {})})
         if dna and 'local_style' not in b:
             dna.apply(b, {**{k: v for k, v in (parent_tags or {}).items() if k in osm_buildings.APPEARANCE}, **t})
         if 'local_style' not in b and osm_buildings.wants_style(t, parent_tags):
@@ -1439,6 +1473,7 @@ def build(cfg, root, context):
             dna.counts['gabled_roofs'] += b.get('roof_shape_rendered', 'gabled') == 'gabled' and 'roof_triangles' in b
         for key in ('_tags', '_part', '_parent'):
             b.pop(key, None)
+    buildings += typical_parts
     if is_rural:
         fences, row_trees, gardens = rural.dress(buildings,way_tags,root,nodes,net,point,road_cut,
                                       area_xy if area_xy is not None else corridor.to_net(map_area,net))
@@ -1455,6 +1490,12 @@ def build(cfg, root, context):
         counts['urban_fences'] = len(fences)
         counts['urban_gardens'] = len(gardens)
         counts['tree_row_instances'] = len(row_trees)
+    # Courtyards (playtest 2026-10-08, note 3): parked cars, entrance benches, shrubs and
+    # playground equipment next to observed features; Godot only (visual_props).
+    yard_props, yard_counts = yards.dress(root, nodes, net.convertLonLat2XY, point, road_cut,
+                                          area_xy if area_xy is not None else corridor.to_net(map_area, net),
+                                          parking_polys, cfg['seed'])
+    counts.update({'yard_'+k: v for k, v in yard_counts.items()})
     if use_roadgen:
         # Continuous median barrier of divided motorways/trunks, open at every junction
         # and crossing: wherever the carriageway itself reaches the median line.
@@ -1656,6 +1697,8 @@ def build(cfg, root, context):
     world['region_profile'] = cfg.get('region_profile', 'experimental')
     if fences:
         world['fences'] = fences
+    if yard_props:
+        world['visual_props'] = yard_props
     if is_rural:
         world['visual_profile'] = 'rural'
         world['traffic_count'] = cfg.get('traffic_count',20)
@@ -1665,7 +1708,7 @@ def build(cfg, root, context):
         world['area']=[[round(x-cx,3),0.0,round(-(y-cy),3)] for x,y in area_xy.exterior.coords]
     context.progress('tiles', 0.87)
     tile_count=write_world(world, context.world)
-    report={'counts':dict(counts),'elevation':elevation_report,'lanes':len(lanes),'junctions':len(junctions),'sliver_triangles_dropped':world.get('sliver_triangles_dropped',0),'traffic_lights':len(net.getTrafficLights()),'terrain_tiles':sorted(terrain.used),'assumptions':['OSM-derived lane widths/speeds and missing lanes may use SUMO defaults.','Signal phases are synthetic. Traffic demand is generated separately by the Godot adapter.','Road heights: coarse DEM smoothed along the road graph; bridge decks assumed 6.5 m (road) / 7 m (rail) above crossings, tunnels 3.5 m per layer, ramps limited to 6% (12% service). Not surveyed heights.','Building multipolygon relations are split into hole-free pieces; S3DB outlines covered by building:part are hidden; pyramidal/hipped/dome/onion roofs are derived solids within the footprint.','Initial rectangle includes neighboring streets; not an administrative boundary.','Road signs are derived from the SUMO network and OSM tags; Kyiv OSM has almost no traffic_sign nodes. Each record carries provenance = osm | derived. Signal phase programs are netconvert defaults, not observed Kyiv timings.'],'spawn':world['spawn'],'building_enrichment':enrichment_audit,'buildings_on_carriageway':clearance_audit,'roundabout_lanes':roundabout_report,'lane_count_suspects':lane_suspects,'tiles':tile_count,**({'pois':poi_report} if poi_report else {})}
+    report={'counts':dict(counts),'elevation':elevation_report,'lanes':len(lanes),'junctions':len(junctions),'sliver_triangles_dropped':world.get('sliver_triangles_dropped',0),'traffic_lights':len(net.getTrafficLights()),'terrain_tiles':sorted(terrain.used),'assumptions':['OSM-derived lane widths/speeds and missing lanes may use SUMO defaults.','Signal phases are synthetic. Traffic demand is generated separately by the Godot adapter.','Road heights: coarse DEM smoothed along the road graph; bridge decks assumed 6.5 m (road) / 7 m (rail) above crossings, tunnels 3.5 m per layer, ramps limited to 6% (12% service). Not surveyed heights.','Building multipolygon relations are split into hole-free pieces; S3DB outlines covered by building:part are hidden; pyramidal/hipped/dome/onion roofs are derived solids within the footprint.','Initial rectangle includes neighboring streets; not an administrative boundary.','Road signs are derived from the SUMO network and OSM tags; Kyiv OSM has almost no traffic_sign nodes. Each record carries provenance = osm | derived. Signal phase programs are netconvert defaults, not observed Kyiv timings.'],'spawn':world['spawn'],'building_enrichment':enrichment_audit,'buildings_on_carriageway':clearance_audit,'typical_models':typical_audit,'roundabout_lanes':roundabout_report,'lane_count_suspects':lane_suspects,'tiles':tile_count,**({'pois':poi_report} if poi_report else {})}
     context.progress('surface_audit', .89)
     surfaces_report = surface_audit.audit(world, [world])
     write_json(BUILD/'surface_audit.json', surfaces_report)
