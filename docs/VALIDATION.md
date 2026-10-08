@@ -48,6 +48,8 @@ python tools/check_publication.py
 ```
 
 `ci_offline.py` requires the built non-editable wheel to be installed first, as done in CI.
+`setup.ps1`/`setup.sh` install the checkout editable (a copy frozen at setup time made the
+CLI build maps with stale code), so run `ci_offline.py` locally from a separate venv.
 Map-dependent tests require installed data and `AKADEM_MAP=akadem`; a fresh public clone
 will skip them until maps are built. The tiny synthetic example needs no downloaded map data.
 
