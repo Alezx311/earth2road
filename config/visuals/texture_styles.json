@@ -1,0 +1,10 @@
+{
+  "note": "Switchable texture styles. Godot: K or the pause menu (game/scripts/styles.gd), remembered in settings.cfg [visuals] texture_style. BeamNG: export option --texture-style (baked into the facade textures). A style is offered only when all its textures exist in game/assets/textures (built by its import tool from a pack the owner downloaded). Geometry and world never change with the style.",
+  "default": "panelka",
+  "styles": [
+    {"id": "procedural", "facade_style": 0, "name": {"en": "Procedural", "uk": "Процедурний"}, "requires": []},
+    {"id": "panelka", "facade_style": 1, "name": {"en": "Panelka photo", "uk": "Панелька, фото"},
+     "requires": ["panelka_panels", "panelka_brick_red", "panelka_brick_white", "panelka_plaster", "panelka_loggias"],
+     "pack": "https://kureca.itch.io/panelka-pack", "license": "CC0-1.0", "import": "tools/import_panelka.py"}
+  ]
+}

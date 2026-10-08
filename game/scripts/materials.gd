@@ -95,6 +95,26 @@ static func make() -> Dictionary:
 	facade.set_shader_parameter("has_normal", wall_normal != null)
 	if wall_normal != null:
 		facade.set_shader_parameter("wall_normal", wall_normal)
+	var panels := texture("panelka_panels", "albedo")
+	facade.set_shader_parameter("has_panels", panels != null)
+	if panels != null:
+		facade.set_shader_parameter("panels", panels)
+	var loggias := texture("panelka_loggias", "albedo")
+	facade.set_shader_parameter("has_loggias", loggias != null)
+	if loggias != null:
+		facade.set_shader_parameter("loggia_atlas", loggias)
+	var plaster := texture("panelka_plaster", "albedo")
+	facade.set_shader_parameter("has_plaster", plaster != null)
+	if plaster != null:
+		facade.set_shader_parameter("plaster", plaster)
+	var red := texture("panelka_brick_red", "albedo")
+	var white := texture("panelka_brick_white", "albedo")
+	facade.set_shader_parameter("has_bricks", red != null and white != null)
+	if red != null and white != null:
+		facade.set_shader_parameter("brick_red", red)
+		facade.set_shader_parameter("brick_white", white)
+		facade.set_shader_parameter("brick_red_normal", texture("panelka_brick_red", "normal"))
+		facade.set_shader_parameter("brick_white_normal", texture("panelka_brick_white", "normal"))
 	mats.facade = facade
 	mats.shopfront = facade
 	var pole := StandardMaterial3D.new()

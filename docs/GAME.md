@@ -56,6 +56,11 @@ Hold the right mouse button and move the mouse to look around the car; in the co
 this turns the head. The mouse wheel sets the chase camera distance. The view returns
 behind the car shortly after the button is released.
 
+Texture styles (`config/visuals/texture_styles.json`): K, or the Textures button in the pause
+menu, switches facade looks at run time (no reload) and remembers the choice. `procedural` is
+always there; `panelka` (photo panels, brick and plaster from Kureca's CC0 Panelka pack) appears
+after unpacking the pack into `texture_packs/Panelka` and running `tools/import_panelka.py`.
+
 The UI is in English by default. L, or the language button in the map menu, switches to
 Ukrainian, and the choice is remembered. The game connects to the traffic bridge by itself
 and reconnects if the bridge restarts. The car drives with or without traffic. On first launch `start.ps1`/`start.sh` import the

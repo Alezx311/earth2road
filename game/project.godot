@@ -37,3 +37,10 @@ jolt_physics_3d/limits/max_contact_constraints=40960
 ; With that many bodies Jolt outgrew its 32 MiB scratch buffer and fell back to the
 ; slow general-purpose allocator during the headless full-map checks.
 jolt_physics_3d/limits/temporary_memory_buffer_size=128
+
+[shader_globals]
+
+facade_style={
+"type": "int",
+"value": 0
+}

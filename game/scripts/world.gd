@@ -208,6 +208,8 @@ func build(source: Dictionary, level := "full", collide := true) -> void:
 				wall(side[i], side[i+1], -0.1, float(fence.height), "fence")
 				wall(side[i+1], side[i], -0.1, float(fence.height), "fence")
 	commit(collide)
+	if full:
+		build_parked_cars()
 	var visual := VisualTile.new()
 	visual.name = "KyivVisuals"
 	add_child(visual)
@@ -280,12 +282,23 @@ func build_building(building: Dictionary) -> void:
 		if base > 0.0:
 			tri(Vector3(a.x, bottom, a.z), Vector3(b.x, bottom, b.z), Vector3(c.x, bottom, c.z), "facade", false, Vector2(0, -1))
 	# COLOR.r: tint from the OSM id; COLOR.g: shop ground floor; COLOR.b: facade family / 5 (facade.gdshader).
-	var tint := Color(fposmod(float(hash(str(building.id))) / 7919.0, 1.0), 1.0 if building.get("ground_floor", "") == "shop" else 0.0, float(VisualTile.family(building)) / 5.0)
+	# COLOR.a: 1 = single windows, 0.5 = loggia facade (VisualTile.loggias); 0.25 less on an end
+	# wall (VisualTile.end_walls), which the photo style draws blank.
+	var tint := Color(fposmod(float(hash(str(building.id))) / 7919.0, 1.0), 1.0 if building.get("ground_floor", "") == "shop" else 0.0, float(VisualTile.family(building)) / 5.0, 0.5 if VisualTile.loggias(building) else 1.0)
+	var ends := VisualTile.end_walls(pts)
+	# S3DB parts (and touching outlines) often share an outer wall plane over the same heights;
+	# with photo facades that z-fought. Each record's walls step inward by 0–2 cm, keyed by its
+	# height range, so coplanar walls get distinct depths; the roof edge hides the step.
+	var inset := 0.02 * fposmod((top - bottom) * 0.37 + base * 0.11, 1.0)
 	for i in range(pts.size()):
 		var j := (i + 1) % pts.size()
 		var a := Vector3(pts[i][0], floor_y, pts[i][2])
 		var b := Vector3(pts[j][0], floor_y, pts[j][2])
-		wall(a, b, bottom - floor_y, top - floor_y, facade_kind, tint)
+		var inward := Vector3(a.z - b.z, 0, b.x - a.x).normalized() * inset
+		var wall_tint := tint
+		if ends[i]:
+			wall_tint.a -= 0.25
+		wall(a + inward, b + inward, bottom - floor_y, top - floor_y, facade_kind, wall_tint)
 
 func commit(collide := true) -> void:
 	for key in buckets:
@@ -325,6 +338,27 @@ func add_collisions(budget_ms: float) -> bool:
 		if (Time.get_ticks_usec() - start) / 1000.0 > budget_ms:
 			break
 	return pending_collisions.is_empty()
+
+## Courtyard parked cars (visual_props, drawn by VisualTile): one box each, solid like a
+## wall, so the player cannot drive through them. Traffic never reaches them (off-lane).
+func build_parked_cars() -> void:
+	var body: StaticBody3D = null
+	for item in data.get("visual_props", []):
+		if item.kind != "parked_car":
+			continue
+		if body == null:
+			body = StaticBody3D.new()
+			body.name = "ParkedCars"
+			body.collision_layer = COLLIDE.building
+			body.add_to_group(SURFACE.get("building", "Road"))
+			add_child(body)
+		var size: Array = item.get("size", [1.8, 1.45, 4.5])
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(size[0], size[1], size[2])
+		var col := CollisionShape3D.new()
+		col.shape = shape
+		col.transform = Transform3D(Basis(Vector3.UP, float(item.get("yaw", 0))), vec(item.position) + Vector3.UP * float(size[1]) * 0.5)
+		body.add_child(col)
 
 ## One pole per signalised approach at the right edge, heads over each lane on an arm.
 func build_signals() -> void:

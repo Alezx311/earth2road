@@ -8,6 +8,11 @@ static var manifest: Dictionary = {}
 static var slot_packs: Dictionary = {}
 ## slot -> successfully loaded external variant part-sets, in sorted pack-id order.
 static var slot_variants: Dictionary = {}
+## Courtyard parked cars (akadem_maps/core/yards.py): passenger models baked once into one
+## static mesh each, drawn by MultiMesh like any prop. Never exported to BeamNG.
+const Vehicles = preload("res://scripts/vehicles.gd")
+const PARKED_MODELS := ["sedan", "hatchback-sports", "sedan-sports", "suv", "suv-luxury", "van"]
+static var parked: Dictionary = {}
 
 static func init() -> void:
 	Palette.init()
@@ -17,8 +22,10 @@ static func init() -> void:
 		for variant in range(3):
 			for lod in range(3):
 				trees["%d:%d:%d" % [species,variant,lod]] = tree(species,variant,lod)
-	for kind in ["lamp", "lamp_modern", "bench", "bin", "planter", "bollard", "cabinet", "stop", "stop_old", "kiosk", "fence", "drain", "manhole", "metro", "ac", "balcony", "loggia", "entrance", "vent"]:
+	for kind in ["lamp", "lamp_modern", "bench", "bin", "planter", "bollard", "cabinet", "stop", "stop_old", "kiosk", "fence", "drain", "manhole", "metro", "ac", "balcony", "loggia", "entrance", "vent", "shrub", "swing", "slide", "sandbox", "climber", "carousel"]:
 		props[kind] = prop(kind)
+	for model in PARKED_MODELS:
+		parked[model] = parked_car(model)
 	load_manifest()
 
 static func tree(species: int, variant: int, lod: int) -> Array:
@@ -71,6 +78,10 @@ static func tree(species: int, variant: int, lod: int) -> Array:
 
 static func part(shape: String, material: String, pos: Vector3, size: Vector3, rot := Vector3.ZERO) -> Dictionary:
 	return {"mesh":Palette.meshes[shape],"material":Palette.materials[material],"transform":Transform3D(Basis.from_euler(rot).scaled(size),pos)}
+
+## A box sized in its own axes, then pitched about X (part() scales after rotating).
+static func tilted(material: String, pos: Vector3, size: Vector3, pitch: float) -> Dictionary:
+	return {"mesh":Palette.meshes.box,"material":Palette.materials[material],"transform":Transform3D(Basis(Vector3.RIGHT,pitch)*Basis.from_scale(size),pos)}
 
 static func box(material: String, pos: Vector3, size: Vector3) -> Dictionary:
 	return part("box",material,pos,size)
@@ -149,6 +160,42 @@ static func prop(kind: String) -> Array:
 		"vent":
 			p.append(box("concrete",Vector3(0,.6,0),Vector3(.7,1.2,.7)))
 			p.append(box("metal",Vector3(0,1.25,0),Vector3(.95,.1,.95)))
+		"shrub":
+			p.append(part("sphere","hedge",Vector3(0,.55,0),Vector3(1.4,1.1,1.3)))
+			p.append(part("sphere","hedge",Vector3(.35,.4,.25),Vector3(.9,.8,.9)))
+		"swing":
+			for x in [-1.3,1.3]:
+				for z in [-.6,.6]:
+					p.append(box("metal",Vector3(x,1.1,z*.6),Vector3(.07,2.2,.07)))
+			p.append(box("metal",Vector3(0,2.2,0),Vector3(2.7,.08,.08)))
+			for x in [-.5,.5]:
+				for dx in [-.2,.2]:
+					p.append(box("metal",Vector3(x+dx,1.35,0),Vector3(.02,1.7,.02)))
+				p.append(box("red",Vector3(x,.5,0),Vector3(.45,.05,.25)))
+		"slide":
+			p.append(box("yellow",Vector3(0,1.2,-.9),Vector3(1.0,.08,1.0)))
+			for x in [-.45,.45]:
+				for z in [-1.35,-.45]:
+					p.append(box("metal",Vector3(x,.6,z),Vector3(.07,1.2,.07)))
+			p.append(tilted("red",Vector3(0,.65,.7),Vector3(.6,.06,2.6),.5))
+			p.append(tilted("metal",Vector3(0,.65,-1.75),Vector3(.5,.05,1.5),-.95))
+		"sandbox":
+			for side in [[0,1.2,2.5,.25],[0,-1.2,2.5,.25],[1.2,0,.25,2.15],[-1.2,0,.25,2.15]]:
+				p.append(box("wood",Vector3(side[0],.15,side[1]),Vector3(side[2],.3,side[3])))
+			p.append(box("sand",Vector3(0,.08,0),Vector3(2.2,.16,2.2)))
+		"climber":
+			for x in [-1.0,0,1.0]:
+				for z in [-.7,.7]:
+					p.append(box("blue",Vector3(x,.9,z),Vector3(.06,1.8,.06)))
+			for y in [.6,1.2,1.8]:
+				for z in [-.7,.7]:
+					p.append(box("blue",Vector3(0,y,z),Vector3(2.0,.05,.05)))
+				p.append(box("yellow",Vector3(0,1.8,0),Vector3(.05,.05,1.4)))
+		"carousel":
+			p.append(part("pole","red",Vector3(0,.3,0),Vector3(1.6,.08,1.6)))
+			p.append(part("pole","metal",Vector3(0,.55,0),Vector3(.08,.5,.08)))
+			for a in range(4):
+				p.append(part("box","metal",Vector3(cos(a*PI/2)*.65,.65,sin(a*PI/2)*.65),Vector3(.04,.5,.04)))
 		"metro":
 			for x in [-2,2]:
 				p.append(box("metal",Vector3(x,1.5,0),Vector3(.12,3,.12)))
@@ -156,6 +203,22 @@ static func prop(kind: String) -> Array:
 			p.append(box("glass",Vector3(0,3.12,0),Vector3(4.1,.06,3.2)))
 			p.append(box("blue",Vector3(0,2.65,-1.55),Vector3(3.8,.4,.1)))
 	return p
+
+## One baked mesh per parked model: the traffic car template (GLB or procedural kit) merged
+## into a single surface. Must run on the main thread (GLTF scene generation).
+static func parked_car(model: String) -> Array:
+	if not Vehicles.available(model):
+		return []
+	var baked: Dictionary = Vehicles.baked(model)
+	if baked.is_empty():
+		return []
+	var mat := StandardMaterial3D.new()
+	if baked.texture != null:
+		mat.albedo_texture = baked.texture
+	else:
+		mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.6
+	return [{"mesh":baked.mesh,"material":mat}]
 
 static func load_manifest() -> void:
 	var path := ProjectSettings.globalize_path("res://../config/visuals/downloads.json")

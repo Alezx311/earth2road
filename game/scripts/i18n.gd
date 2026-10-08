@@ -91,6 +91,8 @@ const UK := {
 	"Spectator · F": "Огляд · F",
 	"Traffic · T": "Трафік · T",
 	"Help · F1": "Довідка · F1",
+	"Textures · K": "Текстури · K",
+	"Textures": "Текстури",
 	"LOCAL ROADS   /   N ↑": "ДОРОГИ ПОРУЧ   /   Пн ↑",
 	"%d cars · %d FPS · %s": "%d авто · %d FPS · %s",
 	"Close · Esc": "Закрити · Esc",
@@ -159,8 +161,8 @@ const UK := {
 	"F — free camera over the city · WASD move · wheel or Q/E height\nRMB + mouse — turn and tilt · MMB — pan · Z/X — rotate · SHIFT — faster":
 		"F — вільна камера над містом · WASD рух · колесо або Q/E висота\nПКМ + миша — поворот і нахил · СКМ — панорама · Z/X — поворот · SHIFT — швидше",
 	"TIME AND TRAFFIC": "ЧАС І ТРАФІК",
-	"1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot · F9 — mark a defect":
-		"1–6 або [ ] — швидкість часу ×0 … ×16 · −/+ або повзунок — щільність руху\nP або ESC — пауза · F5 — перепідключити трафік · F12 — знімок · F9 — позначити недолік",
+	"1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot · F9 — mark a defect · K — textures":
+		"1–6 або [ ] — швидкість часу ×0 … ×16 · −/+ або повзунок — щільність руху\nP або ESC — пауза · F5 — перепідключити трафік · F12 — знімок · F9 — позначити недолік · K — текстури",
 	"ROAD SITUATIONS": "ДОРОЖНІ СИТУАЦІЇ",
 	"T — panel: accident, lane closure, roadworks, jam, speed limit\nPick a situation and click a road · a click without one shows what is there and unlocks the traffic light":
 		"T — панель: ДТП, перекриття смуги, ремонт, затор, обмеження швидкості\nОберіть подію й клацніть по дорозі · клік без події показує, що там, і відкриває світлофор",

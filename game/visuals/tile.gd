@@ -28,6 +28,47 @@ static func family(b: Dictionary) -> int:
 		return 5
 	return posmod(hash(str(b.get("id", "0"))),4)
 
+## Panel blocks of 5+ storeys whose photo facade is a grid of loggias (II-68 modules,
+## facade.gdshader) instead of single windows: ~70 %, fixed by the OSM id. They get no
+## geometric balconies, which would double the photographed ones.
+static func loggias(b: Dictionary) -> bool:
+	var style := str(b.get("local_style", {}).get("architecture", ""))
+	var panel := style in ["panel", "modern"] or (style == "" and family(b) in [0, 2, 3])
+	return panel and float(b.get("height", 0)) >= 15.0 and posmod(hash(str(b.get("id", "")) + ":loggia"), 10) < 7
+
+## End walls of an elongated block (length >= 1.6 x width): the short walls across its long
+## axis. The photo style draws them blank (panel) or windowless (brick), the way Soviet blocks
+## look; balconies and sills stay off them. Same rule in akadem_maps/adapters/beamng/texture_styles.py.
+static func end_walls(points: Array) -> Array:
+	var n := points.size()
+	var mask: Array = []
+	mask.resize(n)
+	mask.fill(false)
+	if n < 3: return mask
+	var axis := Vector2.ZERO
+	var longest := 0.0
+	for i in range(n):
+		var d := Vector2(points[(i+1)%n][0]-points[i][0], points[(i+1)%n][2]-points[i][2])
+		if d.length() > longest:
+			longest = d.length()
+			axis = d.normalized()
+	if longest < 1e-6: return mask
+	var across := Vector2(-axis.y, axis.x)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for p in points:
+		var q := Vector2(p[0], p[2])
+		lo = Vector2(minf(lo.x, q.dot(axis)), minf(lo.y, q.dot(across)))
+		hi = Vector2(maxf(hi.x, q.dot(axis)), maxf(hi.y, q.dot(across)))
+	var length := hi.x-lo.x
+	var width := hi.y-lo.y
+	if length < 1.6*width: return mask
+	for i in range(n):
+		var d := Vector2(points[(i+1)%n][0]-points[i][0], points[(i+1)%n][2]-points[i][2])
+		if d.length() > 1e-6 and absf(d.normalized().dot(axis)) < .5 and d.length() <= minf(width*1.05+.5, 16.0):
+			mask[i] = true
+	return mask
+
 static func vec(p: Array) -> Vector3:
 	return Vector3(p[0],p[1],p[2])
 
@@ -64,8 +105,15 @@ func build(data: Dictionary, level := "full") -> void:
 		build_sign(item)
 	for item in data.get("visual_props",[]) if level == "full" else []:
 		var p := vec(item.position)
+		var xf := Transform3D(Basis(Vector3.UP,float(item.get("yaw",0))),p)
+		if item.kind == "parked_car":
+			# Placed clear of roads, walls and each other by the generator; world.gd gives it
+			# a collision box, so it must be drawn whatever free_at() thinks.
+			for part in Assets.parked.get(str(item.get("model","sedan")), Assets.parked.get("sedan", [])):
+				add_part(part,xf,0,Palette.distance_for("prop"))
+			continue
 		if free_at(p,float(item.get("radius",1))):
-			prop(item.kind,Transform3D(Basis(Vector3.UP,float(item.get("yaw",0))),p),Palette.distance_for("prop"))
+			prop(item.kind,xf,Palette.distance_for("prop"),hash(str(item.get("source",""))))
 	flush()
 
 ## A derived road sign (tools/signs.py): pole, face, grey back. No free_at() check —
@@ -168,14 +216,16 @@ func free_at(p: Vector3, radius: float) -> bool:
 	return true
 
 func facade(b: Dictionary) -> void:
-	# DNA v0 uses batched procedural facade artwork, without per-window geometry.
-	if b.has("local_style"):
+	# DNA v0 uses batched procedural facade artwork, without per-window geometry; residential
+	# panel/brick styles (S3DB colours on Soviet blocks) still get balconies and sills.
+	if b.has("local_style") and not str(b.local_style.get("architecture","")) in ["panel","brick"]:
 		return
 	if b.get("visual_profile", "") == "rural":
 		rural_facade(b)
 		return
-	if float(b.get("base",0)) > 0: return
-	var points: Array = b.get("points",[])
+	# A part on a podium (S3DB min_height/min_level) dresses only its own storeys.
+	var base := float(b.get("base",0))
+	var points: Array = b.get("points",[]).duplicate()
 	if points.size()<3: return
 	var floor_y := INF
 	var area := 0.0
@@ -184,11 +234,19 @@ func facade(b: Dictionary) -> void:
 		var a:=vec(points[i])
 		var c:=vec(points[(i+1)%points.size()])
 		area += a.x*c.z-c.x*a.z
+	# Same winding as World.build_building, so each wall's UV (window grid) starts at the same end.
+	if area<0:
+		points.reverse()
+		area=-area
 	var h := float(b.get("height",6))
 	var fam := family(b)
 	var seed_id := posmod(hash(str(b.get("id","0"))),65521)
 	var own_id := str(b.get("id",""))
 	var end := Palette.distance_for("detail")
+	var balcony_end := Palette.distance_for("balcony")
+	var loggia := loggias(b)
+	var ends := end_walls(points)
+	var panel: bool = fam in [0,2] or str(b.get("local_style",{}).get("architecture","")) == "panel"
 	for i in range(points.size()):
 		var a:=vec(points[i]); a.y=floor_y
 		var c:=vec(points[(i+1)%points.size()]); c.y=floor_y
@@ -203,18 +261,21 @@ func facade(b: Dictionary) -> void:
 			# Probe 0.8 m out: the depth of a balcony slab.
 			var probe := center+outward*.8
 			var buried := covered_to(Vector2(probe.x,probe.z),own_id)
-			for storey in range(1,int(h/3)):
+			for storey in range(maxi(1,ceili(base/3.0)),int(h/3)):
+				if loggia or ends[i]: break
 				var p := center+Vector3.UP*(storey*3+1.71)
 				# Loggia glazing reaches 1.35 m above p; keep it under the own roof and above neighbours.
 				if p.y+1.4>floor_y+h or p.y-.85<buried: continue
 				# Window sills add depth without rebuilding every procedural window.
 				box("frame",Vector3(1.95,.09,.22),Transform3D(basis,p-Vector3.UP*.77),end)
-				if fam in [0,1,2,3] and (column+seed_id)%3==0:
-					prop("loggia" if (column+storey+seed_id)%3==0 else "balcony",Transform3D(basis,p),end)
+				# Panel blocks carry balcony stacks on every other bay; brick and others every third.
+				# Seen from far (spectator), so they outlive the small details.
+				if (fam in [0,1,2,3] or panel) and (column+seed_id)%(2 if panel else 3)==0:
+					prop("loggia" if (column+storey+seed_id)%3==0 else "balcony",Transform3D(basis,p),balcony_end)
 				elif (column*7+storey*11+seed_id)%13==0:
 					prop("ac",Transform3D(basis,p+along*1.2-Vector3.UP*.7),80)
 		var mid := (a+c)*.5+outward*.8
-		if length>8 and covered_to(Vector2(mid.x,mid.z),own_id)<floor_y+2.5:
+		if base<=0 and length>8 and covered_to(Vector2(mid.x,mid.z),own_id)<floor_y+2.5:
 			prop("entrance",Transform3D(basis,(a+c)*.5+outward*.09),end)
 		if i==0 and length>12:
 			prop("vent",Transform3D(Basis(),(a+c)*.5-outward*2+Vector3.UP*h),end*2)

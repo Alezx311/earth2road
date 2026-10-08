@@ -11,6 +11,7 @@ const Modal = preload("res://scripts/ui_modal.gd")
 const IncidentView = preload("res://scripts/incident_view.gd")
 const MapMenu = preload("res://scripts/map_menu.gd")
 const I18n = preload("res://scripts/i18n.gd")
+const Styles = preload("res://scripts/styles.gd")
 const DefectMarker = preload("res://scripts/defect_marker.gd")
 const SPEEDS := [0, 1, 2, 4, 8, 16]
 const MAX_DENSITY := 10000       # fallback; the bridge reports its own limit on connect
@@ -71,6 +72,7 @@ const UNREACHABLE_SECONDS := 6.0
 
 func _ready() -> void:
 	I18n.setup()
+	Styles.apply(Styles.current())
 	var args := OS.get_cmdline_user_args()
 	for arg in args:
 		if arg.begins_with("--seconds="):
@@ -244,6 +246,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif code==KEY_L:
 		# Labels re-translate themselves; formatted texts follow NOTIFICATION_TRANSLATION_CHANGED.
 		I18n.toggle()
+	elif code==KEY_K:
+		show_style(Styles.cycle())
 	elif code==KEY_F12:
 		capture()
 	elif code==KEY_F9:
@@ -318,6 +322,11 @@ func set_paused(on: bool) -> void:
 		body.add_child(Ui.button("Maps · M", func(): open_map_menu(hud, true)))
 		body.add_child(Ui.button("Help · F1", func(): set_help(true)))
 		body.add_child(Ui.button("Language: English", func(): I18n.toggle()))
+		var style_button := Ui.button(tr("Textures · K") + ": " + Styles.label(Styles.current(), I18n.current()), func(): pass)
+		style_button.pressed.connect(func():
+			var id := Styles.cycle()
+			style_button.text = tr("Textures · K") + ": " + Styles.label(id, I18n.current()))
+		body.add_child(style_button)
 		resume.grab_focus.call_deferred()
 	sync_modal_state()
 
@@ -616,7 +625,7 @@ func build_ui() -> void:
 const HELP_LINES := [
 	["DRIVING","WASD or arrows — throttle, brake, steer (S when stopped — reverse) · SPACE — handbrake\nC — camera · RMB + mouse — look around · wheel — camera distance · V — car model · R — back to start"],
 	["SPECTATOR","F — free camera over the city · WASD move · wheel or Q/E height\nRMB + mouse — turn and tilt · MMB — pan · Z/X — rotate · SHIFT — faster"],
-	["TIME AND TRAFFIC","1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot · F9 — mark a defect"],
+	["TIME AND TRAFFIC","1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot · F9 — mark a defect · K — textures"],
 	["ROAD SITUATIONS","T — panel: accident, lane closure, roadworks, jam, speed limit\nPick a situation and click a road · a click without one shows what is there and unlocks the traffic light"],
 ]
 const ATTRIBUTION := "© OpenStreetMap contributors · ODbL  |  Mapzen Terrain"
@@ -678,6 +687,17 @@ func write_metrics() -> void:
 	cpu_samples.sort()
 	var f:=FileAccess.open("res://../logs/render_metrics.json",FileAccess.WRITE)
 	f.store_string(JSON.stringify({"duration":runtime,"median_frame_ms":median,"p95_frame_ms":p95,"median_fps":1000.0/median,"median_gpu_ms":gpu_samples[gpu_samples.size()/2],"p95_gpu_ms":gpu_samples[int(gpu_samples.size()*0.95)],"median_render_cpu_ms":cpu_samples[cpu_samples.size()/2],"vsync":DisplayServer.window_get_vsync_mode(),"renderer":RenderingServer.get_video_adapter_name(),"display":DisplayServer.get_name(),"cars":traffic.count(),"far_cars":traffic.far_count,"near_cars":traffic.cars.size(),"spectating":spectating,"camera_distance":free_cam.distance,"sim_speed":SPEEDS[speed_index],"sim_actual":last_header.get("actual",0),"sumo_step_ms":last_header.get("step_ms",0),"player_position":[player.pos.x,player.pos.y,player.pos.z],"player_contacts":player.contacts,"window_resolution":[get_viewport().size.x,get_viewport().size.y],"render_resolution":[1920,1080]}))
+
+## Brief on-screen name of the texture style just chosen (K).
+func show_style(id: String) -> void:
+	var note := Ui.label(tr("Textures") + ": " + Styles.label(id, I18n.current()), 22, Color.WHITE)
+	note.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	note.position.y = 140
+	hud.add_child(note)
+	var fade := note.create_tween()
+	fade.tween_interval(1.6)
+	fade.tween_property(note, "modulate:a", 0.0, 0.4)
+	fade.tween_callback(note.queue_free)
 
 # Fixed camera poses from config/shots.json, for before/after visual comparison.
 func run_shots() -> void:

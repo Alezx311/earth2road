@@ -10,7 +10,7 @@ static func init() -> void:
 	var path := ProjectSettings.globalize_path("res://../config/visuals/style.json")
 	if FileAccess.file_exists(path):
 		config = JSON.parse_string(FileAccess.get_file_as_string(path))
-	for pair in [["concrete", "a5a398"], ["frame", "d1d0c5"], ["metal", "444b4c"], ["wood", "76634c"], ["bark", "625548"], ["glass", "354b55"], ["rubber", "202326"], ["cream", "c8c3af"], ["blue", "4f727d"], ["white", "dddcd1"]]:
+	for pair in [["concrete", "a5a398"], ["frame", "d1d0c5"], ["metal", "444b4c"], ["wood", "76634c"], ["bark", "625548"], ["glass", "354b55"], ["rubber", "202326"], ["cream", "c8c3af"], ["blue", "4f727d"], ["white", "dddcd1"], ["red", "a8483c"], ["yellow", "d2a83e"], ["green", "4f7d4a"], ["sand", "cbb88c"], ["hedge", "4a6436"]]:
 		var m := StandardMaterial3D.new()
 		m.albedo_color = Color(pair[1])
 		m.roughness = 0.86

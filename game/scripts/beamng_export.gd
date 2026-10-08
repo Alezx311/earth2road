@@ -6,6 +6,8 @@ const Modal = preload("res://scripts/ui_modal.gd")
 const Picker = preload("res://scripts/location_picker.gd")
 const Estimates = preload("res://scripts/estimates.gd")
 const Mods = preload("res://scripts/beamng_mods.gd")
+const Styles = preload("res://scripts/styles.gd")
+const I18n = preload("res://scripts/i18n.gd")
 const SETTINGS := "user://settings.cfg"
 const STAGES := {
 	"prepare": "Checking map data…", "geometry": "Exporting roads and scenery…",
@@ -50,6 +52,8 @@ var destination: LineEdit
 var browse: Button
 var mode_menu: OptionButton
 var mode_note: Label
+var style_menu: OptionButton
+var style_ids: Array = []
 var start_button: Button
 var back_button: Button
 var open_button: Button
@@ -107,6 +111,17 @@ func _ready() -> void:
 	mode_note.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	body.add_child(mode_note)
 	translate_modes()
+	# Facade textures baked into the level (akadem_maps/adapters/beamng/texture_styles.py);
+	# defaults to the style shown in the game now (K).
+	body.add_child(Ui.label("Textures", 20))
+	style_menu = OptionButton.new()
+	style_menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	style_menu.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	style_ids = Styles.available().map(func(s): return s.id)
+	for id in style_ids:
+		style_menu.add_item(Styles.label(id, I18n.current()))
+	style_menu.select(maxi(0, style_ids.find(Styles.current())))
+	body.add_child(style_menu)
 	status = Ui.label("Ready to export", 20, Ui.MUTED, true)
 	body.add_child(status)
 	activity = ProgressBar.new()
@@ -148,6 +163,9 @@ func _ready() -> void:
 	start_button = Ui.button("Export ZIP", start_export, true)
 	modal.footer.add_child(start_button)
 	start_button.grab_focus.call_deferred()
+
+func texture_style() -> String:
+	return str(style_ids[style_menu.selected]) if style_menu.selected >= 0 and style_menu.selected < style_ids.size() else "procedural"
 
 func optimization() -> String:
 	return MODES[mode_menu.selected][0]
@@ -238,8 +256,8 @@ func start_export() -> void:
 	pid = OS.create_process(python, PackedStringArray([root + "/tools/export_beamng_gui.py",
 		"--map", map_id, "--destination", destination.text, "--events", events_path,
 		"--log", events_path + ".log", "--parent-pid", str(OS.get_process_id()), "--cancel-file", cancel_path,
-		"--optimization", optimization()]), false)
-	details.text += "\n" + tr("Optimization") + ": " + optimization()
+		"--optimization", optimization(), "--texture-style", texture_style()]), false)
+	details.text += "\n" + tr("Optimization") + ": " + optimization() + "\n" + tr("Textures") + ": " + texture_style()
 	if pid <= 0:
 		pid = -1
 		status.text = tr("Could not start the exporter. Check technical details.")
