@@ -1,10 +1,12 @@
-# Python 3.14 / Windows validated runtime. Keep in sync with pyproject.toml extras.
+# Python 3.14 / Windows validated runtime; supported range 3.11-3.14, 64-bit.
+# Keep in sync with pyproject.toml extras. numpy 2.5 needs Python 3.12+, so 3.11 gets 2.4.
 certifi==2026.7.22
 charset-normalizer==3.5.1
 eclipse-sumo==1.27.1
 idna==3.20
 libsumo==1.27.1
-numpy==2.5.3
+numpy==2.5.3; python_version >= "3.12"
+numpy==2.4.6; python_version < "3.12"
 osmium==4.3.1
 pillow==12.3.0
 pyproj==3.7.2

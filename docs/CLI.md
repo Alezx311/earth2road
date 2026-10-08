@@ -5,8 +5,8 @@ and development. Players do not need any of this; see the [README](../README.md)
 
 ## Install (generator)
 
-Use Python 3.14 for the pinned setup below. The generator supports Python 3.11+ with
-unpinned compatible dependencies. Windows is locally validated; Linux has a CI job.
+Use Python 3.14 for the pinned setup below. The lock covers 64-bit Python 3.11–3.14 (3.11
+gets numpy 2.4 through an environment marker); 3.15 has no SUMO/pyproj/shapely wheels yet. Windows is locally validated; Linux has a CI job.
 
 ```bash
 python -m pip install -c requirements.lock ".[generator]"               # from a checkout; not published on PyPI yet

@@ -17,7 +17,8 @@ Drive it in the bundled **Godot** game or export it as a mod ZIP for **BeamNG.dr
 
 The first run installs everything into the folder itself: Godot 4.6, Python packages,
 car models and a small example map (several hundred MB download, about 1.2 GB on disk,
-a few minutes). If Python 3.11+ is missing, it offers to install it with winget.
+a few minutes). It needs 64-bit Python 3.11–3.14 (3.15+, 32-bit and ARM builds lack the
+SUMO/map packages); if none is found, it offers to install Python 3.14 with winget.
 Later runs open the game straight away.
 
 Linux/macOS (not tested platforms for this beta): `./setup.sh` once, then `./start.sh`.
