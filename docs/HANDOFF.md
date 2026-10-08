@@ -1,5 +1,163 @@
 # Earth2Road handoff
 
+## 2026-10-08 — courtyards, Panelka photo facades, switchable texture styles (Claude)
+
+- Playtest note #3 (empty yards). `core/yards.py` → world `visual_props` (tiled, Godot only):
+  parked cars in double rows on surface parking and kerbside on yard service roads near
+  apartment blocks (off the carriageway/sidewalks), a bench (+ bin) beside each `entrance=*`,
+  shrubs along apartment walls, playground kit on `leisure=playground`. All `synthetic:yard`
+  with `rule`/`source`. Cars: baked traffic models (MultiMesh) + one box collider each
+  (`world.gd`); BeamNG ignores `visual_props` (decision: no parked cars there). 1 km Bilychi
+  (`out/typical-models/1km-05`): 824 cars, 1420 shrubs, 89 benches, 32 bins, 89 playground items.
+- Facades (#5, "too uniform"): owner downloaded Kureca's Panelka pack (CC0, itch.io) into
+  ignored `texture_packs/Panelka`. `tools/import_panelka.py` → `game/assets/textures/panelka_*`
+  (6-panel atlas with cropped edges and equalised wall tone, red/white brick + normals,
+  plaster), SHA-256 per source file in the manifest. `facade.gdshader`: photo panel per
+  3.3 × 3 m cell (one window style per building, ~10 % swapped, ~3 % blank), photo brick, photo
+  plaster tinted by family/OSM colour under procedural windows; observed `building:colour`
+  tints panels.
+- Owner: walls "flicker", "only windows", procedural walls among photo ones look wrong, wants
+  packs switchable in Godot and selectable for BeamNG export. Fixed: antialiased seams faded
+  with distance (hard `step()` lines crawled); coplanar S3DB part walls (38 same-facing
+  overlaps on the 1 km map) z-fought → each record's walls inset 0–2 cm by its height range;
+  balconies were limited to buildings without `local_style` and `base == 0` (all tower parts)
+  and vanished beyond 180 m → also on panel/brick `local_style` and on parts above their base,
+  stacks on every other bay of panel blocks, `balcony_distance` 600 m; tile.gd now uses the same
+  winding as world.gd so balconies sit on the window grid.
+- Styles: `config/visuals/texture_styles.json` (procedural, panelka); `game/scripts/styles.gd`
+  sets global shader uniform `facade_style` (project.godot `[shader_globals]`), K / pause menu,
+  remembered in settings.cfg. BeamNG: `texture_styles.py`, `--texture-style` in `earth2road
+  export` and `tools/export_beamng_gui.py`, choice in the export dialog (defaults to the style
+  in the game); recorded in report/artifact. A style whose pack is missing is an error.
+- Checks: tests `test_yards` (5), `test_texture_styles` (4); Godot scripts parse-checked; QA
+  shots `logs/shots` (shots-file runs `logs/typical-models/godot-shots-facade-0{1..5}.log`);
+  BeamNG compact export of 1km-05 with `panelka` validated (ZIP `478698bdb407…`), facade tiles
+  inspected as images. Not verified: BeamNG runtime/look in game, flicker in motion (owner),
+  FPS with yard props, style switch by hand.
+- Known: plaster crack pattern repeats visibly; saturated OSM colours (#e5c100) tint strongly;
+  facade family still random per building where OSM gives no material/levels hint.
+- After the owner's BeamNG look ("only window textures", pack has balconies, no playgrounds):
+  II-68 (whole-facade photo) cut on its measured grid into 55 loggia modules
+  (`panelka_loggias`, 6.6 m bay x 3 m storey, tone equalised); ~70 % of panel blocks >= 15 m use
+  them above the ground floor (`VisualTile.loggias`, passed to the shader in COLOR.a) and get no
+  geometric balconies; the grille panel only on ground floors. BeamNG: `balcony` facades and ~70 %
+  of DNA panel styles bake loggia tiles. `beamng_yards.py` exports yard props except parked cars
+  (benches, bins, playground kits as box meshes per 250 m cell, shrubs as forest bushes) — the
+  earlier export had dropped the whole layer, not only cars. 1km-05 compact panelka export
+  `a885e969fc6b…`: 904 objects, 5,187 forest items, validate OK, installed into the BeamNG mods
+  folder (the 06.10 ZIP of the same name backed up in `.cache/replaced/beamng-mods/`).
+- Full suite before the loggia/yard-export changes: 506 OK, 1 skipped (`unittest-03.log`).
+- Owner: one loggia module per bay looked bad; use the whole photo, end walls plain. Now the
+  II-68 sheet (5 bays x 11 storeys = 33 x 33 m) is mapped continuously (Godot shifted by whole
+  bays per building; BeamNG 2048 px sheet, UV 1/33). End walls = short walls (<= 16 m) across
+  the long axis of blocks >= 1.6:1 (`VisualTile.end_walls` = `texture_styles.end_walls`, tested):
+  blank panels / windowless brick, no balconies, BeamNG `<facade>_end` materials.
+- Owner then saw huge blurred loggias on some BeamNG blocks: UV was right (33 m measured in the
+  DAE), BeamNG showed the previous export's texture from its cache (same `.color.png` path).
+  Generated facade textures now carry a content digest in the file name (`fresh_png`), as
+  shapes already did. Installed `204f8b1188b7…`.
+
+## 2026-10-08 — playtest of the 1 km typical-models map: school, S3DB min_level, editable setup (Claude)
+
+- Owner drove `bilychy_1km_v2` (install of `out/typical-models/1km-02-godot`, not activated) and
+  left 5 F9 notes in ignored `logs/defects/bilychy_1km_v2/`.
+- #1 School No. 288 (relation `4192125`, courtyard) missing again: `osm_buildings.hole_free`
+  dropped pieces with area ≤ 0.05, but `prepare.py` passes lon/lat (school ≈ 5e-7 deg²), so
+  every building relation with a courtyard vanished. The 06.10 test used a 10×10 degree
+  building. Threshold now 1e-4 of the outline; test in real lon/lat.
+- #2 textures overlapping on a tower (ways `476481258…477063215`): S3DB parts tagged only
+  `building:min_level` started at the ground and z-fought with the brick podium. `min_level`
+  × 3 m now becomes `base` when `min_height` is absent.
+- `test_building_types` world test also builds a courtyard school relation and a podium part.
+- Found: `.venv` held a non-editable copy of `akadem_maps` from 13:46 (no `building_types.py`),
+  so `earth2road` built with stale code; a first rebuild (`1km-03`) was discarded. Package
+  reinstalled editable; `setup.ps1`/`setup.sh` now install with `-e`; note in VALIDATION.
+  Maps built today through the `earth2road` command may lack the day's changes.
+- Rebuilt `out/typical-models/1km-04` (+ `-godot`) from the checkout: school 2 pieces 9 m,
+  tower parts base 12/48/60 m, 7 typical records; installed over `bilychy_1km_v2` (backup
+  `.cache/replaced/bilychy_1km_v2-20261008T145958Z`). Not yet seen in the engine.
+- Open notes, owner to prioritise: #3 empty yards (parked cars + props for Godot only, not
+  exported to BeamNG), #4 roundabout still wrong (wants parametric roundabout templates by
+  lanes/exits, like v2 junction families), #5 facades too uniform (look for open facade texture
+  sets for typical series).
+- Tests: `test_osm_buildings` 11 OK, `test_building_types` 13 OK; full suite not run.
+
+## 2026-10-08 — typical models by building type: churches, mosques, fuel canopies, shop halls (Claude)
+
+- Owner picked "Будівлі/наповнення → типові моделі за типом" (open since PLAYTEST note 10).
+  New `core/building_types.py`: OSM `building`/`amenity`/`religion`/`denomination`/`shop`
+  → `church_orthodox | church_western | mosque | fuel_canopy | mall | retail`. Context:
+  `building=roof` inside/near an `amenity=fuel` area/node is a canopy; a
+  `place_of_worship` node inside a `building=yes` footprint types it. Untagged Christian
+  church = Orthodox for `region_profile: ukraine`, Western elsewhere (assumption).
+- Form = extra building records shaped like S3DB parts (same `id`/`style_key`, `base`,
+  `roof_triangles`, `local_style`, `roof_color`), so Godot/BeamNG draw them unchanged:
+  hipped nave + octagonal drum with onion (Orthodox, gold), west bell tower (onion or tall
+  spire; only naves ≥150 m² and ≥7 m wide, side ≤ half the nave), dome + minaret (mosque),
+  raised deck (base 4.5 m, top 5.3 m) on 0.4 m posts (canopy), 4.5 m storeys and 1/3 levels
+  for retail/mall without OSM levels. Church height from nave width when assumed.
+  Every record: `typical = {kind, role?, provenance: derived:typical_model, version, fallback?}`.
+  OSM wins: parts, `roof:shape`, tagged height/levels/colours. `audit.json` →
+  `typical_models` lists typed/kept buildings; counts `typical_*`.
+- BeamNG: the synthetic POI canopy is skipped within 60 m of a mapped canopy
+  (`fuel_canopies_mapped`). Rural `dress` no longer re-roofs typical records.
+- Fixed in passing (regression from the 07.10 LocalArea change): `rural.dress` crashed on a
+  `tree_row` entirely outside the map area (empty LineString → `getX called on empty
+  Point`); the 1 km Bilychi build hit it. Test `test_tree_row_outside_the_map_area_is_skipped`.
+- Reality check: in the Bilychi 4 km snapshot only 1 `building=roof` canopy is reachable
+  (fuel stations are nodes / `building=yes|retail`), so the BeamNG synthetic canopy stays
+  the main fuel visual. Retail/mall halls there have OSM levels → height unchanged.
+- 1 km Bilychi (`out/typical-models/1km-02`, inputs of `road-fairing/after-04`): 1 Orthodox
+  chapel (dome), 1 church kept (OSM `roof:shape`), 3 retail, 2 mall, 0 fallbacks; world and
+  BeamNG compact `validate` OK (ZIP `b05322906e9a…`, 884 objects). Godot shots
+  `logs/typical-models/shots-0{1,2}` (01: nave-wide tower read as flats → proportions fixed;
+  02: chapel with green hipped roof and gold onion). Shots used a temporary
+  `game/data/typical_qa_1km` via `AKADEM_MAP`, removed after; `active_map` untouched.
+- Tests: `tests/test_building_types.py` (13, incl. world + both exports on tiny), canopy
+  skip in `test_beamng_export`. Full suite before the rural fix: 493 OK, 1 skipped
+  (`logs/typical-models/unittest-01.log`); final code: 496 OK, 1 skipped (`unittest-02.log`).
+- Not done: no big church/mosque/canopy seen in an engine (none in the 1 km cut); BeamNG
+  runtime not loaded; facades of towers use the generic DNA plaster texture (windows
+  read as storeys); no apse, cross or multi-dome layouts.
+
+## 2026-10-08 — Singapore: three 2 km maps with the current pipeline, no code changes (Claude)
+
+- Owner: "no fixes or improvements, just try to make a few good maps of Singapore" with all
+  recent features. Generator code untouched; only configs, DNA profiles and input data.
+- Configs `config/singapore_{marina_bay,orchard,kampong_glam}.json` (2×2 km, roadgen v2,
+  Local Visual DNA, landmark_limit 10, manual quick-travel anchors, `experimental` profile).
+  DNA `config/visuals/singapore_*_dna.json` from `logs/singapore/make_profile.py` (6 manual
+  profiles: cbd_towers, shophouse, colonial_civic, orchard_retail, condo_green,
+  tropical_garden; 42 anchors per map on a 400 m grid; profile by a fixed OSM rule).
+- Sources: Overpass via `earth2road data prepare` (selection v3) into
+  `out/singapore/inputs-{marina,orchard,kampong}`. Terrarium z12 DEM over central Singapore is a
+  surface model: −616…+847 m per tile, −58…+115 m inside Marina Bay (real ≈0–15 m) → ground hills
+  and spikes, max ground smoothing shift 19–22 m (world-01). Workaround in data only:
+  `logs/singapore/clean_dem.py` writes `inputs-*-dem` (clamp 0..170 m, 9 px grey opening,
+  5 px median + box blur; derived assumption, recorded in each cache). Result: shift 1.7–2.6 m,
+  connected-surface max 0.3–0.5 m (was 1.9–19.5 m).
+- My mistake, fixed in world-03: profile floors (cbd 20–50, condo up to 30) apply to every
+  building without OSM height/levels; in Singapore those are shophouses and sheds → 292–304
+  fake towers ≥40 m per map. All profiles now 1–12 floors; synthetic ≥40 m: 0.
+- Quick-travel: spawns need a ground-level ordinary edge ≥120 m within 150 m. Marina Bay has
+  40 such edges of 1,032 (bridges, short CBD blocks): Merlion, Esplanade, Fullerton, Helix,
+  Lau Pa Sat cannot get a spawn; three anchors moved 190–220 m to accepted roads (noted in
+  the configs). `logs/singapore/snap_anchors.py` reproduces the rule read-only.
+- Final worlds `out/singapore/*-world-03` (build 10.5 / 20.7 / 28.1 min, three in parallel):
+  Marina Bay 4,711 lanes, 941 buildings, 614 parts, 11 spawns; Orchard 9,622 lanes, 1,719
+  buildings, 16 spawns; Kampong Glam 10,256 lanes, 3,753 buildings, 10 spawns.
+  BeamNG compact `*-beamng-03`: ZIPs 21.8 / 30.3 / 34.4 MB, SHA-256 0aca7d59… / 6e706b16… /
+  5b3b8028…; `validate` OK; `tools/capture_beamng.py` in isolated profiles: load ~14 s,
+  360/360 frames, exit 0 for all three (`logs/singapore/beamng-take-*-03`). Godot exports
+  installed as new maps `singapore_*` (not activated); shots `logs/singapore/shots-*-03`.
+  ZIPs copied into `%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\mods` (hashes match).
+- Seen, not fixed (generator): heights capped at 180 m (`prepare.py` `min(h,180)`) and
+  `min_height` dropped when above the cap → MBS SkyPark (193–207 m) is a slab from the ground,
+  CBD crowns above 180 m become columns; lanes are right-hand (Singapore drives left, no
+  `--lefthand`); POI kind labels are Ukrainian ("ТРЦ", "АЗС"); landmark ranking favours MRT
+  stations; a roof part with height < min_height (Masjid Sultan) renders from the ground.
+- Not done: driving by hand, full test suite (no code changed).
+
 ## 2026-10-08 — director guide, Detroit photo-match pilot, 4 km build fixes (Codex → Claude)
 
 - Owner: social clips need a portable "director" any agent can read (scale and
