@@ -1,5 +1,5 @@
 """Courtyard dressing (playtest 2026-10-08, note 3): parked cars, entrance benches, shrubs
-along apartment walls and playground equipment. Every item is synthetic and anchored to an
+along apartment walls and in clumps on yard lawns, and playground equipment. Every item is synthetic and anchored to an
 observed OSM feature (parking area, yard service road, entrance node, apartment wall,
 playground); none of it claims an observed object position.
 
@@ -27,6 +27,9 @@ YARD_SERVICES = (None, 'parking_aisle', 'alley')
 APARTMENTS = ('apartments', 'residential', 'dormitory')
 ENTRANCES = ('staircase', 'yes', 'main', 'home')
 SHRUB_STEP, SHRUB_OFFSET, SHRUB_CHANCE = 3.0, 1.4, 0.45
+# Clumps of shrubs on the open lawn of apartment yards (playtest bilychy_dna note 4: bare
+# lawns read empty): one candidate per LAWN_STEP cell within LAWN_RADIUS of a block.
+LAWN_RADIUS, LAWN_STEP, LAWN_CHANCE, LAWN_CLUMP = 45.0, 16.0, 0.3, (2, 5)
 # Playground kit: kind -> clearance radius, m.
 PLAYGROUND_KIT = {'swing': 2.2, 'slide': 2.0, 'sandbox': 1.8, 'climber': 2.0, 'carousel': 1.6}
 PROVENANCE = 'synthetic:yard'
@@ -104,7 +107,7 @@ def dress(root, nodes, to_xy, point, road_cut, area, parking_polys, seed):
     placed = _Placed()
     props = []
     counts = {'parked_cars_lots': 0, 'parked_cars_kerb': 0, 'entrance_benches': 0, 'entrance_bins': 0,
-              'shrubs': 0, 'playground_items': 0}
+              'shrubs': 0, 'lawn_shrubs': 0, 'playground_items': 0}
 
     def blocked(g, road=0.2, house=0.8, walk=True, lots=True):
         x0, y0, x1, y1 = g.bounds
@@ -306,4 +309,32 @@ def dress(root, nodes, to_xy, point, road_cut, area, parking_polys, seed):
                 # Backrest to the edge: the bench faces the playground.
                 add('bench', bx, by, _yaw(-nx, -ny), 0.9, 'playground', 'way/'+wid, fp)
                 counts['playground_items'] += 1
+
+    # 6. Clumps of shrubs on the open yard lawn, clear of roads, walls, paths, lots and
+    # playgrounds; each is anchored to the nearest apartment block.
+    blocks = [(wid, poly) for wid, (t, _, poly) in sorted(building_ways.items()) if t.get('building') in APARTMENTS]
+    if blocks:
+        tree = STRtree([poly for _, poly in blocks])
+        play = union(poly.buffer(2.0) for _, poly in playgrounds) if playgrounds else Polygon()
+        x0, y0, x1, y1 = union(poly for _, poly in blocks).buffer(LAWN_RADIUS).bounds
+        for ix in range(math.floor(x0/LAWN_STEP), math.ceil(x1/LAWN_STEP)):
+            for iy in range(math.floor(y0/LAWN_STEP), math.ceil(y1/LAWN_STEP)):
+                rand = random.Random(f'{seed}:lawn:{ix}:{iy}')
+                if rand.random() > LAWN_CHANCE:
+                    continue
+                cx, cy = (ix+rand.random())*LAWN_STEP, (iy+rand.random())*LAWN_STEP
+                near = tree.nearest(Point(cx, cy))
+                wid, poly = blocks[int(near)]
+                if poly.distance(Point(cx, cy)) > LAWN_RADIUS or play.contains(Point(cx, cy)):
+                    continue
+                for _ in range(rand.randint(*LAWN_CLUMP)):
+                    a, r = rand.uniform(0, math.tau), rand.uniform(0, 1.8)
+                    x, y = cx+math.cos(a)*r, cy+math.sin(a)*r
+                    fp = Point(x, y).buffer(0.7)
+                    if play.intersects(fp) or blocked(fp, road=2.0, house=2.5):
+                        continue
+                    if near_entrance is not None and near_entrance.within(x-1, y-1, x+1, y+1).intersects(fp):
+                        continue
+                    add('shrub', x, y, round(rand.uniform(0, math.tau), 3), 0.7, 'yard_lawn', 'way/'+wid, fp)
+                    counts['lawn_shrubs'] += 1
     return props, counts

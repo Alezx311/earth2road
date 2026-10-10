@@ -113,6 +113,27 @@ class YardTests(unittest.TestCase):
         self.assertTrue(all(Polygon(pg).contains(Point(xy(p))) for p in kit))
         self.assertEqual(props, run(*osm((9, pg, {'leisure': 'playground'})))[0])
 
+    def test_yard_lawn_gets_shrub_clumps_clear_of_roads_walls_and_playgrounds(self):
+        # Playtest bilychy_dna note 4: open yard lawns read bare.
+        block, pg = ring(0, 0, 60, 12), ring(10, 30, 40, 50)
+        road = LineString([(-60, -30), (120, -30)])
+        root, nodes = osm((1, block, {'building': 'apartments'}), (2, pg, {'leisure': 'playground'}),
+                          (3, list(road.coords), {'highway': 'residential'}))
+        cut = road.buffer(4)
+        props, counts = run(root, nodes, road_cut=cut)
+        lawn = [p for p in props if p['rule'] == 'yard_lawn']
+        self.assertGreater(len(lawn), 10)
+        self.assertEqual(counts['lawn_shrubs'], len(lawn))
+        for p in lawn:
+            q = Point(xy(p))
+            self.assertEqual((p['kind'], p['source']), ('shrub', 'way/1'))
+            self.assertGreater(q.distance(cut), 2.0)
+            self.assertGreater(q.distance(Polygon(block)), 2.5)
+            self.assertLess(q.distance(Polygon(block)), yards.LAWN_RADIUS + 2.5)
+            self.assertFalse(Polygon(pg).contains(q))
+        self.assertEqual(props, run(*osm((1, block, {'building': 'apartments'}), (2, pg, {'leisure': 'playground'}),
+                                         (3, list(road.coords), {'highway': 'residential'})), road_cut=cut)[0])
+
 
 if __name__ == '__main__':
     unittest.main()
