@@ -82,6 +82,23 @@ class DNATests(unittest.TestCase):
         field().apply(b, {'height': '30'})
         self.assertEqual((b['height'], b['levels']), (30., 10))
 
+    def test_synthetic_storeys_fit_the_footprint(self):
+        # Playtest bilychy_dna note 1: kiosk, transformer and copy shop drawn as 9-12 storey towers.
+        d = document()
+        d['profiles']['a']['floors'] = {'12': 1}
+        def box(w, l, **extra):
+            return dict(building(), points=[[0, 0, 0], [l, 0, 0], [l, 0, w], [0, 0, w]], **extra)
+        cases = [(box(3.6, 6.5), {'building': 'yes', 'shop': 'bakery'}, 1),
+                 (box(11, 11.3, building_type='service'), {'building': 'service', 'power': 'transformer'}, 1),
+                 (box(7.7, 14.1), {'building': 'yes', 'shop': 'copyshop'}, 2),
+                 (box(12, 60), {'building': 'apartments'}, 12)]
+        for b, tags, floors in cases:
+            field(d).apply(b, tags)
+            self.assertEqual((b['levels'], b['height']), (floors, floors*3.), tags)
+        thin = box(6, 60)
+        field(d).apply(thin, {'building': 'apartments'})
+        self.assertEqual(thin['levels'], 8)
+
     def test_roof_stays_inside_footprint_and_total_height(self):
         b = dict(building(), height=12., height_source='height')
         field().apply(b, {'height': '12'})

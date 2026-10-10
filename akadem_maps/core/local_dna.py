@@ -75,6 +75,27 @@ def validate(document):
     return document
 
 
+# Synthetic storeys stay within what a footprint can carry (playtest bilychy_dna note 1: a
+# 23 m² bakery kiosk, a 124 m² transformer and a 107 m² copy shop were drawn 9-12 storeys high).
+ONE_STOREY_TYPES = {'service', 'kiosk', 'booth', 'garage', 'garages', 'shed', 'hut', 'cabin', 'toilets',
+                    'container', 'transformer_tower', 'carport'}
+ONE_STOREY_AREA_M2 = 60.0
+LOW_AREA_M2 = 200.0
+LOW_SHOP_AREA_M2 = 400.0
+SLENDERNESS = 4.0  # synthetic height <= this x the footprint's short side
+
+
+def floor_cap(poly, tags):
+    """Most storeys a profile may give a footprint whose height OSM does not tag."""
+    if tags.get('building') in ONE_STOREY_TYPES or 'power' in tags or poly.area < ONE_STOREY_AREA_M2:
+        return 1
+    if poly.area < LOW_AREA_M2 or (('shop' in tags or 'amenity' in tags) and poly.area < LOW_SHOP_AREA_M2):
+        return 2
+    ring = list(poly.minimum_rotated_rectangle.exterior.coords)
+    width = min(math.dist(ring[0], ring[1]), math.dist(ring[1], ring[2]))
+    return max(2, int(SLENDERNESS*width/3))
+
+
 class Field:
     def __init__(self, document, to_world, seed):
         self.document = copy.deepcopy(validate(document))
@@ -157,9 +178,7 @@ class Field:
         if 'roof:shape' in tags:
             origin['roof'] = 'osm'
         if b['height_source'] == 'assumed':
-            floors = int(self.pick(sample['floors'], key, 'floors'))
-            if b.get('building_type') in ('garage', 'garages', 'shed'):
-                floors = 1
+            floors = min(int(self.pick(sample['floors'], key, 'floors')), floor_cap(poly, {'building': b.get('building_type'), **tags}))
             b.update(levels=floors, height=float(floors*3), height_source='synthetic:local_visual_dna')
         else:
             origin['levels'] = 'osm' if 'building:levels' in tags else 'derived:height'
