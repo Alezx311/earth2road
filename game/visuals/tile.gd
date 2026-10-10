@@ -28,13 +28,17 @@ static func family(b: Dictionary) -> int:
 		return 5
 	return posmod(hash(str(b.get("id", "0"))),4)
 
-## Panel blocks of 5+ storeys whose photo facade is a grid of loggias (II-68 modules,
-## facade.gdshader) instead of single windows: ~70 %, fixed by the OSM id. They get no
-## geometric balconies, which would double the photographed ones.
+## Soviet-height panel blocks (5-16 storeys) whose photo facade is a grid of loggias (II-68
+## modules, facade.gdshader) instead of single windows. Taller blocks are post-Soviet in Kyiv and
+## keep the panel-and-window look, as do "modern" ones (playtest bilychy_dna note 3: a 19-storey
+## block looked older than a 10-storey one next to it). Same rule as local_dna.loggia_block.
+## They get no geometric balconies, which would double the photographed ones.
 static func loggias(b: Dictionary) -> bool:
 	var style := str(b.get("local_style", {}).get("architecture", ""))
-	var panel := style in ["panel", "modern"] or (style == "" and family(b) in [0, 2, 3])
-	return panel and float(b.get("height", 0)) >= 15.0 and posmod(hash(str(b.get("id", "")) + ":loggia"), 10) < 7
+	var panel := style == "panel" or (style == "" and family(b) in [0, 2])
+	var height := float(b.get("height", 0))
+	var storeys := float(b.get("levels", 0)) if float(b.get("levels", 0)) > 0 else height / 3.0
+	return panel and height >= 15.0 and storeys <= 16.5
 
 ## End walls of an elongated block (length >= 1.6 x width): the short walls across its long
 ## axis. The photo style draws them blank (panel) or windowless (brick), the way Soviet blocks

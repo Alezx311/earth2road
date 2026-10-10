@@ -181,10 +181,14 @@ def end_walls(points):
 
 
 def dna_kind(style, key=''):
-    """Local Visual DNA / S3DB local_style -> tile kind, matching facade.gdshader's photo branch
-    (most panel blocks show loggias, as VisualTile.loggias picks ~70 % of them)."""
+    """Local Visual DNA / S3DB local_style -> tile kind, matching facade.gdshader's photo branch.
+    Loggia blocks (local_dna.loggia_block, as VisualTile.loggias) have their own facade
+    material named with local_dna.LOGGIA_SUFFIX."""
+    from akadem_maps.core.local_dna import LOGGIA_SUFFIX
+    if key.endswith(LOGGIA_SUFFIX):
+        return 'loggia'
     if style.get('architecture') in ('panel', 'modern') or style.get('material') == 'concrete':
-        return 'loggia' if _unit('loggia_block', key) < .7 else 'panel'
+        return 'panel'
     if style.get('architecture') == 'brick' or style.get('material') == 'brick':
         return 'brick'
     return 'plaster'

@@ -239,6 +239,21 @@ def roof(b):
     b['roof_material'] = 'roof_metal'
 
 
+# Panel blocks of Soviet height (5-16 storeys) wear the II-68 loggia photo in the photo style;
+# taller ones are post-Soviet in Kyiv (playtest bilychy_dna note 3). Same rule as
+# game/visuals/tile.gd loggias().
+LOGGIA_MIN_HEIGHT_M = 15.0
+LOGGIA_MAX_STOREYS = 16
+LOGGIA_SUFFIX = '_lg'  # BeamNG facade material of a loggia block
+
+
+def loggia_block(b):
+    style = b.get('local_style') or {}
+    height = float(b.get('height') or 0)
+    storeys = float(b.get('levels') or 0) or height/3
+    return style.get('architecture') == 'panel' and height >= LOGGIA_MIN_HEIGHT_M         and storeys <= LOGGIA_MAX_STOREYS + .5
+
+
 def material_key(style):
     """A shared material per grammar/material/palette combination, never per building."""
     token = hashlib.sha256(str(style['material']).encode()).hexdigest()[:8]

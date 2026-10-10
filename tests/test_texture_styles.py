@@ -152,11 +152,25 @@ class TextureStyleTests(unittest.TestCase):
         ell = [(0, 0), (80, 0), (80, 12), (12, 12), (12, 30), (0, 30)]
         self.assertEqual(ts.end_walls(ell), [False, True, False, False, False, False])
 
+    def test_loggias_on_soviet_height_panel_blocks_only(self):
+        # Playtest bilychy_dna note 3: a 19-storey block wore the Soviet loggia photo, a
+        # 10-storey one next to it plain windows.
+        from akadem_maps.adapters.beamng.beamng_assets import building_style
+        from akadem_maps.core.local_dna import loggia_block
+        def block(levels, architecture='panel'):
+            return {'id': str(levels), 'height': levels*3., 'levels': levels, 'points': [],
+                    'local_style': {'architecture': architecture, 'material': 'concrete', 'color': '#deded7'}}
+        self.assertEqual([loggia_block(block(n)) for n in (4, 5, 9, 10, 16, 17, 19)],
+                         [False, True, True, True, True, False, False])
+        self.assertFalse(loggia_block(block(10, 'modern')))
+        self.assertTrue(building_style(block(10))[0].endswith('_lg'))
+        self.assertFalse(building_style(block(19))[0].endswith('_lg'))
+
     def test_dna_styles_map_like_the_godot_shader(self):
-        blocks = [ts.dna_kind({'architecture': 'panel', 'material': 'concrete'}, f'k{i}') for i in range(200)]
-        self.assertEqual(set(blocks), {'panel', 'loggia'})
-        self.assertGreater(blocks.count('loggia'), blocks.count('panel'))
-        self.assertIn(ts.dna_kind({'architecture': 'modern', 'material': 'glass'}), ('panel', 'loggia'))
+        panel = {'architecture': 'panel', 'material': 'concrete'}
+        self.assertEqual(ts.dna_kind(panel, 'kyiv_dna_fac_panel_x_deded7'), 'panel')
+        self.assertEqual(ts.dna_kind(panel, 'kyiv_dna_fac_panel_x_deded7_lg'), 'loggia')
+        self.assertEqual(ts.dna_kind({'architecture': 'modern', 'material': 'glass'}), 'panel')
         self.assertEqual(ts.dna_kind({'architecture': 'brick', 'material': 'brick'}), 'brick')
         self.assertEqual(ts.dna_kind({'architecture': 'historic', 'material': 'plaster'}), 'plaster')
 
