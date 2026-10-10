@@ -1454,7 +1454,8 @@ def build(cfg, root, context):
                 typical_audit.append({'id': b['id'], 'kind': kind, 'action': 'typical', 'parts': len(extra),
                                       **({'fallback': why} if why else {})})
         if dna and 'local_style' not in b:
-            dna.apply(b, {**{k: v for k, v in (parent_tags or {}).items() if k in osm_buildings.APPEARANCE}, **t})
+            dna.apply(b, {**{k: v for k, v in (parent_tags or {}).items() if k in osm_buildings.APPEARANCE}, **t},
+                      parent_tags)
         if 'local_style' not in b and osm_buildings.wants_style(t, parent_tags):
             osm_buildings.observe(b, t, parent_tags)
             counts['observed_styles'] += 1

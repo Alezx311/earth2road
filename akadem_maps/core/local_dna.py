@@ -96,6 +96,13 @@ def floor_cap(poly, tags):
     return max(2, int(SLENDERNESS*width/3))
 
 
+WORSHIP_TYPES = {'church', 'cathedral', 'chapel', 'temple', 'mosque', 'synagogue', 'monastery', 'shrine'}
+
+
+def worship(tags):
+    return tags.get('building') in WORSHIP_TYPES or tags.get('amenity') == 'place_of_worship'
+
+
 class Field:
     def __init__(self, document, to_world, seed):
         self.document = copy.deepcopy(validate(document))
@@ -143,7 +150,7 @@ class Field:
                 return value
         return sorted(distribution)[-1]
 
-    def apply(self, b, tags):
+    def apply(self, b, tags, parent_tags=None):
         poly = Polygon([(p[0], p[2]) for p in b['points']])
         sample = self.sample(poly.centroid.x, poly.centroid.y)
         if not sample:
@@ -159,6 +166,11 @@ class Field:
         # A specific OSM use remains a constraint on the synthetic grammar.
         if b.get('building_type') in ('industrial', 'warehouse', 'hangar', 'garages', 'garage', 'shed'):
             family = 'industrial'
+            origin['architecture'] = 'derived:osm_building_type'
+        # A church and its S3DB parts are not a panel block (playtest bilychy_dna note 5: the
+        # parts of a mapped church got panel walls, loggias and balcony slabs).
+        if worship(tags) or worship(parent_tags or {}):
+            family = 'historic'
             origin['architecture'] = 'derived:osm_building_type'
         observed_material = tags.get('building:material')
         if observed_material:

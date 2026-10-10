@@ -99,6 +99,19 @@ class DNATests(unittest.TestCase):
         field(d).apply(thin, {'building': 'apartments'})
         self.assertEqual(thin['levels'], 8)
 
+    def test_church_and_its_parts_stay_historic(self):
+        # Playtest bilychy_dna note 5: S3DB parts of a church got panel walls and balconies.
+        d = document()
+        d['profiles']['a']['architecture'] = {'panel': 1}
+        church = {'building': 'church', 'amenity': 'place_of_worship', 'religion': 'christian'}
+        whole, part, block = building(), dict(building(), id='43'), dict(building(), id='44')
+        field(d).apply(whole, church)
+        field(d).apply(part, {'building:part': 'yes', 'roof:shape': 'dome'}, church)
+        field(d).apply(block, {'building': 'apartments'})
+        self.assertEqual([b['local_style']['architecture'] for b in (whole, part, block)],
+                         ['historic', 'historic', 'panel'])
+        self.assertEqual(part['local_style']['provenance']['architecture'], 'derived:osm_building_type')
+
     def test_roof_stays_inside_footprint_and_total_height(self):
         b = dict(building(), height=12., height_source='height')
         field().apply(b, {'height': '12'})
