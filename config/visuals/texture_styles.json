@@ -4,7 +4,13 @@
   "styles": [
     {"id": "procedural", "facade_style": 0, "name": {"en": "Procedural", "uk": "Процедурний"}, "requires": []},
     {"id": "panelka", "facade_style": 1, "name": {"en": "Panelka photo", "uk": "Панелька, фото"},
-     "requires": ["panelka_panels", "panelka_brick_red", "panelka_brick_white", "panelka_plaster", "panelka_loggias"],
-     "pack": "https://kureca.itch.io/panelka-pack", "license": "CC0-1.0", "import": "tools/import_panelka.py"}
+     "requires": ["panelka_panels", "panelka_brick_red", "panelka_brick_white", "panelka_plaster", "panelka_loggias",
+                  "photo_lawn", "photo_meadow", "photo_verge", "photo_worn", "photo_trodden"],
+     "pack": "https://kureca.itch.io/panelka-pack (facades), https://ambientcg.com (ground)", "license": "CC0-1.0",
+     "import": "tools/fetch_textures.py and tools/import_panelka.py"},
+    {"id": "synthwave", "facade_style": 2, "name": {"en": "Synthwave", "uk": "Синтвейв"}, "requires": [],
+     "note": "1980s retro-futurist look, fully procedural: dark walls with neon windows and edges, neon grid ground, glossy black roads, glowing marks, a striped-sun sky (game/shaders/synth_sky.gdshader)."},
+    {"id": "nes", "facade_style": 3, "name": {"en": "8-bit NES", "uk": "8-біт NES"}, "requires": [],
+     "note": "8-bit console look, fully procedural: walls and ground in world-space pixels from the NES (2C02) palette (SMB brick, grey panels, framed windows, sprite outlines), a flat blue sky with block clouds (game/shaders/nes_sky.gdshader) and a post effect with console pixels of about 480x270, black outlines from depth and normals and the palette snap (game/shaders/nes_post.gdshader, live tuning in config/visuals/nes_tune.json)."}
   ]
 }

@@ -1,5 +1,126 @@
 # Earth2Road handoff
 
+## 2026-10-10 — 8-bit NES texture style; rebuilt maps copied to BeamNG (Claude)
+
+- BeamNG mods: the night-1009 exports copied in — `earth2road_{khreshchatyk_dna,bilychy_dna,
+  ring_beresteiskyi}.zip` (panelka; Khreshchatyk from `beamng-panelka-02`) and
+  `..._synthwave.zip` (own level ids). Older ZIPs with the same level ids stay in `mods/_hide`.
+- `nes` (facade_style 3, `requires: []`). Godot: NES branches in `facade.gdshader` (12 px per
+  3.3 × 3 m cell: SMB brick, grey panels, cream plaster, cyan glass; framed windows with a glint,
+  ~20 % lit gold; sprite outline at corners/wall top via UV2; flat roofs with 2 m seams),
+  `surface.gdshader` (0.5 m pixels by `synth_kind`), `paint`, `field`, `prop` (outline),
+  `foliage`; `nes_sky.gdshader`; `nes_post.gdshader` (full-screen quad after the 3D scene, under
+  the HUD: block = height/270 with 4 taps, sRGB tuning, palette snap to a 40-colour 2C02 subset,
+  black outlines one console pixel wide from depth jumps and normal creases, no outlines beyond
+  900 m); uniforms live from `config/visuals/nes_tune.json` (`main.gd nes_tune`, re-read on
+  change every 0.5 s); `main.gd apply_atmosphere` (neutral ambient colour — sky ambient tinted
+  greys blue —, linear tonemap, no SSAO/glow, white sun). Iterations: a canvas filter without
+  outlines read "too bright, no clear contours" (owner); mip-averaged blocks blurred into blobs,
+  point sampling sparkled; 4 taps kept hard edges; outlines made it read as NES (owner: "much
+  better"). Test map `config/nes_lab.json` (500 m between Maidan and St Michael's, build 2.9 min,
+  installed as `nes_lab`).
+- BeamNG: `texture_styles.nes_kind/nes_tile/nes_end_tile/nes_ground` (palette names in `NES`,
+  nearest-neighbour upscale), `export_beamng.nes_materials` (one tile file per sprite kind,
+  tinted roads/water/roofs via `baseColorFactor`, white paint), `sky_objects(nes=True)`.
+  1 km export `out/typical-models/1km-05-beamng-nes-01` (61 s, 8.4 MB, 46 materials on NES
+  tiles), not installed, not seen in BeamNG.
+- Shots `out/media-1010/shots/<map>/nes/`; NES flythroughs `out/media-1010/final/*-nes.mp4`.
+- Known: unused procedural facade PNGs still go into NES/synth ZIPs; plaster walls streak at
+  grazing angles; Godot segfaults on quit after `--shots` in `nes` (shots saved; not investigated).
+  Full suite before the post-effect rework: 512 OK, 1 skipped (`logs/typical-models/unittest-08.log`).
+
+## 2026-10-10 — media of the rebuilt maps in three styles (Claude)
+
+- 8×8 km Khreshchatyk build stopped with the previous session (in `roads`, ~22.5 GB commit);
+  postponed by the owner. Config `config/khreshchatyk_8km.json` kept.
+- `out/media-1010/` (ignored): `shots/<map>/<style>/` Godot QA shots for khreshchatyk_dna (10
+  poses), bilychy_dna and ring_beresteiskyi (8 each) in procedural/panelka/synthwave, plus
+  "before" in procedural: the replaced installs (Khreshchatyk 06.10, ring 25.09, copied
+  temporarily into `game/data/before_*` and removed after) and `bilychy_roadgen_v2` (05.10).
+  Poses lon/lat in `poses/*.json` → `tools/shots_file.py` (old ring has another offset).
+  `compare/` 2×2 collages and before|after pairs (`compare.py`), `highlights/`.
+- Video: `capture_video.py` = traffic bridge + `--timelapse --timelapse-overlay=false
+  --texture-style=ID` (same camera path per map, 630 frames, 66–90 s per take); `montage.py`
+  cuts one flight per map with the style changing every 4 s (xfade wipe) and title cards.
+  `final/earth2road-styles.mp4` 2:19 (299 MB; share copies 80 MB 1080p, 34 MB 720p),
+  `before-after(-share).mp4` slideshow, raw takes per map/style.
+- Honest note: Khreshchatyk and ring "before" differ little from "now/procedural" (yards, typical
+  models, pitches); the visible change is the texture styles. Bilychi before/after shows yards.
+- Seen, not fixed: Godot sometimes hangs on quit after `--shots` in `panelka` (2 of 7 runs),
+  spamming `material_set_shader: Parameter "material" is null`; shots are already saved. The
+  media scripts kill Godot when that line appears.
+
+## 2026-10-09 — night rebuild of the main maps with the new styles (Claude)
+
+- After a power cut: synthwave work was complete, only the last test log was cut. Full suite
+  510 OK, 1 skipped (`logs/typical-models/unittest-07.log`); Godot synthwave shots re-taken with
+  the final `facade.gdshader` (`logs/shots/synth4/`).
+- Runner `out/night-1009/run.py` (ignored): build → Godot export + install → BeamNG compact
+  `synthwave` (level id + `_synthwave`) → BeamNG compact `panelka`; per-step time and lowest
+  free system RAM in `out/night-1009/status.jsonl`, logs `logs/night-1009/`. Three maps in
+  parallel (16 threads, 32 GB; lowest free 6.5 GB). BeamNG ZIPs stay in `out/` — the owner keeps
+  most mods in `mods/_hide`. Godot: `khreshchatyk_dna`, `ring_beresteiskyi` replaced (backups
+  by `install --replace`), `bilychy_dna` installed new (`bilychy_roadgen_v2` untouched).
+
+  | map | build | Godot | BeamNG synth | BeamNG panelka | total | ZIP synth / panelka |
+  |---|---:|---:|---:|---:|---:|---:|
+  | khreshchatyk_dna | 20.0 min (was ~45) | 0.2 | 5.7 | 6.5* | 32.7 | 31.5 / 362 MB* |
+  | bilychy_dna | 72.2 (was ~70) | 0.4 | 14.8 | 15.3 | 102.8 | 68.8 / 326 MB |
+  | ring_beresteiskyi (legacy roads) | 67.1 (was 72) | 1.1 | 22.2 | 22.7 | 113.2 | 99.8 / 385 MB |
+
+  \* `beamng-panelka-02` after the fix below; the first `beamng-panelka` (846 MB) is obsolete.
+  Height audit unchanged from earlier builds (Khreshchatyk max 7.33 m, Bilychi 6.51 m, ring 7.17 m).
+- Fixed: DNA loggia sheets (2048 px, ~9.7 MB PNG, colour-only) were written once per DNA facade
+  — Khreshchatyk 80 files, 30 distinct. Now one file per colour (`kyiv_dna_loggia` stem);
+  Khreshchatyk 846 → 362 MB. Still open: panelka ZIPs are 4–12× synthwave because every
+  distinct colour bakes its own sheet; tinting via `baseColorFactor` (one sheet) or a smaller
+  sheet would fix it but changes the look — owner's decision.
+- Godot shots of the new Khreshchatyk in both styles: `logs/night-1009/shots-khr-{synthwave,panelka}`.
+- 8×8 km around Khreshchatyk: `config/khreshchatyk_8km.json` (v2, Khreshchatyk DNA profile, Kyiv
+  PBF cut), started 03:17 with the same runner (`logs/night-1009/khreshchatyk_8km.*`).
+  Progress at 05:05: extract 20 s, netconvert ~1 min, `roadgen_input.json` 916 MB (18 min),
+  roadgen 80 min (Bilychi ~15.5) for 11,566 junctions (7,910 v2 / 3,656 fallback; Bilychi
+  2,301); one core busy, ~15 GB RAM. At Bilychi's scale the build would take ~6 h.
+  `network` ended 05:22 (2 h); at 06:03 in `roads` with 22.5 GB commit of a 33.9 GB limit
+  (pagefile ~2 GB), 3.2 GB free. 64 km² is above the 55 km² split rule of the district batch
+  (same RAM/commit reason) — if it runs out of memory, split into halves with 200 m overlap.
+- Not verified: BeamNG runtime of any new ZIP, driving, FPS.
+
+## 2026-10-08 — synthwave texture style (Claude)
+
+- Owner asked for a retrowave / 1980s VR pack. Searched: no CC0 texture pack (KDE CC0 wallpaper,
+  paid itch.io backgrounds, sprite kits only), so `synthwave` (facade_style 2, `requires: []`)
+  is procedural. Godot: `facade.gdshader` synth branch (one neon hue per building, ~55 % lit
+  windows, corner/roof/every-3rd-storey lines from new UV2 = wall length/top), `surface.gdshader`
+  `synth_kind` per material (`materials.gd`), `paint`/`field` glow, `visuals/prop.gdshader` for
+  palette props (balconies were brick-red), `synth_sky.gdshader` + `main.gd apply_atmosphere`
+  (sky, fog, sun, glow follow K). Shots `logs/shots/ground-synth{1,2,3}`. Trees and cars keep
+  their day materials (dark silhouettes at dusk).
+- BeamNG: `texture_styles.family/synth_tile/synth_end_tile/synth_ground`,
+  `export_beamng.synth_materials` (every facade incl. stock sets → synth tile + end, UV 1/6;
+  emissive via `emissiveMap`/`emissiveFactor`, not checked in game), dark roads/pavements/roofs,
+  emissive paint, `sky_objects(synth=True)`. Export `out/typical-models/1km-05-beamng-synth-01`
+  validated (`ee694f9cf87f…`, 23 synth facades), not installed.
+
+## 2026-10-08 — photo ground for the realistic (panelka) style (Claude)
+
+- Owner asked for better ground and grass in the realistic pack. Five ambientCG CC0 2K sets
+  (`config/textures.json` `photo_*`, `tools/fetch_textures.py` now takes a per-set resolution):
+  Grass007 lawn, Grass001 meadow, Ground037 verge, Ground003 worn turf, Ground030 trodden soil.
+  They join `panelka`'s `requires`.
+- Godot: `surface.gdshader` photo branch (global `facade_style == 1`, so K switches ground too):
+  base + patch (≈47 m noise with 7 m lobes) + wear layers, each sampled straight and turned 37°
+  against the repeat, patch colour pulled 60 % (wear 30 %) to the base average (last mip),
+  saturation 0.8, roughness ≥ 0.65. Recipes in `materials.gd` (green, ground, wood, orchard,
+  yard, dirt; pitch/track unchanged). Normal/roughness maps loaded at 1K. First pass read as
+  camouflage from above (hard edges, mismatched hues); fixed by the harmonising and softer
+  edges. Shots: `logs/shots/ground-{procedural,panelka3}` (`--texture-style=ID` QA arg).
+- BeamNG: `texture_styles.ground_sheet` bakes 2048 px / 24 m colour+normal sheets for
+  `kyiv_grass`, `kyiv_ground` (periodic masks, turned base, GL→DX normal flip — convention not
+  confirmed); `export_beamng.photo_ground_materials`, UV 1/24. Export
+  `out/typical-models/1km-05-beamng-panelka-05` validated (`98f2336020f0…`), not installed,
+  not seen in game yet. TerrainBlock (`terrain` optimization) still flat base maps.
+
 ## 2026-10-08 — courtyards, Panelka photo facades, switchable texture styles (Claude)
 
 - Playtest note #3 (empty yards). `core/yards.py` → world `visual_props` (tiled, Godot only):

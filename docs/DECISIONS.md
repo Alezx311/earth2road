@@ -27,6 +27,16 @@
   family uses the pack (no procedural walls left among photo ones). Packs the owner downloads by
   hand live in ignored `texture_packs/`; import tools write ignored `game/assets/textures` with
   per-file SHA-256 and licence. Styles are visual only and must be named as such in posts.
+  A photo style also covers the ground (2026-10-08, owner: "better ground and grass"): ambientCG
+  CC0 `photo_*` sets (lawn, meadow, verge, worn turf, trodden soil) mixed as base cover +
+  patches + worn spots; Godot blends them per pixel, BeamNG gets baked 24 m sheets for
+  `kyiv_grass`/`kyiv_ground` (normals flipped to DirectX, assumed, not confirmed in BeamNG docs).
+  `synthwave` (2026-10-08, owner): no CC0 retrowave texture pack exists (only wallpapers and
+  backgrounds), so the 1980s neon look is fully procedural: shaders in Godot, baked emissive
+  tiles and a dusk sky in BeamNG. A style may change sky, fog and glow, never geometry.
+  `nes` (2026-10-10, owner: "8-bit, like old NES games"): procedural like synthwave. Godot draws
+  world-space pixels in the 2C02 palette and adds a palette screen filter (the part that makes it
+  read as a console); BeamNG gets the same sprites baked, without the filter.
 - Public project/distribution/CLI/repository: Earth2Road / `earth2road`
   (github.com/Alezx311/earth2road). The only CLI is `earth2road`; `akadem_maps` (Python
   package) and `AKADEM_*` (environment) are internal technical names.

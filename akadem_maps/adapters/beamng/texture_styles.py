@@ -137,6 +137,8 @@ def plaster_tile(colour, key, textures=TEXTURES):
 def tile_for(kind, colour, key, textures=TEXTURES):
     """kind: panel | loggia | brick | plaster -> RGB pixel list (row 0 at the top) for export_beamng.png();
     loggia is the whole SHEET_PX sheet, the others one TILE_PX repeat (see tile_size)."""
+    if kind == 'synth':
+        return list(synth_tile(key).tobytes())
     image = {'panel': panel_tile, 'loggia': loggia_sheet, 'brick': brick_tile, 'plaster': plaster_tile}[kind](colour, key, textures)
     return list(image.tobytes())
 
@@ -147,6 +149,8 @@ def tile_size(kind):
 
 
 def end_pixels(kind, colour, key, textures=TEXTURES):
+    if kind == 'synth':
+        return list(synth_end_tile(key).tobytes())
     return list(end_tile('brick' if kind == 'brick' else 'panel', colour, key, textures).tobytes())
 
 
@@ -184,3 +188,259 @@ def dna_kind(style, key=''):
     if style.get('architecture') == 'brick' or style.get('material') == 'brick':
         return 'brick'
     return 'plaster'
+
+
+# --- photo ground ------------------------------------------------------------------
+# BeamNG mesh materials cannot blend layers per pixel like surface.gdshader does, so each
+# ground material gets one baked sheet: the same base cover, patches and worn spots as
+# game/scripts/materials.gd photo_ground(), on masks that repeat with the sheet.
+GROUND_PX = 2048
+GROUND_SHEET_M = 24.0         # 8 repeats of a 3 m photo, 6 of a 4 m one
+GROUND_SATURATION = 0.8       # surface.gdshader photo_saturation
+# material -> (base set, metres), (patch set, metres, cover), (wear set, metres, cover), tint
+GROUND_RECIPES = {
+    'kyiv_grass': (('photo_lawn', 3.0), ('photo_meadow', 4.0, 0.3), ('photo_worn', 3.0, 0.08), (0.86, 0.88, 0.80)),
+    'kyiv_ground': (('photo_lawn', 3.0), ('photo_verge', 4.0, 0.35), ('photo_worn', 3.0, 0.14), (0.90, 0.88, 0.76)),
+}
+
+
+def _ground_layer(textures, name, metres, mode):
+    """One photo map tiled over the sheet at its real size (`metres` must divide the sheet)."""
+    from PIL import Image
+    import numpy as np
+    repeats = round(GROUND_SHEET_M/metres)
+    cell = GROUND_PX // repeats
+    image = Image.open(Path(textures)/name/f'{"albedo" if mode == "RGB" else "normal"}.jpg').convert('RGB')
+    tile = np.asarray(image.resize((cell, cell), Image.LANCZOS), dtype=np.float32)/255
+    sheet = np.tile(tile, (repeats, repeats, 1))
+    if sheet.shape[0] != GROUND_PX:
+        sheet = np.asarray(Image.fromarray((sheet*255).astype('uint8')).resize((GROUND_PX, GROUND_PX), Image.LANCZOS), dtype=np.float32)/255
+    return sheet
+
+
+def _periodic_noise(seed, cycles):
+    """Smooth noise in 0..1 that repeats with the sheet: random waves of whole cycles."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    axis = np.linspace(0, 2*np.pi, GROUND_PX, endpoint=False, dtype=np.float32)
+    u, v = np.meshgrid(axis, axis)
+    total = np.zeros_like(u)
+    for _ in range(28):
+        fx, fy = rng.integers(-cycles, cycles+1, 2)
+        if fx == 0 and fy == 0:
+            continue
+        total += np.cos(fx*u + fy*v + rng.uniform(0, 2*np.pi)) / (fx*fx + fy*fy) ** .35
+    return (total - total.min()) / (total.max() - total.min())
+
+
+def _cover(noise, cover, detail):
+    """surface.gdshader cover_mask on arrays (a narrower edge: the baked noise is smoother)."""
+    import numpy as np
+    edge = 1 - cover + (detail - 0.4)*0.5
+    t = np.clip((noise - (edge - .03)) / .06, 0, 1)
+    return (t*t*(3 - 2*t))[..., None]
+
+
+def ground_sheet(material, textures=TEXTURES):
+    """-> (colour pixels, normal pixels) of a GROUND_PX sheet covering GROUND_SHEET_M; the
+    normal map has its green channel flipped for BeamNG (DirectX convention; ambientCG ships GL)."""
+    import numpy as np
+    (base, bm), (patch, pm, pc), (wear, wm, wc), tint = GROUND_RECIPES[material]
+    key = int.from_bytes(hashlib.sha256(material.encode()).digest()[:4], 'big')
+    layers = {}
+    for name, metres in ((base, bm), (patch, pm), (wear, wm)):
+        layers[name] = (_ground_layer(textures, name, metres, 'RGB'), _ground_layer(textures, name, metres, 'N'))
+    # The shader's turned second sample: here the base turned 90 degrees and shifted half a
+    # repeat (both keep the sheet tileable), mixed in by noise so the 3 m grid does not show.
+    shift = GROUND_PX // round(GROUND_SHEET_M/bm) // 2
+    turned_c = np.roll(np.rot90(layers[base][0]), (shift, shift), (0, 1))
+    turned_n = np.roll(np.rot90(layers[base][1]), (shift, shift), (0, 1))
+    turned_n = np.stack([1 - turned_n[..., 1], turned_n[..., 0], turned_n[..., 2]], -1)  # turn the slope too
+    k = _cover(_periodic_noise(key + 99, 6), .5, np.full((GROUND_PX, GROUND_PX), .4, np.float32))
+    colour = layers[base][0]*(1 - k) + turned_c*k
+    normal = layers[base][1]*(1 - k) + turned_n*k
+    target = colour.reshape(-1, 3).mean(0)
+    for name, cover, amount, cycles in ((patch, pc, .6, 2), (wear, wc, .3, 4)):
+        own_c, own_n = layers[name]
+        own_c = own_c * (1 + amount*(target/np.maximum(own_c.reshape(-1, 3).mean(0), .02) - 1))
+        noise = (_periodic_noise(key + cycles, cycles)*.7 + _periodic_noise(key + 7*cycles, 3*cycles)*.2
+                 + _periodic_noise(key + 13*cycles, 24)*.1)
+        mask = _cover(noise, cover, own_c.mean(2))
+        colour = colour*(1 - mask) + own_c*mask
+        normal = normal*(1 - mask) + own_n*mask
+    grey = (colour @ np.array([.3, .59, .11], dtype=np.float32))[..., None]
+    colour = (grey + (colour - grey)*GROUND_SATURATION) * np.array(tint, dtype=np.float32)
+    normal[..., 1] = 1 - normal[..., 1]
+    to_bytes = lambda a: list(np.clip(a*255 + .5, 0, 255).astype('uint8').tobytes())
+    return to_bytes(colour), to_bytes(normal)
+
+
+# --- synthwave (facade_style 2) ------------------------------------------------------
+# Fully procedural: no pack. Facades are dark tiles with lit neon windows (used as both the
+# colour and the emissive map), ground is a neon grid, roads and pavements go dark.
+SYNTH_NEON = ((1.0, .12, .6), (.1, .85, 1.0), (.62, .22, 1.0), (1.0, .42, .12), (.95, .2, .95))
+SYNTH_WALL = (5, 4, 9)
+SYNTH_GRID_M = 12.0           # two grid squares per GROUND_SHEET_M sheet
+SYNTH_FINE_M = 3.0
+
+
+def family(style):
+    """'procedural', 'photo', 'synth' or 'nes' by the style's facade_style (0, 1, 2, 3)."""
+    return {0: 'procedural', 1: 'photo', 2: 'synth', 3: 'nes'}.get(styles()[style]['facade_style'], 'photo')
+
+
+def _rgb(colour, gain=1.0):
+    return tuple(max(0, min(255, round(c*255*gain))) for c in colour)
+
+
+def synth_tile(key):
+    """2 x 2 cells of 3 m: lit windows in the building's neon hue (a few in a second), dark
+    unlit panes, a neon slab line at the bottom of the repeat (every second storey)."""
+    from PIL import Image, ImageDraw
+    image = Image.new('RGB', (TILE_PX, TILE_PX), SYNTH_WALL)
+    draw = ImageDraw.Draw(image)
+    neon = SYNTH_NEON[int(_unit('neon', key)*len(SYNTH_NEON))]
+    alt = SYNTH_NEON[int(_unit('alt', key)*len(SYNTH_NEON))]
+    for bx in range(2):
+        for sy in range(2):
+            x0, y0 = bx*CELL, sy*CELL
+            box = (x0+.22*CELL, y0+(1-.82)*CELL, x0+.78*CELL, y0+(1-.32)*CELL)
+            lit = _unit('lit', key, bx, sy) < .55
+            pane = alt if _unit('pane', key, bx, sy) < .18 else neon
+            draw.rectangle(box, fill=_rgb(pane, .65 + .35*_unit('gain', key, bx, sy)) if lit else (12, 11, 20))
+    draw.rectangle((0, TILE_PX-4, TILE_PX, TILE_PX-1), fill=_rgb(neon, .55))
+    return image
+
+
+def synth_end_tile(key):
+    """Blank end wall: dark with a faint neon grid on the 3 m storey / bay lines."""
+    from PIL import Image, ImageDraw
+    image = Image.new('RGB', (TILE_PX, TILE_PX), SYNTH_WALL)
+    draw = ImageDraw.Draw(image)
+    line = _rgb(SYNTH_NEON[int(_unit('neon', key)*len(SYNTH_NEON))], .35)
+    for i in range(2):
+        draw.rectangle((i*CELL, 0, i*CELL+2, TILE_PX), fill=line)
+        draw.rectangle((0, i*CELL, TILE_PX, i*CELL+2), fill=line)
+    return image
+
+
+def synth_ground(material):
+    """-> pixels of a GROUND_PX sheet over GROUND_SHEET_M: dark ground, bright grid every
+    SYNTH_GRID_M and a faint one every SYNTH_FINE_M (magenta on bare ground, teal on grass)."""
+    from PIL import Image, ImageDraw
+    teal = material == 'kyiv_grass'
+    image = Image.new('RGB', (GROUND_PX, GROUND_PX), (3, 8, 12) if teal else (6, 3, 12))
+    draw = ImageDraw.Draw(image)
+    colour = SYNTH_NEON[1] if teal else SYNTH_NEON[0]
+    px_m = GROUND_PX/GROUND_SHEET_M
+    for step, width, gain in ((SYNTH_FINE_M, 2, .3), (SYNTH_GRID_M, 6, 1.0)):
+        for i in range(round(GROUND_SHEET_M/step)):
+            c = round(i*step*px_m)
+            # Lines straddle the sheet edge so the repeat seam is one continuous line.
+            for at in (c, c + GROUND_PX) if c == 0 else (c,):
+                draw.rectangle((at-width//2, 0, at+width//2, GROUND_PX), fill=_rgb(colour, gain))
+                draw.rectangle((0, at-width//2, GROUND_PX, at+width//2), fill=_rgb(colour, gain))
+    return list(image.tobytes())
+
+
+# --- 8-bit NES (facade_style 3) --------------------------------------------------------
+# Fully procedural, the same drawing as facade.gdshader / surface.gdshader's NES branches: a
+# 3.3 x 3 m cell is 12 x 12 console pixels in the NES (2C02) palette, scaled up with nearest
+# neighbour so the blocks stay hard. BeamNG has no screen filter: the textures carry the look.
+NES = {'black': (0, 0, 0), 'white': (252, 252, 252), 'grey': (124, 124, 124), 'light': (188, 188, 188),
+       'dark': (74, 74, 74), 'navy': (0, 0, 188), 'blue': (0, 88, 248), 'sky': (92, 148, 252),
+       'cyan': (60, 188, 252), 'brick': (200, 76, 12), 'brick_dark': (136, 20, 0), 'brick_light': (252, 152, 56),
+       'cream': (252, 224, 168), 'gold': (248, 184, 0), 'green': (0, 168, 0), 'green_dark': (0, 88, 0),
+       'green_light': (88, 216, 84), 'dirt': (172, 124, 0), 'dirt_dark': (80, 48, 0), 'roof_red': (168, 16, 0)}
+NES_KINDS = ('brick', 'panel', 'plaster', 'glass')
+NES_PIXEL_M = 0.5             # ground pixel
+
+
+def nes_kind(kind, key):
+    """Facade kind (texture_styles / export kinds, or None for a stock set) -> NES sprite kind."""
+    if kind == 'brick' or 'brick' in key:
+        return 'brick'
+    if kind in ('panel', 'loggia'):
+        return 'panel'
+    if kind == 'plaster':
+        return 'plaster'
+    return NES_KINDS[1 + int(_unit('nes', key) * 3)]
+
+
+def _nes_cell(kind, key, bx, sy, end=False):
+    """One 12 x 12 cell as rows of palette names (row 0 at the top)."""
+    base, shade, light = {'brick': ('brick', 'brick_dark', 'brick_light'), 'panel': ('light', 'grey', 'white'),
+                          'plaster': ('cream', 'gold', 'white'), 'glass': ('cyan', 'blue', 'white')}[kind]
+    rows = []
+    for y in range(12):
+        gy = 11 - y + sy*12            # from the bottom, as the shader's f.y
+        row = []
+        for x in range(12):
+            if kind == 'brick':
+                qx = x + bx*12
+                b_x, b_y = (qx + (gy // 3 % 2) * 2) % 4, gy % 3
+                c = shade if b_x == 0 or b_y == 0 else (light if b_y == 2 and b_x == 1 else base)
+            else:
+                c = base
+                if x == 0 or (11 - y) == 0:
+                    c = shade if kind == 'panel' else base
+                if kind != 'panel' and (x + (11 - y)) % 4 == 0 and (11 - y) > 9:
+                    c = shade
+            row.append(c)
+        rows.append(row)
+    if not end:
+        lit = _unit('nes_lit', key, bx, sy) > .8
+        for y in range(12):
+            fy = 11 - y
+            for x in range(12):
+                if 3 <= x <= 8 and 3 <= fy <= 9:
+                    inner = 4 <= x <= 7 and 4 <= fy <= 8
+                    rows[y][x] = ('gold' if lit else 'navy') if inner else 'black'
+                    if inner and not lit and x == 5 and fy == 7:
+                        rows[y][x] = 'white'
+    return rows
+
+
+def _nes_image(cells):
+    """2 x 2 cells (bx, sy) -> TILE_PX square, nearest-neighbour upscale."""
+    from PIL import Image
+    small = Image.new('RGB', (24, 24))
+    for (bx, sy), rows in cells.items():
+        for y, row in enumerate(rows):
+            for x, name in enumerate(row):
+                small.putpixel((bx*12 + x, (1 - sy)*12 + y), NES[name])
+    return small.resize((TILE_PX, TILE_PX), Image.NEAREST)
+
+
+def nes_tile(kind, key):
+    """6 m repeat: 2 bays x 2 storeys of the NES facade sprite."""
+    return _nes_image({(bx, sy): _nes_cell(kind, key, bx, sy) for bx in range(2) for sy in range(2)})
+
+
+def nes_end_tile(kind, key):
+    return _nes_image({(bx, sy): _nes_cell(kind, key, bx, sy, end=True) for bx in range(2) for sy in range(2)})
+
+
+def nes_ground(material):
+    """-> pixels of a GROUND_PX sheet over GROUND_SHEET_M in half-metre console pixels: two
+    greens with light tufts on grass, light lawn with SMB dirt patches on bare ground."""
+    from PIL import Image
+    n = round(GROUND_SHEET_M / NES_PIXEL_M)
+    small = Image.new('RGB', (n, n))
+    grass = material == 'kyiv_grass'
+    for y in range(n):
+        for x in range(n):
+            h = _unit('nes_g', material, x, y)
+            # periodic blobs so the sheet repeats without a seam
+            import math
+            big = (math.sin(2*math.pi*x/n*2 + 1.3) + math.sin(2*math.pi*y/n*2 + .4) + math.sin(2*math.pi*(x+y)/n*3)) / 3
+            if grass:
+                c = 'green_dark' if big > .45 else 'green'
+                if h > .93:
+                    c = 'green_light'
+            else:
+                c = 'green' if h > .9 else 'green_light'
+                if big > .55:
+                    c = 'dirt_dark' if h > .85 else 'dirt'
+            small.putpixel((x, y), NES[c])
+    return list(small.resize((GROUND_PX, GROUND_PX), Image.NEAREST).tobytes())

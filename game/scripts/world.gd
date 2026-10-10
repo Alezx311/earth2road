@@ -52,6 +52,7 @@ func tri(a: Vector3, b: Vector3, c: Vector3, kind: String, facing_up := true, uv
 	for v in [a, b, c]:
 		st.set_color(color)
 		st.set_uv(Vector2(v.x, v.z) if uv == Vector2.INF else uv)
+		st.set_uv2(Vector2.ZERO)
 		st.add_vertex(v)
 
 func wall(a: Vector3, b: Vector3, bottom: float, top: float, kind: String, color := Color.WHITE) -> void:
@@ -62,6 +63,8 @@ func wall(a: Vector3, b: Vector3, bottom: float, top: float, kind: String, color
 	for i in [0, 1, 2, 0, 2, 3]:
 		st.set_color(color)
 		st.set_uv(uvs[i])
+		# UV2 = (wall length, wall top): facade.gdshader finds the corners and the roof line.
+		st.set_uv2(Vector2(run, top))
 		st.add_vertex(quad[i])
 
 ## Left/right borders of a polyline ribbon with mitred joints (no wedges on bends).

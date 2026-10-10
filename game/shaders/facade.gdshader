@@ -29,6 +29,8 @@ const float PANEL_LAYERS = 6.0;
 const vec2 PLASTER_METRES = vec2(4.0, 4.0);
 const vec2 BRICK_METRES = vec2(2.0, 1.8);
 varying vec3 wn;
+// facade_style 2 (synthwave): one neon hue per building from this palette.
+const vec3 NEON[5] = vec3[](vec3(1.0,.12,.6), vec3(.1,.85,1.0), vec3(.62,.22,1.0), vec3(1.0,.42,.12), vec3(.95,.2,.95));
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 void vertex() { wn = (MODEL_MATRIX * vec4(NORMAL,0.0)).xyz; }
 void fragment() {
@@ -127,5 +129,86 @@ void fragment() {
 		ALBEDO = mix(ALBEDO,vec3(.71,.72,.69),clamp(frame,0.0,1.0)*(1.0-roof));
 		ROUGHNESS = mix(.88,.22,glazing);
 		METALLIC = glazing*.12;
+	}
+	if(facade_style == 2) {
+		// Synthwave: near-black glossy walls, lit windows in the building's neon hue (a few in a
+		// second hue), neon corners, roof line and a thin band every third storey. UV2 = (wall
+		// length, wall top) from world.gd; zero on faces that are not walls.
+		float pick = hash(vec2(COLOR.r*97.0, 5.0));
+		vec3 neon = NEON[int(pick*5.0)];
+		vec3 alt = NEON[int(hash(vec2(COLOR.r*13.0, 9.0))*5.0)];
+		vec3 dark = vec3(.018,.014,.035) * (.8 + COLOR.r*.5);
+		float lit = step(.45, hash(cell + COLOR.r*17.0));
+		vec3 pane = mix(neon, alt, step(.82, hash(cell*1.3 + COLOR.r*7.0)));
+		float wnd = window * (1.0 - roof);
+		vec2 pw = fwidth(UV) + 1e-4;
+		float line = 0.0;
+		if(UV2.x > 0.0) {
+			float corner = min(UV.x, UV2.x - UV.x);
+			line = max(line, 1.0 - smoothstep(.10, .10 + pw.x*1.5, corner));
+			line = max(line, 1.0 - smoothstep(.16, .16 + pw.y*1.5, UV2.y - UV.y));
+		}
+		float storey = abs(fract(UV.y / (floor_height*3.0) + .5) - .5) * floor_height*3.0;
+		line = max(line, (1.0 - smoothstep(.035, .035 + pw.y*1.5, storey)) * .45 * step(floor_height, UV.y));
+		line *= 1.0 - roof;
+		ALBEDO = mix(dark, pane*.25, wnd*lit);
+		ALBEDO = mix(ALBEDO, vec3(.04,.04,.07), wnd*(1.0-lit));
+		EMISSION = pane * wnd * lit * (1.1 + hash(cell + 3.0)*.8) + neon * line * 3.2;
+		NORMAL_MAP = vec3(.5, .5, 1.0);
+		NORMAL_MAP_DEPTH = 0.0;
+		ROUGHNESS = mix(.32, .3, wnd);   // glossier, metallic panes mirrored the stars
+		METALLIC = .35 * (1.0 - wnd);
+	}
+	if(facade_style == 3) {
+		// 8-bit NES: the wall drawn in world-space "pixels" (12 per 3.3 x 3 m cell) from the
+		// console's palette: SMB brick, grey panels, cream plaster or sky-blue glass; windows with
+		// a black frame and a white glint; black outline on corners and the roof line.
+		vec2 px = floor(f * 12.0);
+		vec2 pcell = vec2(3.3, floor_height) / 12.0;
+		vec3 base, shade, light;
+		if(is_brick) { base = vec3(.784,.298,.047); shade = vec3(.533,.078,0.); light = vec3(.988,.596,.22); }
+		else if(dna_enabled ? dna_architecture == 3 : family > 2.5 && family < 3.5) { base = vec3(.235,.737,.988); shade = vec3(0.,.345,.973); light = vec3(.988); }
+		else if(is_panel) { base = vec3(.737); shade = vec3(.486); light = vec3(.988); }
+		else { base = vec3(.988,.878,.659); shade = vec3(.973,.722,0.); light = vec3(.988); }
+		vec3 c = base;
+		if(is_brick) {
+			// 4 x 3 px bricks, every other course shifted, dark mortar on two sides, light top-left.
+			vec2 q = floor(UV / pcell);
+			float bx = mod(q.x + mod(floor(q.y / 3.0), 2.0) * 2.0, 4.0), by = mod(q.y, 3.0);
+			c = bx < .5 || by < .5 ? shade : (by > 1.5 && bx < 1.5 ? light : base);
+		} else {
+			// Plain wall with a 1 px darker seam at the cell edge (panels) and a dither row.
+			if(px.x < .5 || px.y < .5) c = is_panel ? shade : mix(base, shade, .35);
+			if(!is_panel && mod(px.x + px.y, 4.0) < .5 && px.y > 9.5) c = shade;
+		}
+		float wx = step(3.0, px.x) * step(px.x, 8.0) * step(3.0, px.y) * step(px.y, 9.0);
+		if(dna_enabled && dna_architecture >= 3) wx = step(1.0, px.x) * step(px.x, 10.0) * step(3.0, px.y) * step(px.y, 9.0);
+		if(shop > .5) wx = step(1.0, px.x) * step(px.x, 10.0) * step(2.0, px.y) * step(px.y, 10.0);
+		wx *= 1.0 - roof;
+		if(photo && is_brick && end_wall) wx = 0.0;
+		float wedge = wx * (1.0 - step(4.0, px.x) * step(px.x, 7.0) * step(4.0, px.y) * step(px.y, 8.0));
+		if(shop > .5) wedge = wx * (1.0 - step(2.0, px.x) * step(px.x, 9.0) * step(3.0, px.y) * step(px.y, 9.0));
+		bool lit = hash(cell + COLOR.r*17.0) > .8;
+		vec3 pane = lit ? vec3(.973,.722,0.) : vec3(0.,0.,.737);
+		float glint = step(abs(px.x - (shop > .5 ? 3.0 : 5.0)), .5) * step(abs(px.y - (shop > .5 ? 8.0 : 7.0)), .5);
+		c = mix(c, pane, wx);
+		c = mix(c, vec3(.988), glint * wx * (lit ? 0. : 1.));
+		c = mix(c, vec3(0.), wedge);
+		if(UV2.x > 0.0) {
+			// Sprite outline: one pixel at both corners and below the wall top.
+			if(UV.x < pcell.x || UV2.x - UV.x < pcell.x || UV2.y - UV.y < pcell.y) c = vec3(0.);
+		}
+		if(roof > .5) {
+			// Flat roof colour with a 1 px seam every 2 m (a checker shimmered at a distance).
+			vec2 r = mod(floor(UV / .5), 4.0);
+			c = is_brick ? vec3(.659,.063,0.) : vec3(.486);
+			if(r.x < .5 || r.y < .5) c = is_brick ? vec3(.533,.078,0.) : vec3(.29);
+		}
+		ALBEDO = c;
+		EMISSION = lit ? pane * wx * .6 : vec3(0.);
+		NORMAL_MAP = vec3(.5, .5, 1.0);
+		NORMAL_MAP_DEPTH = 0.0;
+		ROUGHNESS = 1.0;
+		METALLIC = 0.0;
 	}
 }

@@ -770,8 +770,40 @@ def visible_distance(bounds):
     return int(max(4000, min(8000, span * 0.55)))
 
 
-def sky_objects(distance=4000):
-    """Overcast-bright Kyiv daylight: high visibility, soft fog, drifting cloud deck."""
+def sky_objects(distance=4000, synth=False, nes=False):
+    """Overcast-bright Kyiv daylight: high visibility, soft fog, drifting cloud deck. The
+    synthwave texture style gets a violet dusk instead: low pink sun, purple fog, no clouds;
+    8-bit NES a flat console blue: blue fog and clear colour, white sun high up, no clouds."""
+    if nes:
+        return [
+            scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
+                         fogDensity=4e-05, fogAtmosphereHeight=900, fogColor=[0.36, 0.58, 0.99, 1],
+                         canvasClearColor=[92, 148, 252, 255], globalEnviromentMap='BNG_Sky_02_cubemap'),
+            scene_object('sunsky', 'ScatterSky', 'KyivSky', azimuth=150, elevation=60,
+                         skyBrightness=30, shadowDistance=min(1400, int(distance * 0.35)), shadowSoftness=0.0, texSize=2048,
+                         castShadows=True, brightness=0.9, exposure=1.0, flareType='BNG_Sunflare_2',
+                         flareScale=2, mieScattering=0.001, rayleighScattering=0.0032,
+                         sunScale=[1, 1, 1, 1], ambientScale=[0.55, 0.55, 0.55, 1],
+                         colorize=[0.36, 0.58, 0.99, 1], colorizeAmount=0.85,
+                         fogScale=[0.36, 0.58, 0.99, 1], nightFogColor=[0.09, 0.11, 0.16, 1],
+                         nightColor=[0.07, 0.08, 0.12, 1], nightCubemap='BNG_Sky_02_cubemap',
+                         moonEnabled=False, occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
+        ]
+    if synth:
+        return [
+            scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
+                         fogDensity=0.00035, fogAtmosphereHeight=500, fogColor=[0.24, 0.07, 0.3, 1],
+                         canvasClearColor=[0.12, 0.02, 0.2, 255], globalEnviromentMap='BNG_Sky_02_cubemap'),
+            scene_object('sunsky', 'ScatterSky', 'KyivSky', azimuth=180, elevation=7,
+                         skyBrightness=8, shadowDistance=min(1400, int(distance * 0.35)), shadowSoftness=0.3, texSize=2048,
+                         castShadows=True, brightness=0.45, exposure=0.8, flareType='BNG_Sunflare_2',
+                         flareScale=4, mieScattering=0.004, rayleighScattering=0.0032,
+                         sunScale=[1.0, 0.35, 0.7, 1], ambientScale=[0.3, 0.12, 0.42, 1],
+                         colorize=[0.75, 0.15, 0.6, 1], colorizeAmount=0.75,
+                         fogScale=[0.5, 0.15, 0.55, 1], nightFogColor=[0.1, 0.02, 0.16, 1],
+                         nightColor=[0.08, 0.02, 0.14, 1], nightCubemap='BNG_Sky_02_cubemap',
+                         moonEnabled=False, occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
+        ]
     return [
         scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
                      fogDensity=9e-05, fogAtmosphereHeight=700, fogColor=[0.62, 0.68, 0.76, 1],
@@ -920,8 +952,9 @@ def panel_facade_materials(level, level_id, texture_style='procedural'):
     style (texture_styles.py) builds them from its pack instead of drawing them."""
     from . import texture_styles
     materials = {}
+    photo = texture_styles.family(texture_style) == 'photo'
     for name, (base, glass, style) in PANEL_FACADES.items():
-        if texture_style == 'procedural':
+        if not photo:
             path = fresh_png(level, level_id, name, '.png', FACADE_PX, _facade_pixels(base, glass, style, name))
         else:
             kind = panel_facade_kind(name)
@@ -943,6 +976,108 @@ def panel_facade_materials(level, level_id, texture_style='procedural'):
                         'roughnessFactor': 0.72, 'metallicFactor': 0.0}, {}, {}, {}],
             'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
     return materials
+
+
+def photo_ground_materials(level, level_id, texture_style='procedural'):
+    """A photo texture style replaces the stock grass of kyiv_grass/kyiv_ground with baked
+    sheets of its ground photos (texture_styles.ground_sheet); procedural keeps the stock art."""
+    from . import texture_styles
+    from .beamng_assets import SURFACES
+    if texture_styles.family(texture_style) != 'photo':
+        return {}
+    materials = {}
+    size = texture_styles.GROUND_PX
+    for name in texture_styles.GROUND_RECIPES:
+        colour, normal = texture_styles.ground_sheet(name)
+        stage = {'baseColorMap': fresh_png(level, level_id, name, '.color.png', size, colour),
+                 'normalMap': fresh_png(level, level_id, name, '.normal.png', size, normal),
+                 'roughnessFactor': 0.95, 'metallicFactor': 0.0}
+        materials[name] = {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                           'Stages': [stage, {}, {}, {}], **SURFACES[name][2]}
+    return materials
+
+
+def synth_materials(level, level_id, materials, facade_kinds):
+    """Synthwave overrides on the assembled material set: neon-window facades and grid end
+    walls (the colour map doubles as the emissive map), grid ground, dark roads, pavements and
+    roofs, glowing lane paint. Emissive fields follow BeamNG's v1.5 material stage (emissiveMap,
+    emissiveFactor); not yet checked in the game."""
+    from . import texture_styles
+    from .beamng_assets import SURFACES
+    out = {}
+
+    def glowing(name, path, extra):
+        stage = {'baseColorMap': path, 'emissiveMap': path, 'emissiveFactor': [1, 1, 1],
+                 'roughnessFactor': 0.35, 'metallicFactor': 0.2}
+        return {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                'Stages': [stage, {}, {}, {}], **extra}
+    building = {'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+    for name, kind in facade_kinds.items():
+        if kind != 'synth':
+            continue
+        out[name] = glowing(name, fresh_png(level, level_id, name, '.color.png', texture_styles.TILE_PX,
+                                            texture_styles.tile_for('synth', None, name)), building)
+        out[name+'_end'] = glowing(name+'_end', fresh_png(level, level_id, name+'_end', '.color.png', texture_styles.TILE_PX,
+                                                          texture_styles.end_pixels('synth', None, name)), building)
+    for name in texture_styles.GROUND_RECIPES:
+        path = fresh_png(level, level_id, name+'_synth', '.color.png', texture_styles.GROUND_PX,
+                         texture_styles.synth_ground(name))
+        out[name] = glowing(name, path, SURFACES[name][2])
+        out[name]['Stages'][0].update(roughnessFactor=0.6, metallicFactor=0.0)
+    dark = {'kyiv_asphalt': ([0.06, 0.05, 0.08], 0.25), 'kyiv_asphalt_worn': ([0.07, 0.06, 0.09], 0.3),
+            'kyiv_concrete': ([0.12, 0.09, 0.16], 0.4), 'kyiv_curb': ([0.14, 0.1, 0.18], 0.4),
+            'kyiv_gravel': ([0.1, 0.08, 0.12], 0.6), 'kyiv_pitch': ([0.04, 0.12, 0.14], 0.6),
+            'kyiv_track': ([0.2, 0.04, 0.12], 0.5), 'kyiv_water': ([0.02, 0.04, 0.1], 0.04)}
+    for name, material in materials.items():
+        roof = 'roof' in name and material.get('annotation') == 'BUILDINGS'
+        if name not in dark and not roof:
+            continue
+        factor, rough = dark.get(name, ([0.07, 0.05, 0.1], 0.5))
+        out[name] = {**material, 'Stages': [{**material['Stages'][0], 'baseColorFactor': factor + [1],
+                                             'roughnessFactor': rough}, {}, {}, {}]}
+    paint = materials.get('kyiv_paint')
+    if paint:
+        out['kyiv_paint'] = {**paint, 'Stages': [{**paint['Stages'][0], 'baseColorFactor': [0.2, 0.08, 0.2, 1],
+                                                  'emissiveFactor': [1.0, 0.45, 0.95]}, {}, {}, {}]}
+    return out
+
+
+def nes_materials(level, level_id, materials, facade_kinds, nes_kinds):
+    """8-bit NES overrides on the assembled material set: pixel-sprite facades and end walls
+    (texture_styles.nes_tile), pixel grass and lawn, roads, pavements, water and roofs tinted to
+    palette colours (the maps stay, the factor sets the hue), white lane paint."""
+    from . import texture_styles
+    from .beamng_assets import SURFACES
+    out = {}
+
+    def flat(name, path, extra):
+        return {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                'Stages': [{'baseColorMap': path, 'roughnessFactor': 0.95, 'metallicFactor': 0.0}, {}, {}, {}], **extra}
+    building = {'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+    for name, sprite in nes_kinds.items():
+        if facade_kinds.get(name) != 'nes':
+            continue
+        out[name] = flat(name, fresh_png(level, level_id, 'kyiv_nes_'+sprite, '.color.png', texture_styles.TILE_PX,
+                                         list(texture_styles.nes_tile(sprite, name).tobytes())), building)
+        out[name+'_end'] = flat(name+'_end', fresh_png(level, level_id, 'kyiv_nes_'+sprite+'_end', '.color.png',
+                                                       texture_styles.TILE_PX,
+                                                       list(texture_styles.nes_end_tile(sprite, name).tobytes())), building)
+    for name in texture_styles.GROUND_RECIPES:
+        out[name] = flat(name, fresh_png(level, level_id, name+'_nes', '.color.png', texture_styles.GROUND_PX,
+                                         texture_styles.nes_ground(name)), SURFACES[name][2])
+    tint = {'kyiv_asphalt': [0.45, 0.45, 0.45], 'kyiv_asphalt_worn': [0.5, 0.5, 0.5],
+            'kyiv_concrete': [1.0, 1.0, 1.0], 'kyiv_curb': [0.7, 0.7, 0.7], 'kyiv_gravel': [0.9, 0.65, 0.1],
+            'kyiv_pitch': [0.0, 0.8, 0.0], 'kyiv_track': [1.0, 0.35, 0.05], 'kyiv_water': [0.0, 0.35, 0.97]}
+    for name, material in materials.items():
+        roof = 'roof' in name and material.get('annotation') == 'BUILDINGS'
+        if name not in tint and not roof:
+            continue
+        out[name] = {**material, 'Stages': [{**material['Stages'][0], 'baseColorFactor': tint.get(name, [0.49, 0.49, 0.49]) + [1],
+                                             'roughnessFactor': 0.95, 'metallicFactor': 0.0}, {}, {}, {}]}
+    paint = materials.get('kyiv_paint')
+    if paint:
+        out['kyiv_paint'] = {**paint, 'Stages': [{**paint['Stages'][0], 'baseColorFactor': [1, 1, 1, 1]}, {}, {}, {}]}
+    return out
 
 
 # Ukrainian plates: white ground, blue EU-style band, AA #### XX for Kyiv city. The
@@ -1172,6 +1307,9 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         level.mkdir(parents=True)
         UV.clear()
         UV.update(uv_scales())
+        style_family = texture_styles.family(texture_style)
+        if style_family != 'procedural':
+            UV.update({name: 1/texture_styles.GROUND_SHEET_M for name in texture_styles.GROUND_RECIPES})
         objects = [scene_object('MissionGroup', 'SimGroup', parent='')]
         objects[0].pop('__parent')
         objects += [scene_object(name, 'SimGroup', 'MissionGroup') for name in GROUPS]
@@ -1201,7 +1339,8 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         bounds = [min(p[0] for p in points) - 150, min(p[1] for p in points) - 150,
                   max(p[0] for p in points) + 150, max(p[1] for p in points) + 150]
         size = index['tile_size']
-        objects += sky_objects(visible_distance(bounds))
+        objects += sky_objects(visible_distance(bounds), synth=texture_styles.family(texture_style) == 'synth',
+                               nes=texture_styles.family(texture_style) == 'nes')
         # 'terrain': the ground heightmap replaces both the ground meshes and the low substrate.
         terrain = GroundTerrain(bounds) if 'terrain' in feature else None
         if terrain is None:
@@ -1304,7 +1443,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         # Whole buildings merge into 250 m cells by footprint centre: thousands of
         # per-building TSStatics dominated level load time.
         building_cells = defaultdict(Mesh)
-        dna_styles, roof_colours, facade_kinds = {}, {}, {}
+        dna_styles, roof_colours, facade_kinds, nes_kinds = {}, {}, {}, {}
         mapped_canopies = []
         from akadem_maps.adapters.beamng.beamng_placement import audit_building
         for index_n, (bid, parts) in enumerate(building_items, 1):
@@ -1313,12 +1452,19 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                 dna_styles[facade] = parts[0]['local_style']
                 UV[facade] = 1/6
             end = None
-            if texture_style != 'procedural':
+            if style_family != 'procedural':
                 kind = (panel_facade_kind(facade) if facade in PANEL_FACADES else
                         texture_styles.dna_kind(dna_styles[facade], facade) if facade in dna_styles else None)
+                if style_family == 'synth':
+                    kind = 'synth'          # every facade, stock sets included (synth_materials)
+                    UV[facade] = 1/6
+                if style_family == 'nes':
+                    nes_kinds[facade] = texture_styles.nes_kind(kind, facade)
+                    kind = 'nes'            # every facade, stock sets included (nes_materials)
+                    UV[facade] = 1/6
                 if kind == 'loggia':
                     UV[facade] = 1/texture_styles.LOGGIA_SHEET_M
-                if kind in ('panel', 'loggia', 'brick'):
+                if kind in ('panel', 'loggia', 'brick', 'synth', 'nes'):
                     end = facade + '_end'
                     UV[end] = 1/6
                     facade_kinds[facade] = kind
@@ -1361,16 +1507,20 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         del building_parts, building_items, building_cells
         stage_event('dressing')
         materials = {**surface_materials(), **tree_materials(), **fixture_materials(level, level_id),
-                     **panel_facade_materials(level, level_id, texture_style), **yard_materials()}
+                     **panel_facade_materials(level, level_id, texture_style), **yard_materials(),
+                     **photo_ground_materials(level, level_id, texture_style)}
         from akadem_maps.core.local_dna import facade_pixels, Field
         for name, style in sorted(dna_styles.items()):
-            if texture_style == 'procedural':
+            if style_family != 'photo':
                 path = fresh_png(level, level_id, name, '.color.png', 256, facade_pixels(style))
             else:
                 colour = [int(str(style.get('color') or '#b5b2aa')[i:i+2], 16)/255 for i in (1, 3, 5)]
                 kind = texture_styles.dna_kind(style, name)
                 px, _metres = texture_styles.tile_size(kind)
-                path = fresh_png(level, level_id, name, '.color.png', px, texture_styles.tile_for(kind, colour, name))
+                # A loggia sheet depends on the colour only: facades of one colour share one file
+                # (Khreshchatyk DNA: 80 sheets of 9.7 MB, 30 distinct, ZIP 846 MB).
+                stem = 'kyiv_dna_loggia' if kind == 'loggia' else name
+                path = fresh_png(level, level_id, stem, '.color.png', px, texture_styles.tile_for(kind, colour, name))
                 if name in facade_kinds:
                     materials[name+'_end'] = facade_material(name+'_end', fresh_png(
                         level, level_id, name+'_end', '.color.png', texture_styles.TILE_PX,
@@ -1395,6 +1545,12 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                       for _tid, tile in tiles for s in tile.get('signs', [])}
         signmats, plates = sign_materials(level, level_id, used_signs)
         materials.update(signmats)
+        if style_family == 'synth':
+            materials.update(synth_materials(level, level_id, materials, facade_kinds))
+            counts['synth_facades'] = sum(1 for k in facade_kinds.values() if k == 'synth')
+        if style_family == 'nes':
+            materials.update(nes_materials(level, level_id, materials, facade_kinds, nes_kinds))
+            counts['nes_facades'] = len(nes_kinds)
         write_json(level / 'art/kyiv/main.materials.json', materials)
         write_json(level / 'art/forest/managedItemData.json', forest_item_data())
 

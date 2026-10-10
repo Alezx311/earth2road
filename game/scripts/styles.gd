@@ -8,6 +8,9 @@ const TEXTURES := "res://assets/textures/"
 const SETTINGS := "user://settings.cfg"
 
 static var _config: Dictionary = {}
+## facade_style of the applied style (0 procedural, 1 photo, 2 synthwave): main.gd switches
+## sky, fog and glow with it.
+static var active := 0
 
 static func config() -> Dictionary:
 	if _config.is_empty():
@@ -51,7 +54,8 @@ static func apply(id: String, remember := false) -> void:
 	var style := find(id)
 	if style.is_empty():
 		return
-	RenderingServer.global_shader_parameter_set("facade_style", int(style.facade_style))
+	active = int(style.facade_style)
+	RenderingServer.global_shader_parameter_set("facade_style", active)
 	if remember:
 		var cfg := ConfigFile.new()
 		cfg.load(SETTINGS)

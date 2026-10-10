@@ -67,6 +67,14 @@ installed map ID such as `tiny`, not a path.
 `--texture-style ID` (default `procedural`) bakes a texture style from
 `config/visuals/texture_styles.json` into the facade textures; a style whose pack is not
 imported is an error, not a fallback. The export dialog in the game offers the same choice.
+A photo style also bakes `kyiv_grass` and `kyiv_ground` into 2048 px sheets of 24 m from its
+ground photos (`texture_styles.ground_sheet`); the `terrain` optimization's TerrainBlock keeps
+its flat base maps. `synthwave` bakes neon-window facade and grid end-wall tiles (colour map
+reused as `emissiveMap`), grid sheets for the two ground materials, darkens roads, pavements,
+water and roofs, makes lane paint emissive and writes a violet dusk `ScatterSky` without clouds.
+`nes` bakes 8-bit sprite tiles per facade kind (brick, panel, plaster, glass; shared files),
+pixel grass and lawn sheets, tints roads, pavements, water and roofs to palette colours and writes
+a flat blue sky without clouds; BeamNG has no screen filter, so the textures carry the look.
 
 `--optimization balanced` (default) shares identical vertices in the DAE files, merges flat
 ground (≤5 cm height error, tile edges kept exact) and gives sidewalks a simplified collision

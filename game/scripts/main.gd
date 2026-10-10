@@ -73,6 +73,10 @@ const UNREACHABLE_SECONDS := 6.0
 func _ready() -> void:
 	I18n.setup()
 	Styles.apply(Styles.current())
+	# --texture-style=ID: QA captures of one style without touching the remembered choice.
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--texture-style="):
+			Styles.apply(arg.split("=", true, 1)[1])
 	var args := OS.get_cmdline_user_args()
 	for arg in args:
 		if arg.begins_with("--seconds="):
@@ -124,6 +128,7 @@ func _ready() -> void:
 	sun.directional_shadow_split_3 = 0.45
 	sun.directional_shadow_blend_splits = true
 	add_child(sun)
+	apply_atmosphere()
 	world = WorldStream.new()
 	add_child(world)
 	var sp: Array = data.spawn.position
@@ -150,9 +155,94 @@ func _ready() -> void:
 	reconnect_clock = RECONNECT_SECONDS - 0.5
 	print("WORLD_READY map=%s lanes=%d tiles=%d" % [WorldStream.map_id(),data.lanes.size(),data.tiles.size()])
 
+var day_sky: Material
+var synth_sky: ShaderMaterial
+var nes_sky: ShaderMaterial
+var nes_post: MeshInstance3D
+
+## Sky, sun, fog and glow of the active texture style (Styles.active): the daylight look,
+## for synthwave (2) a dusk with a striped-sun sky, violet fog and strong neon bloom, for
+## 8-bit NES (3) a flat blue sky with block clouds, even light and the palette screen filter.
+func apply_atmosphere() -> void:
+	var synth := Styles.active == 2
+	var nes := Styles.active == 3
+	if synth and synth_sky == null:
+		synth_sky = ShaderMaterial.new()
+		synth_sky.shader = preload("res://shaders/synth_sky.gdshader")
+	if nes and nes_sky == null:
+		nes_sky = ShaderMaterial.new()
+		nes_sky.shader = preload("res://shaders/nes_sky.gdshader")
+	env.sky.sky_material = synth_sky if synth else (nes_sky if nes else day_sky)
+	env.ambient_light_energy = 0.55 if synth else (0.75 if nes else 0.9)
+	# NES: neutral fill light; the blue sky as ambient tinted every grey towards the palette blues.
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR if nes else Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_color = Color.WHITE
+	env.fog_light_color = Color("3a1450") if synth else (Color("5c94fc") if nes else Color("c3d2dc"))
+	env.fog_density = 0.6 if synth else (0.2 if nes else 0.35)
+	env.fog_aerial_perspective = 0.15 if synth else (0.0 if nes else 0.4)
+	env.glow_intensity = 1.0 if synth else (0.0 if nes else 0.35)
+	env.glow_bloom = 0.12 if synth else 0.02
+	env.glow_hdr_threshold = 0.8 if synth else 1.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE if synth else Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	env.adjustment_saturation = 1.2 if synth else (1.1 if nes else 1.05)
+	env.tonemap_exposure = 1.0 if synth else (1.0 if nes else 1.05)
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR if nes else Environment.TONE_MAPPER_AGX
+	env.ssao_enabled = not nes
+	if sun != null:
+		sun.light_color = Color("ff5fb4") if synth else (Color.WHITE if nes else Color("fff1dc"))
+		sun.light_energy = 0.45 if synth else (0.7 if nes else 1.25)
+	if nes and nes_post == null:
+		# Full-screen quad after the 3D scene (shaders/nes_post.gdshader): console pixels,
+		# outlines from depth and normals, palette snap. The HUD is drawn over it.
+		nes_post = MeshInstance3D.new()
+		var quad := QuadMesh.new()
+		quad.size = Vector2(2, 2)
+		quad.flip_faces = true
+		nes_post.mesh = quad
+		nes_post.extra_cull_margin = 16384.0
+		nes_post.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := ShaderMaterial.new()
+		mat.shader = preload("res://shaders/nes_post.gdshader")
+		mat.set_shader_parameter("block", maxf(2.0, roundf(get_viewport().get_visible_rect().size.y / 270.0)))
+		nes_post.material_override = mat
+		add_child(nes_post)
+		nes_tune_time = -1
+	if nes_post != null:
+		nes_post.visible = nes
+
+const NES_TUNE := "res://../config/visuals/nes_tune.json"
+var nes_tune_time := -1
+var nes_tune_clock := 0.0
+
+## Live tuning of the NES post effect: config/visuals/nes_tune.json is re-read when it changes
+## (every half second), each key a uniform of shaders/nes_post.gdshader.
+func nes_tune(delta: float) -> void:
+	if nes_post == null or not nes_post.visible:
+		return
+	nes_tune_clock += delta
+	if nes_tune_clock < 0.5:
+		return
+	nes_tune_clock = 0.0
+	var path := ProjectSettings.globalize_path(NES_TUNE)
+	if not FileAccess.file_exists(path):
+		return
+	var t := FileAccess.get_modified_time(path)
+	if t == nes_tune_time:
+		return
+	nes_tune_time = t
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		push_warning("nes_tune.json: not a JSON object")
+		return
+	for key in parsed:
+		if not str(key).begins_with("_"):
+			nes_post.material_override.set_shader_parameter(key, parsed[key])
+	print("NES_TUNE ", JSON.stringify(parsed))
+
 ## Daylight look: physical-ish sky, SSAO for contact shadows, light aerial fog.
 func make_environment() -> WorldEnvironment:
 	var sky_mat := ProceduralSkyMaterial.new()
+	day_sky = sky_mat
 	sky_mat.sky_top_color = Color("5f8fc4")
 	sky_mat.sky_horizon_color = Color("c9d8e3")
 	sky_mat.ground_horizon_color = Color("b9c3c6")
@@ -248,6 +338,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		I18n.toggle()
 	elif code==KEY_K:
 		show_style(Styles.cycle())
+		apply_atmosphere()
 	elif code==KEY_F12:
 		capture()
 	elif code==KEY_F9:
@@ -325,6 +416,7 @@ func set_paused(on: bool) -> void:
 		var style_button := Ui.button(tr("Textures · K") + ": " + Styles.label(Styles.current(), I18n.current()), func(): pass)
 		style_button.pressed.connect(func():
 			var id := Styles.cycle()
+			apply_atmosphere()
 			style_button.text = tr("Textures · K") + ": " + Styles.label(id, I18n.current()))
 		body.add_child(style_button)
 		resume.grab_focus.call_deferred()
@@ -376,6 +468,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		panel.world_click(point)
 
 func _process(delta: float) -> void:
+	nes_tune(delta)
 	if player==null: return
 	runtime+=delta
 	frame_age+=delta
