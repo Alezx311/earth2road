@@ -203,8 +203,8 @@ GROUND_SHEET_M = 24.0         # 8 repeats of a 3 m photo, 6 of a 4 m one
 GROUND_SATURATION = 0.8       # surface.gdshader photo_saturation
 # material -> (base set, metres), (patch set, metres, cover), (wear set, metres, cover), tint
 GROUND_RECIPES = {
-    'kyiv_grass': (('photo_lawn', 3.0), ('photo_meadow', 4.0, 0.3), ('photo_worn', 3.0, 0.08), (0.86, 0.88, 0.80)),
-    'kyiv_ground': (('photo_lawn', 3.0), ('photo_verge', 4.0, 0.35), ('photo_worn', 3.0, 0.14), (0.90, 0.88, 0.76)),
+    'kyiv_grass': (('photo_lawn', 3.0), ('photo_meadow', 4.0, 0.25), ('photo_worn', 3.0, 0.04), (0.86, 0.88, 0.80)),
+    'kyiv_ground': (('photo_lawn', 3.0), ('photo_meadow', 4.0, 0.3), ('photo_worn', 3.0, 0.07), (0.88, 0.90, 0.78)),
 }
 
 

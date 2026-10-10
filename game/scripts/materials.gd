@@ -93,10 +93,12 @@ static func make() -> Dictionary:
 	mats.gravel = surface("gravel", 2.0, Color(0.95, 0.88, 0.73), Color("a99e87"), {"normal_strength":0.9})
 	mats.yard = surface("ground", 4.0, Color(0.85,0.85,0.7), Color("8e8c70"))
 	mats.orchard = surface("grass", 3.0, Color(0.85,0.88,0.7), Color("6a7945"))
-	# Realistic ground (texture style "panelka"): Kyiv lawns are clover and weeds with worn
-	# turf; the fill between streets and verges is patchy mossy grass; yards are trodden soil.
-	photo_ground(mats.green, ["photo_lawn", 3.0], ["photo_meadow", 3.5, 0.3], ["photo_worn", 3.0, 0.08], Color(0.86, 0.88, 0.8))
-	photo_ground(mats.ground, ["photo_lawn", 3.0], ["photo_verge", 3.5, 0.35], ["photo_worn", 3.0, 0.14], Color(0.9, 0.88, 0.76))
+	# Realistic ground (texture style "panelka"): Kyiv lawns are clover and weeds with a few
+	# denser clumps and little worn turf; yards are trodden soil. Lawns and the fill between
+	# streets read as close short grass: mossy verge patches and wide worn spots looked "soft
+	# and sparse" from above (playtest bilychy_dna note 4). Same recipes in texture_styles.py.
+	photo_ground(mats.green, ["photo_lawn", 3.0], ["photo_meadow", 3.5, 0.25], ["photo_worn", 3.0, 0.04], Color(0.86, 0.88, 0.8))
+	photo_ground(mats.ground, ["photo_lawn", 3.0], ["photo_meadow", 3.5, 0.3], ["photo_worn", 3.0, 0.07], Color(0.88, 0.9, 0.78))
 	photo_ground(mats.wood, ["photo_meadow", 3.5], ["photo_verge", 3.5, 0.35], ["photo_worn", 3.0, 0.06], Color(0.78, 0.82, 0.74))
 	photo_ground(mats.orchard, ["photo_lawn", 3.0], ["photo_verge", 3.5, 0.35], ["photo_worn", 3.0, 0.1], Color(0.88, 0.88, 0.78))
 	photo_ground(mats.yard, ["photo_trodden", 3.0], ["photo_worn", 3.0, 0.45], ["photo_lawn", 3.0, 0.15], Color(0.9, 0.88, 0.84))
