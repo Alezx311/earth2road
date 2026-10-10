@@ -82,6 +82,21 @@ class SurfaceAuditTests(unittest.TestCase):
         self.assertEqual(geometry.height_or(mesh, 5, 5, field), geometry.height_on(mesh, 5, 5, 7.0))
         self.assertEqual(calls, [(5, 5)])
 
+    def test_robust_overlay_repairs_an_invalid_ring_as_last_resort(self):
+        bowtie = Polygon([(0, 0), (2, 2), (2, 0), (0, 2)])
+        def strict(geoms):
+            from shapely.errors import GEOSException
+            if not all(g.is_valid for g in geoms):
+                raise GEOSException('TopologyException: Ring edge missing')
+            return unary_union(geoms)
+        self.assertTrue(geometry._snapped(strict, [bowtie, box(3, 3, 4, 4)]).is_valid)
+        def broken(geoms):
+            from shapely.errors import GEOSException
+            raise GEOSException('first failure')
+        with self.assertRaisesRegex(Exception, 'first failure'):
+            geometry._snapped(broken, [box(0, 0, 1, 1)])
+
+
 class SeamTests(unittest.TestCase):
     def test_absorbed_approach_keeps_junction_connected_to_its_street(self):
         from types import SimpleNamespace

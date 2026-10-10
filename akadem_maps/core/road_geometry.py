@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon
-from shapely import set_precision
+from shapely import make_valid, set_precision
 from shapely.errors import GEOSException
 from shapely.ops import nearest_points, unary_union
 from shapely.strtree import STRtree
@@ -29,13 +29,20 @@ GRIDS = (1e-6, 1e-4, 1e-3)  # metres; snapping used only after a GEOS noding fai
 def _snapped(run, geoms):
     try:
         return run(geoms)
+    except GEOSException as error:
+        first = error
+    for grid in GRIDS:
+        try:
+            return run([set_precision(g, grid) for g in geoms])
+        except GEOSException:
+            pass
+    # Last resort, reached only where every grid failed (Singapore 1.5 km legacy,
+    # 2026-10-11: "Ring edge missing" on a junction cut): an invalid input ring is
+    # repaired, then snapped to the coarsest grid.
+    try:
+        return run([set_precision(make_valid(g), GRIDS[-1]) for g in geoms])
     except GEOSException:
-        for i, grid in enumerate(GRIDS):
-            try:
-                return run([set_precision(g, grid) for g in geoms])
-            except GEOSException:
-                if i == len(GRIDS)-1:
-                    raise
+        raise first
 
 
 def robust(name, a, b):
