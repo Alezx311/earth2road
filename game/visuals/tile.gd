@@ -238,7 +238,9 @@ func facade(b: Dictionary) -> void:
 	if area<0:
 		points.reverse()
 		area=-area
-	var h := float(b.get("height",6))
+	# Up to the eaves: a shaped roof rises above wall_height, and a coping at the ridge height
+	# floated over the roof as an empty frame (playtest bilychy_dna note 5, church annexes).
+	var h := float(b.get("wall_height", b.get("height",6)))
 	var fam := family(b)
 	var seed_id := posmod(hash(str(b.get("id","0"))),65521)
 	var own_id := str(b.get("id",""))
