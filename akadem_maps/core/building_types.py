@@ -106,9 +106,11 @@ def with_context(tags, footprint, context):
 
 
 def heights(kind_, tags, default_levels):
-    """(levels, height, base) for a kind when OSM gives no height or levels; None keeps the default."""
-    if kind_ in ('retail', 'mall') and 'building:levels' not in tags and 'height' not in tags:
-        levels = DEFAULT_LEVELS[kind_]
+    """(levels, height, base) for a kind when OSM gives no height; None keeps the default."""
+    if kind_ in ('retail', 'mall') and 'height' not in tags:
+        # Tagged storeys of a shop hall are tall too (playtest bilychy_dna note 1: a two-storey
+        # supermarket and market drawn 6 m high, lower than the kiosks around them).
+        levels = osm_buildings.number(tags.get('building:levels')) or DEFAULT_LEVELS[kind_]
         return levels, levels*RETAIL_STOREY_M, None
     if kind_ == 'fuel_canopy':
         base = osm_buildings.number(tags.get('min_height')) or CANOPY_BASE_M

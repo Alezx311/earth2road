@@ -42,7 +42,8 @@ class KindTests(unittest.TestCase):
     def test_shop_halls_and_canopies_get_their_heights(self):
         self.assertEqual(bt.heights('retail', {'building': 'retail'}, 2), (1, 4.5, None))
         self.assertEqual(bt.heights('mall', {'shop': 'mall'}, 2), (3, 13.5, None))
-        self.assertIsNone(bt.heights('retail', {'building': 'retail', 'building:levels': '2'}, 2))
+        self.assertEqual(bt.heights('retail', {'building': 'retail', 'building:levels': '2'}, 2), (2, 9.0, None))
+        self.assertIsNone(bt.heights('retail', {'building': 'retail', 'building:levels': '2', 'height': '7'}, 2))
         self.assertEqual(bt.heights('fuel_canopy', {'building': 'roof'}, 2), (1, 5.3, 4.5))
         self.assertEqual(bt.heights('fuel_canopy', {'building': 'roof', 'min_height': '5', 'height': '6'}, 2), (1, 6.0, 5.0))
 
