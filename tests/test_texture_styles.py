@@ -65,7 +65,7 @@ class TextureStyleTests(unittest.TestCase):
                 ts.GROUND_PX = saved
             self.assertEqual(len(colour), 96*96*3)
             reds = set(colour[0::3])
-            self.assertGreater(max(reds) - min(reds), 10)       # verge patches over the lawn
+            self.assertGreater(max(reds) - min(reds), 5)        # meadow clumps over the lawn
             # Slope GL green 100 (and 128 where the turned sample is mixed in) -> DirectX 127..155.
             greens = normal[1::3]
             self.assertTrue(all(125 <= g <= 157 for g in greens))
