@@ -770,10 +770,42 @@ def visible_distance(bounds):
     return int(max(4000, min(8000, span * 0.55)))
 
 
-def sky_objects(distance=4000, synth=False, nes=False):
+# BeamNG clock (0 noon, 0.25 dusk, 0.5 midnight) each style opens at; see weather_objects.
+DAY_TIME, SYNTH_TIME, NES_TIME = 0.94, 0.34, 0.0
+
+
+def weather_objects(time_of_day, lonlat=None, coverage=0.0, cloud_color=(0.93, 0.94, 0.96, 1)):
+    """The objects BeamNG's environment menu and weather presets drive (core_environment,
+    core_weather, art/weather/defaults.json): without a TimeOfDay the time slider does
+    nothing, without Precipitation there is no rain, without a CloudLayer no cloud cover,
+    without a ForestWindEmitter no wind in the trees. Every stock level carries all four.
+    `time_of_day` is BeamNG's clock: 0 noon, 0.25 dusk, 0.5 midnight. `version: 2` keeps it as
+    written; without it the engine shifted 0.94 to 0.69 on load and set the sun on the horizon
+    (measured in 0.39.4, logs/weather/probe-01 vs -02)."""
+    lon, lat = lonlat or (30.52, 50.45)
+    return [
+        scene_object('tod', 'TimeOfDay', 'KyivSky', position=[0, 0, 0], animate='0', play=False, version=2,
+                     axisTilt=23.44, latitude=round(lat, 4), longitude=round(lon, 4),
+                     time=time_of_day, startTime=time_of_day, dayLength=1800),
+        scene_object('rain', 'Precipitation', 'KyivSky', position=[0, 0, 300], dataBlock='rain_drop',
+                     numDrops=0, numOfDrops='0', boxWidth=50, boxHeight=50, dropSize=0.2,
+                     minSpeed=0.35, maxSpeed=0.4, splashSize=0.2, hitVehicles=True,
+                     useTurbulence=True, useWind=True),
+        scene_object('wind', 'ForestWindEmitter', 'KyivSky', position=[0, 0, 0], strength=0.2),
+        scene_object('clouds', 'CloudLayer', 'KyivSky', position=[0, 0, 400], height=4.5,
+                     coverage=coverage, exposure=0.5, windSpeed=1.2, baseColor=list(cloud_color),
+                     texture='art/skies/clouds/clouds_normal_displacement.png',
+                     Textures=[{'texScale': 0.55, 'texSpeed': 0.0035, 'texDirection': [0.3, 0.1]},
+                               {'texScale': 0.75, 'texSpeed': 0.005, 'texDirection': [0.2, 0.9]},
+                               {'texScale': 0.95, 'texSpeed': 0.0065, 'texDirection': [0.1, 0.4]}]),
+    ]
+
+
+def sky_objects(distance=4000, synth=False, nes=False, lonlat=None):
     """Overcast-bright Kyiv daylight: high visibility, soft fog, drifting cloud deck. The
-    synthwave texture style gets a violet dusk instead: low pink sun, purple fog, no clouds;
-    8-bit NES a flat console blue: blue fog and clear colour, white sun high up, no clouds."""
+    synthwave texture style gets a violet dusk instead: low pink sun, purple fog, clear sky;
+    8-bit NES a flat console blue: blue fog and clear colour, white sun high up, clear sky.
+    All three start from that look and stay adjustable in the game's environment menu."""
     if nes:
         return [
             scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
@@ -788,7 +820,7 @@ def sky_objects(distance=4000, synth=False, nes=False):
                          fogScale=[0.36, 0.58, 0.99, 1], nightFogColor=[0.09, 0.11, 0.16, 1],
                          nightColor=[0.07, 0.08, 0.12, 1], nightCubemap='BNG_Sky_02_cubemap',
                          moonEnabled=False, occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
-        ]
+        ] + weather_objects(NES_TIME, lonlat)
     if synth:
         return [
             scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
@@ -803,14 +835,14 @@ def sky_objects(distance=4000, synth=False, nes=False):
                          fogScale=[0.5, 0.15, 0.55, 1], nightFogColor=[0.1, 0.02, 0.16, 1],
                          nightColor=[0.08, 0.02, 0.14, 1], nightCubemap='BNG_Sky_02_cubemap',
                          moonEnabled=False, occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
-        ]
+        ] + weather_objects(SYNTH_TIME, lonlat, cloud_color=(0.55, 0.2, 0.6, 1))
     return [
         scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
                      fogDensity=9e-05, fogAtmosphereHeight=700, fogColor=[0.62, 0.68, 0.76, 1],
                      canvasClearColor=[0.58, 0.66, 0.76, 255],
                      globalEnviromentMap='BNG_Sky_02_cubemap'),
-        # Fixed mid-morning sun. A TimeOfDay object overrides elevation/azimuth and put the
-        # sun on the horizon, which blew the whole district out to white.
+        # The TimeOfDay in weather_objects places the sun; DAY_TIME is the mid-morning
+        # these azimuth/elevation values were tuned at.
         scene_object('sunsky', 'ScatterSky', 'KyivSky', azimuth=142, elevation=52,
                      skyBrightness=26, shadowDistance=min(1400, int(distance * 0.35)), shadowSoftness=0.2, texSize=2048,
                      castShadows=True, brightness=0.85, exposure=1.0, flareType='BNG_Sunflare_2',
@@ -821,13 +853,7 @@ def sky_objects(distance=4000, synth=False, nes=False):
                      nightColor=[0.07, 0.08, 0.12, 1], nightCubemap='BNG_Sky_02_cubemap',
                      moonEnabled=True, moonMat='Moon_Glow_Mat', moonScale=0.06,
                      occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
-        scene_object('clouds', 'CloudLayer', 'KyivSky', position=[0, 0, 400], height=4.5,
-                     coverage=0.42, exposure=0.5, windSpeed=1.2,
-                     baseColor=[0.93, 0.94, 0.96, 1], texture='art/skies/clouds/clouds_normal_displacement.png',
-                     Textures=[{'texScale': 0.55, 'texSpeed': 0.0035, 'texDirection': [0.3, 0.1]},
-                               {'texScale': 0.75, 'texSpeed': 0.005, 'texDirection': [0.2, 0.9]},
-                               {'texScale': 0.95, 'texSpeed': 0.0065, 'texDirection': [0.1, 0.4]}]),
-    ]
+    ] + weather_objects(DAY_TIME, lonlat, coverage=0.42)
 
 
 # --- panel facades ----------------------------------------------------------
@@ -1339,8 +1365,10 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         bounds = [min(p[0] for p in points) - 150, min(p[1] for p in points) - 150,
                   max(p[0] for p in points) + 150, max(p[1] for p in points) + 150]
         size = index['tile_size']
+        bbox = index.get('bbox')
         objects += sky_objects(visible_distance(bounds), synth=texture_styles.family(texture_style) == 'synth',
-                               nes=texture_styles.family(texture_style) == 'nes')
+                               nes=texture_styles.family(texture_style) == 'nes',
+                               lonlat=((bbox[0]+bbox[2])/2, (bbox[1]+bbox[3])/2) if bbox else None)
         # 'terrain': the ground heightmap replaces both the ground meshes and the low substrate.
         terrain = GroundTerrain(bounds) if 'terrain' in feature else None
         if terrain is None:

@@ -1,5 +1,26 @@
 # Earth2Road handoff
 
+## 2026-10-10 — BeamNG weather and time of day work on exported maps (Claude)
+
+- Owner: weather changes did nothing in exported maps (open since 06.10). Cause: levels had no
+  `TimeOfDay`, `Precipitation`, `ForestWindEmitter` (and no `CloudLayer` in synthwave/nes), the
+  objects `core_environment` and `core_weather` presets (`art/weather/defaults.json`) drive.
+  `export_beamng.weather_objects` adds all four to every style; `TimeOfDay` gets the map's
+  lat/lon from `index['bbox']` and `version: 2` — without it the engine moved 0.94 to 0.69 on
+  load (sun at −2.4°), which is why TimeOfDay had been removed. Start times: day 0.94 (sun
+  50.8°, the tuned look), synthwave 0.34 (low western sun), nes 0.0. Stock sky gradient files
+  were tried and left out: no visible difference.
+- Checked in BeamNG 0.39.4, isolated profiles, 1 km Bilychi (`logs/weather/`, ignored; probe
+  `logs/weather/tools/weatherprobe2.lua` + `run_probe2.py`): time slider moves the sun (dusk,
+  night with stars), cloud cover and fog change, preset `rainy` sets `numDrops` 200 and wets the
+  road. White frames seen at night were the probe's screenshot catching the switch frame, not
+  the game. Open: the menu rain slider writes `numOfDrops`, the engine reads `numDrops` — not
+  compared on a stock level (the small_island probe hung); rain streaks not seen in shots.
+- Re-export of the 4×4 km `bilychy_dna` panelka (`out/weather/bilychy_dna-beamng-panelka`) started
+  from `out/night-1009/bilychy_dna/world`; not copied into the BeamNG mods folder.
+- Tests: `test_texture_styles` (weather objects per style); full suite 513 OK, 1 skipped
+  (`logs/weather/unittest-01.log`).
+
 ## 2026-10-10 — 8-bit NES texture style; rebuilt maps copied to BeamNG (Claude)
 
 - BeamNG mods: the night-1009 exports copied in — `earth2road_{khreshchatyk_dna,bilychy_dna,

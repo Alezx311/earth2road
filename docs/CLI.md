@@ -71,10 +71,16 @@ A photo style also bakes `kyiv_grass` and `kyiv_ground` into 2048 px sheets of 2
 ground photos (`texture_styles.ground_sheet`); the `terrain` optimization's TerrainBlock keeps
 its flat base maps. `synthwave` bakes neon-window facade and grid end-wall tiles (colour map
 reused as `emissiveMap`), grid sheets for the two ground materials, darkens roads, pavements,
-water and roofs, makes lane paint emissive and writes a violet dusk `ScatterSky` without clouds.
+water and roofs, makes lane paint emissive and writes a violet dusk `ScatterSky` and a cloudless sky.
 `nes` bakes 8-bit sprite tiles per facade kind (brick, panel, plaster, glass; shared files),
 pixel grass and lawn sheets, tints roads, pavements, water and roofs to palette colours and writes
-a flat blue sky without clouds; BeamNG has no screen filter, so the textures carry the look.
+a flat blue cloudless sky; BeamNG has no screen filter, so the textures carry the look.
+
+Every level carries the objects BeamNG's environment menu and weather presets drive: a
+`TimeOfDay` (`version: 2`, the map's latitude and longitude; opens at 0.94 ≈ 10:30, synthwave
+at dusk, nes at noon), a `Precipitation` (dry), a `CloudLayer` (clear in synthwave and nes) and a
+`ForestWindEmitter`. Time of day, cloud cover, fog and the weather presets (`rainy`, …) work in
+game; the menu's rain slider writes `numOfDrops`, which 0.39.4 does not read from our level.
 
 `--optimization balanced` (default) shares identical vertices in the DAE files, merges flat
 ground (≤5 cm height error, tile edges kept exact) and gives sidewalks a simplified collision

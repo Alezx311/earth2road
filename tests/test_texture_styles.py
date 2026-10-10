@@ -95,9 +95,10 @@ class TextureStyleTests(unittest.TestCase):
     def test_synthwave_sky_is_a_dusk(self):
         from akadem_maps.adapters.beamng.export_beamng import sky_objects
         day, dusk = sky_objects(4000), sky_objects(4000, synth=True)
-        sun = lambda objs: next(o for o in objs if o['class'] == 'ScatterSky')
-        self.assertLess(sun(dusk)['elevation'], sun(day)['elevation'])
-        self.assertFalse(any(o['class'] == 'CloudLayer' for o in dusk))
+        tod = lambda objs: next(o for o in objs if o['class'] == 'TimeOfDay')['time']
+        hours = lambda t: (t * 24 + 12) % 24                            # BeamNG clock: 0 is noon
+        self.assertGreater(hours(tod(dusk)), hours(tod(day)))
+        self.assertEqual(next(o for o in dusk if o['class'] == 'CloudLayer')['coverage'], 0)
 
     def test_nes_needs_no_pack_and_uses_the_palette(self):
         with tempfile.TemporaryDirectory() as td:
@@ -128,7 +129,20 @@ class TextureStyleTests(unittest.TestCase):
         nes = sky_objects(4000, nes=True)
         info = next(o for o in nes if o['class'] == 'LevelInfo')
         self.assertEqual(info['canvasClearColor'][:3], [92, 148, 252])
-        self.assertFalse(any(o['class'] == 'CloudLayer' for o in nes))
+        self.assertEqual(next(o for o in nes if o['class'] == 'CloudLayer')['coverage'], 0)
+
+    def test_every_style_carries_the_objects_the_weather_menu_drives(self):
+        from akadem_maps.adapters.beamng.export_beamng import sky_objects
+        for style in ({}, {'synth': True}, {'nes': True}):
+            objs = sky_objects(4000, lonlat=(30.35, 50.46), **style)
+            classes = [o['class'] for o in objs]
+            for kind in ('LevelInfo', 'ScatterSky', 'TimeOfDay', 'Precipitation', 'CloudLayer', 'ForestWindEmitter'):
+                self.assertEqual(classes.count(kind), 1, (style, kind))
+            tod = next(o for o in objs if o['class'] == 'TimeOfDay')
+            self.assertEqual(tod['version'], 2)                         # else the engine shifts the clock on load
+            self.assertEqual((tod['latitude'], tod['longitude']), (50.46, 30.35))
+            self.assertEqual(next(o for o in objs if o['class'] == 'Precipitation')['numDrops'], 0)
+            self.assertEqual(len({o['name'] for o in objs}), len(objs))
 
     def test_end_walls_are_the_short_sides_of_elongated_blocks(self):
         slab = [(0, 0), (60, 0), (60, 12), (0, 12)]            # a 60 x 12 m panel block
