@@ -1,5 +1,48 @@
 # Earth2Road handoff
 
+## 2026-10-11 — honest waiting time and drawn areas in the picker (Claude)
+
+- Owner direction: instead of 30 s streaming, show before the build how long it will
+  take, count it down during the build, and let the player draw any area (e.g. a ring
+  road with one avenue), not only the square. Streaming stays deferred.
+- `akadem_maps/area_probe.py`: roads, road_km (full length of roads touching the area),
+  road nodes, buildings, DEM tiles missing, OSM ready. Source: covering local snapshot,
+  else ONE Overpass request (`make stat ... sum(length())` + two `out count`; HTTP 400
+  falls back to plain counts; 429/504 are not retried and give `area_only`), cached in
+  `<cache>/estimates/`. Live Overpass was 504/500 during this session: the stat query
+  syntax is NOT verified against a real server; the fallback path is unit-tested.
+- `estimates.build_estimate`: five stage groups (download, roads, buildings, scenery,
+  export), NNLS fit (`tools/estimate.py --calibrate`). 13 runs, `out/calibration`
+  (ignored), BeamNG running alongside. Leave-one-out actual/predicted 0.40–1.91, so the
+  shown range is predicted ×0.55–×1.9 (12/13 inside). Download coefficients set by hand
+  (only 2 runs downloaded). Each finished picker build now records features + group
+  seconds in `logs/timings.jsonl`; per-group median ratio rescales this machine, its own
+  spread replaces the base one after 5 runs. Old records still work.
+- Check: `generate_map.py --action estimate` Vynohradar 1.5 km (cached): legacy 103 s
+  [57–196], measured 172 s; v2 332 s [183–630], measured ~435 s (450 incl. download).
+  Centre values are low; ranges hold. Not yet checked: a real picker run's countdown.
+- Picker: background `estimate` replaces the auto `status` check and never locks the
+  area (`busy()` vs `checking()`; a real action kills a running check). Card "Waiting
+  time ≈ X (lo – hi)" with counts/download notes; countdown re-paced by finished groups,
+  "Taking longer than expected" instead of a negative timer. EN/UK strings.
+- Drawn area: config `area: {polygon, provenance}` (`corridor.drawn_area`: simple,
+  0.05–25 km², ≤500 points, no antimeridian), bbox from the outline, `sources.coverage`
+  = polygon, netconvert geo-boundary as for corridors. `generate_map.py --polygon FILE`.
+  Picker "Draw my own area": click corners, drag, right-click removes, close on first
+  corner/Enter, refuses self-crossing/size. E2E (legacy, cached OSM, L-shape 0.82 km²):
+  built 50 s, index `area` 7 points, Godot spawn supported; 91 % of lane points within
+  5 m of the outline, 0.8 % deep in the L's notch (edges partly inside are kept whole,
+  same as corridor maps).
+- Bug found by calibration, pre-existing on HEAD: Singapore 1.5 km legacy failed with
+  GEOS "Ring edge missing" in `junction_surface`. `road_geometry._snapped` now tries
+  make_valid + 1 mm grid as a last resort (only after every grid failed); the same
+  build then completed (197.7 s). Unit-tested with an invalid ring.
+- Checks: full suite 547 OK, 1 skipped (`out/calibration/unittest-01.log`);
+  `validate_ui.gd --offline` (tiny, headless) passed incl. estimate card, countdown,
+  overrun text, drawn outline accept/refuse (`out/calibration/validate_ui-estimate-02.log`).
+- Not done: main menu on the world map (phase 3), real Overpass check of the stat query,
+  manual picker run to compare the shown time with the result.
+
 ## 2026-10-10 — streaming: profile, speed-ups, real-window seams (Claude)
 
 - Continued Codex's probes. `city-complete-02` (city 500 m, source) completed:

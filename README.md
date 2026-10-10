@@ -28,9 +28,13 @@ Linux/macOS (not tested platforms for this beta): `./setup.sh` once, then `./sta
 1. In the game press **M** (or the **Maps · M** button).
 2. Click **+ New map from any place on Earth…**.
 3. Find the place by search or drag the map, or paste `lat, lon`; choose the area size
-   (0.3–5 km).
-4. Click **Generate**. The game downloads OpenStreetMap data and terrain, builds the map
-   and loads it. A 1 km area takes a few minutes; you can cancel at any time.
+   (0.3–5 km), or switch to **Draw my own area** and click its corners on the map (for
+   example a ring road with one avenue, up to 25 km²).
+4. The panel shows the expected waiting time. It counts the roads and buildings in the
+   area first (from local data or one small OpenStreetMap query), so a dense centre and
+   open country get different times; each finished build tunes it to your computer.
+5. Click **Generate**. The game downloads OpenStreetMap data and terrain, builds the map
+   and loads it, counting down the time left; you can cancel at any time.
 
 Your maps stay in the **Maps** menu; switch between them there. **L** switches the
 interface between English and Ukrainian.

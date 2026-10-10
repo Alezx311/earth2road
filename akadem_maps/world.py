@@ -29,6 +29,12 @@ def validate_config(cfg):
     if 'corridor' in cfg:
         from .core.corridor import validate_includes
         validate_includes(cfg['corridor'])
+    if 'area' in cfg:
+        from .core.corridor import bounds, drawn_area
+        if 'corridor' in cfg or 'boundary' in cfg:
+            raise ValueError('area, corridor and boundary are mutually exclusive')
+        # The drawn outline decides the bbox; a stale or absent one is replaced.
+        cfg['bbox'] = bounds(drawn_area(cfg['area']))
     if not re.fullmatch('[a-z0-9_]+', str(cfg.get('id', ''))):
         raise ValueError('Map id must contain only lowercase ASCII letters, digits and underscores')
     if not str(cfg.get('name', '')).strip():
@@ -42,7 +48,7 @@ def validate_config(cfg):
             raise ValueError('Invalid bbox: require west < east, south < north, latitude within ±85°. Antimeridian crossing is unsupported')
         cfg.setdefault('center', [(w+e)/2, (s+n)/2])
     elif not ('corridor' in cfg or 'boundary' in cfg):
-        raise ValueError('Specify bbox, corridor, or boundary')
+        raise ValueError('Specify bbox, area, corridor, or boundary')
     cfg.setdefault('seed', 311)
     cfg.setdefault('terrain_zoom', 12)
     cfg.setdefault('overpass', 'https://overpass-api.de/api/interpreter')

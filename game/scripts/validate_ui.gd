@@ -112,13 +112,56 @@ func run() -> void:
 		check(side_scroll.scroll_vertical == 0, "picker opens at the top (%d)" % side_scroll.scroll_vertical)
 		picker.name_edit.text = "QA preserved name"
 		check(picker.road_menu.item_count == 2, "picker offers both road builders")
-		var legacy_text: String = picker.size_warning.text
+		var legacy_text: String = picker.wait_label.text
 		picker.road_menu.select(1)
 		picker.update_size()
-		check(picker.size_warning.text != legacy_text and picker.road_note.text != "", "road builder changes the estimate and note")
+		check(picker.wait_label.text != legacy_text and picker.road_note.text != "", "road builder changes the estimate and note")
 		picker.road_menu.select(0)
 		picker.update_size()
 		await snap("generator")
+		# Density-aware waiting time and the countdown that follows it.
+		picker.estimate = {"features": {"basis": "osm_snapshot", "roads": 190, "buildings": 200, "osm_ready": true,
+			"dem_missing": 0}, "estimate": {"expected_s": 300.0, "seconds": [240.0, 450.0], "machine_runs": 0,
+			"stages": {"download": 20.0, "roads": 200.0, "buildings": 20.0, "scenery": 40.0, "export": 20.0},
+			"stage_groups": {"download": ["sources", "terrain"], "roads": ["network", "roads"], "buildings": ["buildings"],
+			"scenery": ["ground", "trees"], "export": ["export", "install"]}}}
+		picker.show_estimate()
+		check(picker.wait_label.text.contains("5") and picker.wait_detail.text.contains("190"), "estimate shows time and counts: %s / %s" % [picker.wait_label.text, picker.wait_detail.text])
+		picker.started_ms = Time.get_ticks_msec() - 30000
+		picker.groups_done = {"download": 30.0}
+		picker.current_group = "roads"
+		picker.group_started_ms = Time.get_ticks_msec()
+		var left: String = picker.countdown()
+		check(left.contains(tr("About %s left · elapsed %s").get_slice("%", 0).strip_edges()), "countdown while on time: %s" % left)
+		picker.group_started_ms = Time.get_ticks_msec() - 600000
+		check(picker.countdown().contains(tr("Taking longer than expected · elapsed %s").get_slice("·", 0).strip_edges()), "overrun is admitted")
+		picker.estimate = {}
+		picker.update_size()
+		# Drawn area: valid L-shape enables Generate, a crossing outline does not.
+		picker.mode_button.select(1)
+		picker.mode_button.item_selected.emit(1)
+		check(not picker.size_slider.visible and picker.polygon_hint.visible, "draw mode replaces the size slider")
+		check(picker.generate_button.disabled, "an empty outline cannot be generated")
+		for q in [Vector2(30.440, 50.452), Vector2(30.456, 50.452), Vector2(30.456, 50.456), Vector2(30.446, 50.456),
+				Vector2(30.446, 50.460), Vector2(30.440, 50.460)]:
+			picker.polygon.append(q)
+		picker.polygon_closed = true
+		picker.area_changed()
+		check(picker.polygon_error() == "" and not picker.generate_button.disabled, "closed outline can be generated (%s)" % picker.polygon_error())
+		check(absf(picker.polygon_km2() - 0.69) < 0.05, "outline area %.2f km²" % picker.polygon_km2())
+		var area_file: String = picker.write_polygon("user://ui-regression.area.geojson")
+		check(FileAccess.get_file_as_string(area_file).contains("30.44"), "outline written as GeoJSON")
+		DirAccess.remove_absolute(area_file)
+		await snap("generator-drawn")
+		picker.polygon[1] = Vector2(30.440, 50.460)
+		picker.polygon[5] = Vector2(30.456, 50.452)
+		picker.area_changed()
+		check(picker.polygon_crosses_itself() and picker.generate_button.disabled, "crossing outline is refused")
+		picker.polygon.clear()
+		picker.polygon_closed = false
+		picker.mode_button.select(0)
+		picker.mode_button.item_selected.emit(0)
+		check(picker.size_slider.visible, "square mode restored")
 		# Complete-line JSONL consumption: a split write must not lose its event.
 		picker.events_path = "user://ui-regression.jsonl"
 		var file := FileAccess.open(picker.events_path, FileAccess.WRITE)

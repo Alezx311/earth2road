@@ -1,5 +1,12 @@
 # Decisions
 
+- Waiting time (2026-10-11): before a build the picker shows a density-based range
+  (roads, road length, buildings, missing downloads) and counts down during the build;
+  it never claims more precision than the calibration spread (×0.55–×1.9 until a
+  machine has 5 own runs). One Overpass request per area, no retry on 429/504.
+- Drawn areas (2026-10-11): a player-drawn polygon is a valid map area (`area`), used
+  exactly and labelled as the player's choice, not an OSM/administrative boundary.
+
 - Godot streaming windows (2026-10-10, measured): real-OSM windows built
   independently disagree by up to 1.27 m and flip junction families, even deep
   inside a larger halo. Streaming will grow from a ~250 m start window and treat

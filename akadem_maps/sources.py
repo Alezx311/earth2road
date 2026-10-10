@@ -60,6 +60,9 @@ def coverage(cfg):
     # Polygon extracts are only reusable for that exact polygon; rectangles can serve
     # any contained area. Do not infer coverage from the object coordinate envelope.
     from .core import corridor
+    if 'area' in cfg:
+        from shapely.geometry import mapping
+        return mapping(corridor.drawn_area(cfg['area']))
     if corridor.shaped(cfg):
         raise ValueError('Polygon coverage needs the resolved area')
     from shapely.geometry import box, mapping

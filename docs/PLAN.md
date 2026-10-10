@@ -21,7 +21,9 @@ moving generation service, bounded residency/origin shifts and offline boundary
 stops follow only after the prerequisites pass. Do not silently reduce quality.
 Measurements and limitations belong in HANDOFF, not inferred from the plan.
 
-Next, in order (after the 2026-10-10 findings): (1) move surface audit off the
+Deferred 2026-10-11 by the owner in favour of an honest waiting time and drawn
+areas (done, see HANDOFF). Next for the picker: main menu on the world map with the
+outlines of installed maps. Streaming order, when resumed (after the 2026-10-10 findings): (1) move surface audit off the
 start path and find a spawn inside a 250 m window; (2) frozen-state incremental
 generation — a new window takes existing surfaces/junction decisions as fixed
 boundaries; re-run the real-OSM seam comparison as its acceptance; (3) worker
