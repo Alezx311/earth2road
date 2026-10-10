@@ -115,6 +115,50 @@ The prototype follows the installed TraCI API and the upstream
 [traffic-light](https://eclipse.dev/sumo/docs/TraCI/Traffic_Lights_Value_Retrieval.html)
 contracts; documented setters alone do not establish seamless continuation.
 
+## Results and findings — 2026-10-10 (second pass)
+
+Real Kyiv city point, source mode (cache from `matrix-cold-01` completed by
+`data prepare`). BeamNG was running on the same machine, so wall times carry
+roughly ±25 % noise; CPU-time comparisons were used for optimisation decisions.
+
+- **City 500 m completes in 95.3 s** (`city-complete-02`): road_geometry 40.9,
+  roads 21.0, buildings 9.4, surface_audit 6.8, trees 6.4, Godot 4.7, SUMO 0.7 s.
+  100 vehicles, no collisions/teleports, supported spawn. Three times the budget.
+- **Profile-driven speed-ups with byte-identical worlds** (every file except
+  provenance/sources compared against the pre-change build): vectorised
+  `TriangleIndex` construction and covers test, memoised point queries, cached
+  `LocalArea` cell unions, deduplicated stitch knots, chained patch height fields
+  evaluated lazily (`height_or`). Build CPU 108.8 → 88.7 s (−18 %); buildings
+  stage 12.5 → 3.1 s. Remaining hot spots: GEOS `union_all` in sidewalks/collars,
+  `stitch_vertices`, `GroundField._nearest_edge`, the diagnostic surface audit.
+- **Window size dominates.** Same point: 250 m builds in ~25 s, 400 m in ~64 s,
+  500 m in ~70 s (wall, contended). Full pipeline for `city_250`
+  (`config/streaming_start.json`, `start-city-01`): **30.48 s** to supported spawn
+  plus 91 SUMO vehicles — just over budget; surface_audit (1.7 s) is diagnostic.
+  `suburb_250` and the earlier `suburb_500` fail the 120 m start-road rule.
+- **Independently built real-OSM windows do not agree.** `compare_surfaces` of the
+  250 m window against the 500 m world inside a central 170 m box: 2,668 samples,
+  437 over 5 cm, 67 candidate-missing, max 1.27 m (`seam-city-250-in-500.json`).
+  A 400 m window still differs by up to 22.7 cm within 50 m of the centre. Cause:
+  discrete v2 decisions are threshold-sensitive to context far away. Junction
+  `11257426502` at the centre is a v2 cluster in the 250 and 500 m builds but
+  falls back (`approach stub detached from template core`) in the 400 m build,
+  after its socket moved from 9.41 to 9.34 m. A larger halo does not converge.
+  The synthetic seam lab result above does not transfer to real OSM.
+
+Consequences for the design (not implemented):
+
+1. Start from a small window (~250 m, densest centre) and grow; never rebuild a
+   whole area per move. At 90 km/h a 250 m tile is crossed in ~10 s while one
+   costs ~25 s of one core: growth needs several worker processes and look-ahead.
+2. Neighbouring windows must not be generated independently. Generated roads and
+   junction decisions must become **frozen state keyed by OSM ids**: a new window
+   reads already-built surfaces as fixed boundary conditions (as `align_strips`
+   does for major roads) and never re-decides a junction that already exists.
+3. The spawn rule must pick a start inside the first window or the first window
+   must grow until one exists; suburbs/rural need this before any 30 s claim.
+4. Surface audit moves off the start path and runs in the background.
+
 ## Decision gate
 
 Keep the production generators, exporters and menu behaviour. If acquisition,

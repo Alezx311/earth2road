@@ -1,0 +1,55 @@
+{
+  "cases": [
+    {
+      "category": "city",
+      "size_m": 250,
+      "config": {
+        "id": "city_250",
+        "name": "Streaming start window city 250 m",
+        "bbox": [
+          30.521739965264764,
+          50.45087628078781,
+          30.525260034735233,
+          50.453123718994014
+        ],
+        "center": [
+          30.5235,
+          50.452
+        ],
+        "terrain_zoom": 12,
+        "region_profile": "ukraine",
+        "source_kind": "osm",
+        "seed": 311,
+        "road_geometry": {
+          "mode": "v2"
+        }
+      }
+    },
+    {
+      "category": "suburb",
+      "size_m": 250,
+      "config": {
+        "id": "suburb_250",
+        "name": "Streaming start window suburb 250 m",
+        "bbox": [
+          30.3494305777942,
+          50.46131728281495,
+          30.3529514222058,
+          50.463564716966886
+        ],
+        "center": [
+          30.351191,
+          50.462441
+        ],
+        "terrain_zoom": 12,
+        "region_profile": "ukraine",
+        "source_kind": "osm",
+        "seed": 311,
+        "road_geometry": {
+          "mode": "v2"
+        }
+      }
+    }
+  ],
+  "category_note": "Start-window candidates inside the 500 m matrix caches; not a global sample"
+}

@@ -21,6 +21,12 @@ moving generation service, bounded residency/origin shifts and offline boundary
 stops follow only after the prerequisites pass. Do not silently reduce quality.
 Measurements and limitations belong in HANDOFF, not inferred from the plan.
 
+Next, in order (after the 2026-10-10 findings): (1) move surface audit off the
+start path and find a spawn inside a 250 m window; (2) frozen-state incremental
+generation — a new window takes existing surfaces/junction decisions as fixed
+boundaries; re-run the real-OSM seam comparison as its acceptance; (3) worker
+pool + look-ahead growth; (4) only then the Free Drive menu and moving SUMO.
+
 ## Backlog Earth2Road — roadgen-v2
 
 Збережено 2026-10-03. Цей файл — робочий план майбутніх задач і перевірки концепцій.

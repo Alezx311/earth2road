@@ -1,5 +1,11 @@
 # Decisions
 
+- Godot streaming windows (2026-10-10, measured): real-OSM windows built
+  independently disagree by up to 1.27 m and flip junction families, even deep
+  inside a larger halo. Streaming will grow from a ~250 m start window and treat
+  already generated roads/junctions as frozen state keyed by OSM ids; it must
+  never regenerate or re-decide geometry the player may already see.
+
 - Godot streaming (2026-10-10, feasibility prototype): preserve full nearby quality
   and SUMO as the target; BeamNG stays the existing selected-area export. Add
   isolated generation/cache, surface-overlap and TraCI handoff probes before a

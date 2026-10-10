@@ -1,5 +1,28 @@
 # Earth2Road handoff
 
+## 2026-10-10 — streaming: profile, speed-ups, real-window seams (Claude)
+
+- Continued Codex's probes. `city-complete-02` (city 500 m, source) completed:
+  95.3 s wall, road_geometry 40.9 s; traffic and spawn OK. Over budget 3x.
+- Generator speed-ups, outputs byte-identical to the pre-change build
+  (`out/streaming/profile-city500-01` vs `opt-cpu-01`, 0 differing files):
+  `surface_audit.TriangleIndex` vectorised + memoised `hits`; `LocalArea.within`
+  caches each cell-combination union; `stitch_vertices` dedupes knots;
+  `road_geometry.height_or` evaluates chained patch fallbacks only when 0 or >1
+  triangles cover the point. CPU 108.8 -> 88.7 s; buildings 12.5 -> 3.1 s.
+- `config/streaming_start.json` (250 m). `start-city-01`: 30.48 s total incl.
+  Godot spawn/collision 5.4 s and SUMO (91 vehicles, 0 collisions/teleports);
+  `pipeline_within_30s` false. `start-suburb-01`: no 120 m start road.
+- Real-OSM seams FAIL: 250 m window vs 500 m world, central 170 m: 437/2,668
+  samples > 5 cm, max 1.27 m, 67 missing. 400 m vs 500 m: up to 22.7 cm within
+  50 m of the centre. Centre junction 11257426502 flips v2/fallback with window
+  size. Independent window generation is not a viable streaming basis; see
+  STREAMING.md "Results and findings" for the frozen-state design consequence.
+- Machine had BeamNG running: wall times are noisy; CPU time used for A/B.
+- `python -m unittest discover -s tests`: 522 tests OK (1 skipped), 527.7 s.
+- Not done: background audit, spawn search inside a small window, frozen-state
+  incremental generation, Free Drive menu, moving SUMO window, any driven test.
+
 ## 2026-10-10 — streaming feasibility probes (Codex)
 
 - Implemented separate generation/cache benchmark, direct-export headless Godot
