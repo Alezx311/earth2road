@@ -47,6 +47,9 @@ void fragment() {
 	// Panel seams 5 cm wide, antialiased and faded once a pixel spans more than ~10 cm:
 	// hard step() lines crawled ("flickered") on photo panels as the camera moved.
 	vec2 fw = fwidth(UV);
+	// UV gradients taken here, in uniform control flow: implicit derivatives inside the
+	// per-building branches below are undefined and picked wrong mips (sparkling loggias).
+	vec2 uv_dx = dFdx(UV), uv_dy = dFdy(UV);
 	vec2 edge = vec2(min(f.x,1.0-f.x)*3.3, min(f.y,1.0-f.y)*floor_height);
 	float seams = max(1.0-smoothstep(.025-fw.x,.025+fw.x,edge.x), 1.0-smoothstep(.025-fw.y,.025+fw.y,edge.y));
 	seams *= 1.0 - smoothstep(.04,.12,max(fw.x,fw.y));
@@ -102,14 +105,15 @@ void fragment() {
 		if(hash(cell*1.7 + COLOR.r*3.0) > .97 || end_wall) layer = PANEL_LAYERS-1.0;
 		vec2 q = UV / vec2(3.3, floor_height);
 		vec2 uv = vec2((layer + clamp(f.x,.003,.997)) / PANEL_LAYERS, 1.0 - clamp(f.y,.003,.997));
-		vec2 dx = dFdx(q) * vec2(1.0/PANEL_LAYERS, -1.0), dy = dFdy(q) * vec2(1.0/PANEL_LAYERS, -1.0);
+		vec2 dx = uv_dx / vec2(3.3, floor_height) * vec2(1.0/PANEL_LAYERS, -1.0), dy = uv_dy / vec2(3.3, floor_height) * vec2(1.0/PANEL_LAYERS, -1.0);
 		ALBEDO = textureGrad(panels, uv, dx, dy).rgb * (1.0 - seams * .35);
 		if(has_loggias && loggia_block && !end_wall && UV.y >= floor_height) {
 			// Loggia blocks: the whole II-68 photo (5 bays x 11 storeys = 33 x 33 m) as one
 			// continuous facade above the ground floor, shifted by whole bays per building.
 			float shift = floor(hash(vec2(COLOR.r*61.0, 2.0)) * LOGGIA_GRID.x) * LOGGIA_BAY;
 			vec2 sheet = LOGGIA_GRID * vec2(LOGGIA_BAY, floor_height);
-			ALBEDO = texture(loggia_atlas, vec2((UV.x + shift) / sheet.x, 1.0 - (UV.y - floor_height) / sheet.y)).rgb;
+			ALBEDO = textureGrad(loggia_atlas, vec2((UV.x + shift) / sheet.x, 1.0 - (UV.y - floor_height) / sheet.y),
+				uv_dx / sheet * vec2(1.0, -1.0), uv_dy / sheet * vec2(1.0, -1.0)).rgb;
 		}
 		ALBEDO *= (.92 + COLOR.r*.14) * mix(.8,1.0,smoothstep(0.0,2.0,UV.y)) * tint;
 		ROUGHNESS = .86;
@@ -117,14 +121,15 @@ void fragment() {
 		if(photo && is_brick && roof < .5) {
 			bool white = hash(vec2(COLOR.r*71.0, 3.0)) < .4;
 			vec2 b = UV / BRICK_METRES;
-			vec3 bricks = white ? texture(brick_white, b).rgb : texture(brick_red, b).rgb;
+			vec2 bx = uv_dx / BRICK_METRES, by = uv_dy / BRICK_METRES;
+			vec3 bricks = white ? textureGrad(brick_white, b, bx, by).rgb : textureGrad(brick_red, b, bx, by).rgb;
 			wall = bricks * (.9 + COLOR.r*.15) * mix(.8,1.0,smoothstep(0.0,2.0,UV.y));
-			NORMAL_MAP = mix(white ? texture(brick_white_normal,b).rgb : texture(brick_red_normal,b).rgb, vec3(.5,.5,1.0), glazing);
+			NORMAL_MAP = mix(white ? textureGrad(brick_white_normal,b,bx,by).rgb : textureGrad(brick_red_normal,b,bx,by).rgb, vec3(.5,.5,1.0), glazing);
 			NORMAL_MAP_DEPTH = .6;
 		} else if(photo && has_plaster && roof < .5) {
-			wall = texture(plaster, UV / PLASTER_METRES).rgb * hue / .62 * (.93 + COLOR.r*.12) * mix(.8,1.0,smoothstep(0.0,2.0,UV.y));
-			if(has_normal) { NORMAL_MAP = mix(texture(wall_normal,UV*.3).rgb,vec3(.5,.5,1.0),glazing); NORMAL_MAP_DEPTH=.32; }
-		} else if(has_normal) { NORMAL_MAP = mix(texture(wall_normal,UV*.3).rgb,vec3(.5,.5,1.0),glazing); NORMAL_MAP_DEPTH=.32; }
+			wall = textureGrad(plaster, UV / PLASTER_METRES, uv_dx / PLASTER_METRES, uv_dy / PLASTER_METRES).rgb * hue / .62 * (.93 + COLOR.r*.12) * mix(.8,1.0,smoothstep(0.0,2.0,UV.y));
+			if(has_normal) { NORMAL_MAP = mix(textureGrad(wall_normal,UV*.3,uv_dx*.3,uv_dy*.3).rgb,vec3(.5,.5,1.0),glazing); NORMAL_MAP_DEPTH=.32; }
+		} else if(has_normal) { NORMAL_MAP = mix(textureGrad(wall_normal,UV*.3,uv_dx*.3,uv_dy*.3).rgb,vec3(.5,.5,1.0),glazing); NORMAL_MAP_DEPTH=.32; }
 		ALBEDO = mix(wall,glass,glazing);
 		ALBEDO = mix(ALBEDO,vec3(.71,.72,.69),clamp(frame,0.0,1.0)*(1.0-roof));
 		ROUGHNESS = mix(.88,.22,glazing);
