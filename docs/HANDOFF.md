@@ -1,5 +1,43 @@
 # Earth2Road handoff
 
+## 2026-10-10 — streaming feasibility probes (Codex)
+
+- Implemented separate generation/cache benchmark, direct-export headless Godot
+  spawn-collision probe and conservative two-process TraCI handoff. No installed
+  maps, active map or production traffic bridge are replaced. See STREAMING.md.
+- First completed synthetic v2 run (`out/streaming/tiny-01`, ignored): source replay
+  49.426 s including worker startup; road_geometry 30.567 s, roads 3.150 s,
+  audit 3.910 s, Godot process/spawn 4.636 s. Ready geometry 4.835 s. Both had 100
+  SUMO vehicles, zero collisions/teleports and supported spawn. This is NOT measured
+  start-to-control; actual player control and streaming drive remain untested.
+- Initial SUMO lab passed red queue, internal-junction lane and ego braking with
+  zero immediate position/speed error and zero 10 s divergence on deterministic
+  drivers. Revised lab also checks the red queue's next phase switch/restart;
+  `python -m unittest tests.test_streaming_probe -v`: 8 passed (4.299 s).
+- Cold real matrix at a 40 s cap: city 500/1000/2000 and suburb 1000/2000 timed out
+  in road_geometry. Suburb 500 failed the existing 120 m spawn-road requirement.
+  Rural 500 returned NoRoads; rural 1000/2000 received Overpass HTTP 429. These are
+  failed/censored attempts, not completed build timings. No retry of rate-limited
+  downloads. Source replay with the partial cold caches repeated the five geometry
+  timeouts and the spawn failure; three rural source runs were unavailable. The
+  nine ready-geometry cases were explicitly `not_run`, not recorded as warm loads.
+- Surface lab `out/streaming/seams-01`: five v2 builds (whole, west/east, reverse
+  order), analytic sloping DEM and a bridge crossing a ground road. Both order
+  checks matched all 12 index/network/tile files. Whole-vs-west/east: 957 probes
+  each; overlap: 963 probes. No missing surfaces or topology mismatches; maximum
+  height differences 0.000882 / 0.000829 / 0.000802 m. Geometric only; no driven
+  acceptance, arbitrary independently acquired OSM windows still unverified.
+- Longer real city-500 replay `city-complete-01` failed at 72.430 s: lazy terrain
+  use during trees needed `terrain/12/2395/1380.png`, absent after the early cold
+  timeout. Retained as a failed experiment. Existing `earth2road data prepare`
+  completed the cache (6 DEM tiles, no second Overpass request), logged to
+  `logs/streaming/city-source-preparation.jsonl`; repeated complete profile pending.
+- Godot fixture exits 0 after successful collision result, but reports existing
+  Dummy renderer RID/ObjectDB cleanup warnings; not a clean rendering/FPS certificate.
+- Execution environment: sandbox process setup failed (`helper_unknown_error`);
+  shell checks required approved unrestricted execution. No repository writes
+  outside the worktree were needed.
+
 ## 2026-10-10 — BeamNG weather and time of day work on exported maps (Claude)
 
 - Owner: weather changes did nothing in exported maps (open since 06.10). Cause: levels had no

@@ -20,6 +20,7 @@ var collision_queue: Array = []
 var signals_builder: Node3D
 var focus := Vector3.ZERO
 var schedule_clock := 0.0
+var start_metrics: Dictionary = {}
 
 static func map_id() -> String:
 	var env := OS.get_environment("AKADEM_MAP")
@@ -38,9 +39,9 @@ static func load_index() -> Dictionary:
 		return {}
 	return JSON.parse_string(FileAccess.get_file_as_string(path))
 
-func start(source: Dictionary, at: Vector3) -> void:
+func start(source: Dictionary, at: Vector3, source_folder: String = "") -> void:
 	index = source
-	folder = map_folder()
+	folder = source_folder.trim_suffix("/") + "/" if source_folder != "" else map_folder()
 	focus = at
 	World.shared()
 	signals_builder = World.new()
@@ -51,10 +52,17 @@ func start(source: Dictionary, at: Vector3) -> void:
 		var t: Array = index.tiles[name]
 		tiles[name] = {"center": Vector3((t[0] + 0.5) * size, 0.0, (t[1] + 0.5) * size), "level": "", "node": null, "busy": false}
 	add_backdrop()
+	var build_started := Time.get_ticks_usec()
+	var full_tiles := 0
 	for name in tiles:
 		if flat_distance(tiles[name].center, at) < START_RADIUS:
 			install(name, "full", make(name, "full"))
+			full_tiles += 1
+	var collision_started := Time.get_ticks_usec()
 	flush_collisions()
+	start_metrics = {"mesh_build_ms": (collision_started - build_started) / 1000.0,
+		"collision_ms": (Time.get_ticks_usec() - collision_started) / 1000.0,
+		"full_tiles": full_tiles}
 
 ## Everything in full, synchronously (headless validation).
 func build_all() -> void:

@@ -52,6 +52,7 @@ const STAGE_TEXT := {
 	"geometry": "Reading the map data…",
 	"terrain": "Shaping the terrain…",
 	"network": "Building the road network…",
+	"road_geometry": "Building roads and scenery…",
 	"roads": "Building roads and scenery…",
 	"ground": "Building roads and scenery…",
 	"landcover": "Building roads and scenery…",

@@ -11,6 +11,16 @@ Real-map acceptance is separate: geometry, spawned vehicle contact, traversable 
 signals, traffic and performance must be checked for each rebuilt map and engine.
 Large historical maps are not included in Git or certified by a passing tiny fixture.
 
+## Streaming feasibility — 2026-10-10
+
+Owner target: local Godot free driving with current nearby quality and SUMO, an
+uncached start within 30 s; BeamNG stays a selected-area export. First gate is the
+technical prototype in [STREAMING.md](STREAMING.md): generation/cache matrix,
+overlapping surface comparison and two-process traffic handoff. A Free Drive menu,
+moving generation service, bounded residency/origin shifts and offline boundary
+stops follow only after the prerequisites pass. Do not silently reduce quality.
+Measurements and limitations belong in HANDOFF, not inferred from the plan.
+
 ## Backlog Earth2Road — roadgen-v2
 
 Збережено 2026-10-03. Цей файл — робочий план майбутніх задач і перевірки концепцій.

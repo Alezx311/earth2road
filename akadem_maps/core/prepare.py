@@ -894,6 +894,7 @@ def build(cfg, root, context):
     import re
     network_file = BUILD/'network.net.xml'
     network_file.write_bytes(re.sub(rb'<!--.*?-->', b'', network_file.read_bytes(), flags=re.S))
+    context.progress('road_geometry', 0.32)
     net = sumolib.net.readNet(str(BUILD/'network.net.xml'), withInternal=True, withPrograms=True)
     cx,cy = net.convertLonLat2XY(*cfg['center'])
     def height(x,y):

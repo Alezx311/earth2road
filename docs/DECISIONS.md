@@ -1,5 +1,14 @@
 # Decisions
 
+- Godot streaming (2026-10-10, feasibility prototype): preserve full nearby quality
+  and SUMO as the target; BeamNG stays the existing selected-area export. Add
+  isolated generation/cache, surface-overlap and TraCI handoff probes before a
+  Free Drive menu or moving generator service. Current geometry exceeds the
+  30 s startup budget even with source data available; a passed synthetic seam or
+  deterministic SUMO fixture does not certify arbitrary OSM windows. Keep the
+  experimental handoff outside the live bridge until stable IDs, complete traffic
+  state, bounded world residency and offline boundary handling are verified.
+
 - Local Visual DNA v0 is opt-in and engine-neutral. Manual district profiles are
   hypotheses, with per-property provenance and OSM taking precedence. Blend profile
   distributions in metric space; seed choices by map seed, OSM ID and property.
