@@ -402,7 +402,7 @@ def _harmonic_field(poly, arms, road, initial):
     count = np.maximum(1, np.bincount(src, minlength=len(points)))
     values = geometry.harmonic(values, fixed, src, dst, count)
     mesh = audit.TriangleIndex([('', [[(*points[i], float(values[i])) for i in row] for row in ids], {})])
-    return lambda x, y: float(geometry.height_on(mesh, x, y, initial(x, y)))
+    return lambda x, y: float(geometry.height_or(mesh, x, y, initial))
 
 
 def _smoothstep(t):
@@ -731,7 +731,7 @@ def _generate(source, net, strips, road_z, tolerance, targets, started):
         mesh = audit.TriangleIndex([(nid, triangles, {})])
         analytic = patch['height']
         # All consumers sample the final triangulated surface, not an independent curve.
-        patch['height'] = lambda x, y, m=mesh, f=analytic: geometry.height_on(m, x, y, f(x, y))
+        patch['height'] = lambda x, y, m=mesh, f=analytic: geometry.height_or(m, x, y, f)
         records[nid].update(status='v2', reason='', triangles=len(triangles),
                             sockets=[{k: v for k, v in a.items() if not k.startswith('_')} for a in patch['arms']])
         if len(patch['members']) > 1:
@@ -766,7 +766,7 @@ def _generate(source, net, strips, road_z, tolerance, targets, started):
         patch['triangles'] = stitch_mesh(patch['triangles'], knots)
         mesh = audit.TriangleIndex([(nid, patch['triangles'], {})])
         previous = patch['height']
-        patch['height'] = lambda x,y,m=mesh,f=previous: geometry.height_on(m,x,y,f(x,y))
+        patch['height'] = lambda x,y,m=mesh,f=previous: geometry.height_or(m,x,y,f)
         records[nid]['triangles'] = len(patch['triangles'])
     for lid, local in by_lane.items():
         adjusted = {}

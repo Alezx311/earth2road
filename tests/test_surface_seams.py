@@ -61,6 +61,26 @@ class SurfaceAuditTests(unittest.TestCase):
         # Missing pavement must not masquerade as measured surface smoothness.
         self.assertEqual(report['smooth']['over_5pct'], 0)
 
+    def test_triangle_index_hits_are_stable_and_vectorised(self):
+        tris = [[(0, 0, 0), (2, 0, 0), (0, 2, 2)], [(2, 0, 0), (2, 2, 2), (0, 2, 2)]]
+        mesh = audit.TriangleIndex([('a', tris, {})])
+        self.assertEqual(len(mesh.polys), 2)
+        self.assertEqual(sorted(h for h, _ in mesh.hits(1, 1)), [1.0, 1.0])     # on the shared edge
+        self.assertEqual(mesh.hits(.5, .5), [(.5, 'a')])
+        first = mesh.hits(.5, .5)
+        first.append('mutated')                                                # cached result is copied
+        self.assertEqual(mesh.hits(.5, .5), [(.5, 'a')])
+        self.assertEqual(mesh.hits(5, 5), [])
+        self.assertEqual(audit.TriangleIndex([]).polys, [])
+
+    def test_height_or_evaluates_the_fallback_only_when_it_decides(self):
+        mesh = audit.TriangleIndex([('a', [[(0, 0, 0), (2, 0, 0), (0, 2, 2)]], {})])
+        calls = []
+        field = lambda x, y: calls.append((x, y)) or 7.0
+        self.assertEqual(geometry.height_or(mesh, .5, .5, field), geometry.height_on(mesh, .5, .5, 7.0))
+        self.assertEqual(calls, [])
+        self.assertEqual(geometry.height_or(mesh, 5, 5, field), geometry.height_on(mesh, 5, 5, 7.0))
+        self.assertEqual(calls, [(5, 5)])
 
 class SeamTests(unittest.TestCase):
     def test_absorbed_approach_keeps_junction_connected_to_its_street(self):

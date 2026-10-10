@@ -117,6 +117,17 @@ def height_on(mesh, x, y, fallback=None):
     return at(mesh.planes[i], x, y)
 
 
+def height_or(mesh, x, y, field):
+    """height_on(mesh, x, y, field(x, y)), evaluating the field only when it decides.
+
+    A single covering triangle is returned whatever the fallback; chained patch
+    height fields then stop at the first surface that answers alone."""
+    hits = mesh.hits(x, y)
+    if len(hits) == 1:
+        return hits[0][0]
+    return height_on(mesh, x, y, field(x, y))
+
+
 def align_strips(strips):
     """Clip followers to fixed major surfaces and taper the seam correction over 60 m.
 
@@ -280,7 +291,7 @@ def junction_surface(poly, adjoining, fallback, free_boundary=False, anchors=())
             row.append(lookup[key])
         ids.append(row)
     if not points:
-        return poly, [], lambda x,y:height_on(mesh,x,y,fallback(x,y)) if mesh.polys else fallback(x,y)
+        return poly, [], lambda x,y:height_or(mesh,x,y,fallback) if mesh.polys else fallback(x,y)
     values = np.array([fallback(*p) for p in points])
     fixed = np.zeros(len(points), dtype=bool)
     boundary = poly.boundary
@@ -313,7 +324,7 @@ def junction_surface(poly, adjoining, fallback, free_boundary=False, anchors=())
         hits = output.hits(x, y)
         if hits:
             return hits[0][0]
-        return height_on(mesh, x, y, fallback(x, y)) if mesh.polys else fallback(x, y)
+        return height_or(mesh, x, y, fallback) if mesh.polys else fallback(x, y)
     return poly, triangles, height
 
 

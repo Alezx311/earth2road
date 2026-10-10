@@ -9,6 +9,8 @@ import math
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+import numpy as np
+import shapely
 from shapely.geometry import Point, Polygon
 from shapely.ops import nearest_points
 from shapely.strtree import STRtree
@@ -116,22 +118,31 @@ def relationship(a, b):
 
 class TriangleIndex:
     def __init__(self, surfaces):
-        self.polys, self.planes, self.owners, self.metadata = [], [], [], {}
+        rings, self.planes, self.owners, self.metadata = [], [], [], {}
         for sid, triangles, meta in surfaces:
             self.metadata[sid] = meta
             for tri in triangles:
                 coeff = plane(tri)
                 if coeff is None:
                     continue
-                self.polys.append(Polygon([p[:2] for p in tri]))
+                rings.append([p[:2] for p in tri])
                 self.planes.append(coeff)
                 self.owners.append(sid)
-        self.tree = STRtree(self.polys)
+        # Vectorised construction/predicates: identical geometries, one GEOS call.
+        self._polys = shapely.polygons(np.asarray(rings, dtype=float).reshape(-1, 3, 2))             if rings else np.empty(0, dtype=object)
+        self.polys = list(self._polys)
+        self.tree = STRtree(self._polys)
+        self._hits = {}
 
     def hits(self, x, y):
-        pt = Point(x, y)
-        return [(at(self.planes[i], x, y), self.owners[i]) for i in self.tree.query(pt)
-                if self.polys[i].covers(pt)]
+        # Shared triangle vertices are queried repeatedly; the index never changes.
+        key = (x, y)
+        if key not in self._hits:
+            pt = Point(x, y)
+            found = self.tree.query(pt)
+            found = found[shapely.covers(self._polys[found], pt)]
+            self._hits[key] = [(at(self.planes[i], x, y), self.owners[i]) for i in found.tolist()]
+        return list(self._hits[key])
 
 
 def surfaces(tiles, lane_meta=None, junction_meta=None):

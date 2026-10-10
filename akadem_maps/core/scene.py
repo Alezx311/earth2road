@@ -611,7 +611,8 @@ def stitch_vertices(polys, points, cell=20.0, tol=0.25):
     if not points:
         return list(polys)
     grid = {}
-    for px, py in points:
+    # Exact duplicates (shared mesh vertices) would only be skipped after sorting.
+    for px, py in dict.fromkeys((p[0], p[1]) for p in points):
         grid.setdefault((int(px//cell), int(py//cell)), []).append((px, py))
     out = []
     for poly in polys:

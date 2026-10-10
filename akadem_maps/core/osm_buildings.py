@@ -103,7 +103,7 @@ class LocalArea:
 
     def __init__(self, area, cell=LOCAL_CELL):
         from shapely.geometry import box
-        self.cell, self.pieces = cell, {}
+        self.cell, self.pieces, self.unions = cell, {}, {}
         if area.is_empty:
             return
         x0, y0, x1, y1 = area.bounds
@@ -116,9 +116,14 @@ class LocalArea:
     def within(self, x0, y0, x1, y1):
         from shapely.geometry import box
         c = self.cell
-        parts = [self.pieces[i, j] for i in range(math.floor(x0/c), math.floor(x1/c)+1)
-                 for j in range(math.floor(y0/c), math.floor(y1/c)+1) if (i, j) in self.pieces]
-        return robust(lambda a, b: a.intersection(b), union(parts), box(x0, y0, x1, y1)) if parts else Polygon()
+        keys = tuple((i, j) for i in range(math.floor(x0/c), math.floor(x1/c)+1)
+                     for j in range(math.floor(y0/c), math.floor(y1/c)+1) if (i, j) in self.pieces)
+        if not keys:
+            return Polygon()
+        # Many small windows share the same cells: union each cell combination once.
+        if keys not in self.unions:
+            self.unions[keys] = union(self.pieces[k] for k in keys)
+        return robust(lambda a, b: a.intersection(b), self.unions[keys], box(x0, y0, x1, y1))
 
     def nearest(self, point, start=50.0):
         """Nearest point of the area to ``point`` (None if empty): grow a window until a hit
