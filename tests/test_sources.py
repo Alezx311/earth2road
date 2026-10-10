@@ -255,6 +255,15 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(saved.read_text(encoding='utf8'), 'Fatal launcher error')
 
 
+class ExtractRelationTests(unittest.TestCase):
+    def test_relations_with_members_outside_the_package_are_left_out(self):
+        # Odesa 2026-10-11: relation 7160849 of the Ukraine extract has a member outside it.
+        members = {1: [('w', 10), ('w', 11)], 2: [('w', 10), ('w', 99)], 3: [('r', 2), ('w', 10)],
+                   4: [('r', 1), ('n', 5)], 5: [('r', 404)]}
+        written = {'w': {10, 11}, 'n': {5}}
+        self.assertEqual(osm_extract.drop_incomplete({1, 2, 3, 4, 5, 404}, members, written), {1, 4})
+
+
 class NetworkDeadlineTests(unittest.TestCase):
     def test_slow_http_body_has_wall_clock_deadline_and_no_publication(self):
         from akadem_maps.network import download
