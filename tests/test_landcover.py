@@ -30,6 +30,24 @@ class LandcoverTests(unittest.TestCase):
         areas = landcover.relation_covers(osm, nodes, lambda x, y: (x, y), box(0, 0, 10, 10))
         self.assertEqual({a['kind']: round(a['poly'].area, 6) for a in areas}, {'water': 96.0, 'wood': 4.0})
 
+    def test_coastline_sea_is_water_on_its_right(self):
+        # Odesa 2026-10-11: the Black Sea was flat land. Coastline runs north along x = 6 with a
+        # bay; land on the left (west), water on the right (east). Two ways, nodes outside the map.
+        osm = ET.fromstring('''<osm>
+          <node id="1" lon="6" lat="-5"/><node id="2" lon="6" lat="3"/><node id="3" lon="8" lat="5"/>
+          <node id="4" lon="6" lat="7"/><node id="5" lon="6" lat="15"/>
+          <way id="20"><nd ref="1"/><nd ref="2"/><nd ref="3"/></way>
+          <way id="21"><nd ref="3"/><nd ref="4"/><nd ref="5"/><tag k="natural" v="coastline"/></way>
+          <way id="22"><nd ref="1"/><nd ref="2"/><nd ref="3"/><tag k="natural" v="coastline"/></way>
+        </osm>''')
+        nodes = {n.get('id'): (float(n.get('lon')), float(n.get('lat'))) for n in osm.iter('node')}
+        sea, = landcover.sea(osm, nodes, lambda x, y: (x, y), box(0, 0, 10, 10))
+        self.assertEqual(sea['kind'], 'water')
+        self.assertAlmostEqual(sea['poly'].area, 40 - 4, places=6)   # east strip minus the land spit
+        self.assertTrue(sea['poly'].contains(box(9, 1, 9.5, 9).centroid))
+        self.assertFalse(sea['poly'].intersects(box(0, 0, 5.9, 10)))
+        self.assertEqual(landcover.sea(ET.fromstring('<osm/>'), nodes, lambda x, y: (x, y), box(0, 0, 10, 10)), [])
+
     def test_overlaps_resolved_by_priority(self):
         park = {'id': 'p', 'kind': 'green', 'poly': box(0, 0, 10, 10)}
         pond = {'id': 'w', 'kind': 'water', 'poly': box(2, 2, 4, 4)}

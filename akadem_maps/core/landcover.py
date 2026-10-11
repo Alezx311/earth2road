@@ -7,7 +7,8 @@ overlapping areas are resolved by priority so each point of ground has one cover
 """
 import math
 
-from shapely.geometry import LineString, Polygon
+from shapely import STRtree
+from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import polygonize, transform, unary_union
 
 from . import rural
@@ -68,6 +69,52 @@ def relation_covers(root, nodes, to_xy, clip, is_rural=False):
         result.append({'id': 'relation_' + rel.get('id'), 'kind': area_kind,
                        'poly': transform(lambda x, y, z=None: to_xy(x, y), local).buffer(0),
                        'provenance': 'osm multipolygon'})
+    return result
+
+
+def sea(root, nodes, to_xy, clip):
+    """Sea inside the map area from ``natural=coastline`` ways (lon/lat in, network XY out).
+
+    OSM draws coastlines with the land on the left and the water on the right. The map area
+    is cut by the coastline; each piece is sea when the side test of a coastline segment on
+    its boundary points into it. Odesa 2026-10-11: without this the Black Sea was drawn as
+    flat land."""
+    lines = []
+    for w in root.findall('way'):
+        if not any(t.get('k') == 'natural' and t.get('v') == 'coastline' for t in w.findall('tag')):
+            continue
+        refs = [n.get('ref') for n in w.findall('nd')]
+        if len(refs) >= 2 and all(r in nodes for r in refs):
+            lines.append([nodes[r] for r in refs])
+    if not lines:
+        return []
+    coast = robust(lambda a, b: a.intersection(b), unary_union([LineString(l) for l in lines]), clip)
+    if coast.is_empty:
+        return []
+    segments = [(a, b) for line in lines for a, b in zip(line, line[1:]) if a != b]
+    tree = STRtree([LineString(sg) for sg in segments])
+    faces = list(polygonize(unary_union([clip.boundary, coast])))
+    result = []
+    for k, face in enumerate(faces):
+        if not clip.buffer(1e-9).covers(face.representative_point()):
+            continue
+        ring = list(face.exterior.coords)
+        water = None
+        for p, q in zip(ring, ring[1:]):
+            mid = ((p[0]+q[0])/2, (p[1]+q[1])/2)
+            nearest = int(tree.nearest(Point(mid)))
+            if tree.geometries[nearest].distance(Point(mid)) > 1e-9:
+                continue
+            a, b = segments[nearest]
+            dx, dy = b[0]-a[0], b[1]-a[1]
+            n = math.hypot(dx, dy)
+            probe = Point(mid[0]+dy/n*1e-6, mid[1]-dx/n*1e-6)       # right of the coastline
+            water = face.contains(probe)
+            break
+        if water:
+            result.append({'id': f'coastline_sea_{k}', 'kind': 'water',
+                           'poly': transform(lambda x, y, z=None: to_xy(x, y), face).buffer(0),
+                           'provenance': 'osm natural=coastline (sea side)'})
     return result
 
 

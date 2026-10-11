@@ -1029,6 +1029,7 @@ def build(cfg, root, context):
         return ramps, spans
     # Lakes and forests mapped as multipolygon relations, in every map mode (playtest note 5).
     relation_areas = landcover.relation_covers(root, nodes, net.convertLonLat2XY, map_area, is_rural)
+    relation_areas += landcover.sea(root, nodes, net.convertLonLat2XY, map_area)
     water_sources = [(a['id'], a['poly']) for a in relation_areas if a['kind'] == 'water']
     for wid, w in ways.items():
         refs = [nd.attrib['ref'] for nd in w.findall('nd')]
