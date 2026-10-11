@@ -48,6 +48,27 @@ class LandcoverTests(unittest.TestCase):
         self.assertFalse(sea['poly'].intersects(box(0, 0, 5.9, 10)))
         self.assertEqual(landcover.sea(ET.fromstring('<osm/>'), nodes, lambda x, y: (x, y), box(0, 0, 10, 10)), [])
 
+    def test_river_lines_become_water_pieces_outside_mapped_water(self):
+        # Kamianets-Podilskyi 2026-10-11: the Smotrych is only a waterway=river line there.
+        osm = ET.fromstring('''<osm>
+          <node id="1" lon="0" lat="50"/><node id="2" lon="400" lat="50"/><node id="3" lon="0" lat="80"/><node id="4" lon="400" lat="80"/>
+          <way id="30"><nd ref="1"/><nd ref="2"/><tag k="waterway" v="river"/></way>
+          <way id="31"><nd ref="3"/><nd ref="4"/><tag k="waterway" v="canal"/><tag k="width" v="4"/></way>
+          <way id="32"><nd ref="3"/><nd ref="4"/><tag k="waterway" v="river"/><tag k="tunnel" v="culvert"/></way>
+          <way id="33"><nd ref="1"/><nd ref="2"/><tag k="waterway" v="stream"/></way>
+        </osm>''')
+        nodes = {n.get('id'): (float(n.get('lon')), float(n.get('lat'))) for n in osm.iter('node')}
+        lake = box(300, 0, 400, 100)
+        areas = landcover.rivers(osm, nodes, lambda x, y: (x, y), box(0, 0, 400, 100), lake)
+        river = [a for a in areas if a['id'].startswith('waterway_30_')]
+        canal = [a for a in areas if a['id'].startswith('waterway_31_')]
+        self.assertEqual(len(river), 3)                       # 400 m in three 133 m pieces, the last cut by the lake
+        self.assertAlmostEqual(sum(a['poly'].area for a in river), 300*12, places=3)
+        self.assertAlmostEqual(sum(a['poly'].area for a in canal), 300*4, places=3)
+        self.assertEqual(canal[0]['provenance'], 'osm waterway line; width osm')
+        self.assertTrue(all(a['kind'] == 'water' and not a['poly'].intersects(box(300.01, 0, 400, 100)) for a in areas))
+        self.assertEqual(len(areas), len(river)+len(canal))
+
     def test_overlaps_resolved_by_priority(self):
         park = {'id': 'p', 'kind': 'green', 'poly': box(0, 0, 10, 10)}
         pond = {'id': 'w', 'kind': 'water', 'poly': box(2, 2, 4, 4)}

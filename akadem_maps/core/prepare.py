@@ -1035,6 +1035,10 @@ def build(cfg, root, context):
         refs = [nd.attrib['ref'] for nd in w.findall('nd')]
         if len(refs) >= 4 and refs[0] == refs[-1] and all(r in nodes for r in refs) and landcover.kind(tags(w), is_rural) == 'water':
             water_sources.append((wid, Polygon([net.convertLonLat2XY(*nodes[r]) for r in refs]).buffer(0)))
+    river_areas = landcover.rivers(root, nodes, net.convertLonLat2XY, map_area,
+                                   unary_union([poly for _, poly in water_sources]) or Polygon())
+    relation_areas += river_areas
+    water_sources += [(a['id'], a['poly']) for a in river_areas]
     hidden_tunnels = tunnels_under_water(net, edge_level, [poly for _, poly in water_sources])
     lanes, road_strips, anchors, edges, profile = [], [], [], [], []
     ramp_strips, span_strips = [], []

@@ -118,6 +118,45 @@ def sea(root, nodes, to_xy, clip):
     return result
 
 
+# Rivers and canals mapped only as lines (Kamianets-Podilskyi 2026-10-11: the Smotrych has no
+# water area there). Width from the tag, else assumed; cut into pieces so each finds its own
+# flat level on the DEM and the water steps down with the valley.
+LINE_WIDTH_M = {'river': 12.0, 'canal': 8.0}
+LINE_PIECE_M = 150.0
+
+
+def rivers(root, nodes, to_xy, clip, covered):
+    """Water areas around river/canal lines outside ``covered`` (mapped water, network XY)."""
+    from shapely.ops import substring
+    clip_xy = transform(lambda x, y, z=None: to_xy(x, y), clip)
+    result = []
+    for w in root.findall('way'):
+        tags = {t.get('k'): t.get('v') for t in w.findall('tag')}
+        if tags.get('waterway') not in LINE_WIDTH_M or tags.get('tunnel', 'no') != 'no':
+            continue
+        refs = [n.get('ref') for n in w.findall('nd')]
+        if len(refs) < 2 or any(r not in nodes for r in refs):
+            continue
+        try:
+            width = float(tags.get('width', '').split()[0])
+        except (ValueError, IndexError):
+            width = LINE_WIDTH_M[tags['waterway']]
+        width = max(2.0, min(width, 80.0))
+        line = LineString([to_xy(*nodes[r]) for r in refs])
+        n = max(1, math.ceil(line.length/LINE_PIECE_M))
+        for i in range(n):
+            piece = substring(line, i*line.length/n, (i+1)*line.length/n)
+            if piece.length <= 0:
+                continue
+            area = robust(lambda a, b, c: a.intersection(b).difference(c),
+                          piece.buffer(width/2, cap_style='flat'), clip_xy, covered).buffer(0)
+            if area.is_empty or area.area < 4:
+                continue
+            result.append({'id': f'waterway_{w.get("id")}_{i}', 'kind': 'water', 'poly': area,
+                           'provenance': 'osm waterway line; width ' + ('osm' if 'width' in tags else 'assumed')})
+    return result
+
+
 def resolve(areas):
     """Areas sorted by priority, each minus everything drawn before it (in place: 'poly')."""
     areas = sorted(areas, key=lambda a: PRIORITY.get(a['kind'], 9))
