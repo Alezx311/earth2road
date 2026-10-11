@@ -99,12 +99,20 @@ def panel_tile(colour, key, textures=TEXTURES):
     return _tint(out, colour)
 
 
+def loggia_colour(colour):
+    """The DNA palette colour nearest to `colour` (0..1 RGB). A loggia sheet is ~9.7 MB and only
+    30 % tinted: Kharkiv's 67 observed OSM colours baked 67 sheets, a 945 MB ZIP (2026-10-11)."""
+    from akadem_maps.core.local_dna import COLORS
+    palette = [[int(h[i:i+2], 16)/255 for i in (1, 3, 5)] for h in sorted(set(COLORS.values()))]
+    return min(palette, key=lambda p: sum((a-b)**2 for a, b in zip(p, colour)))
+
+
 def loggia_sheet(colour, key, textures=TEXTURES):
     """The whole II-68 photo as one SHEET_PX square repeating every LOGGIA_SHEET_M metres, so
     neighbouring loggias keep the variety and alignment of the original facade."""
     from PIL import Image
     atlas = Image.open(Path(textures)/'panelka_loggias/albedo.jpg').convert('RGB')
-    return _tint(atlas.resize((SHEET_PX, SHEET_PX), Image.LANCZOS), colour, 0.3)
+    return _tint(atlas.resize((SHEET_PX, SHEET_PX), Image.LANCZOS), loggia_colour(colour), 0.3)
 
 
 def end_tile(kind, colour, key, textures=TEXTURES):

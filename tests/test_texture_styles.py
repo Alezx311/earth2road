@@ -166,6 +166,14 @@ class TextureStyleTests(unittest.TestCase):
         self.assertTrue(building_style(block(10))[0].endswith('_lg'))
         self.assertFalse(building_style(block(19))[0].endswith('_lg'))
 
+    def test_loggia_sheets_share_a_small_palette(self):
+        # Kharkiv 2026-10-11: one 9.7 MB sheet per observed OSM colour made a 945 MB ZIP.
+        import random
+        rng = random.Random(1)
+        colours = {tuple(ts.loggia_colour([rng.random() for _ in range(3)])) for _ in range(500)}
+        self.assertLessEqual(len(colours), 10)
+        self.assertEqual(ts.loggia_colour([0xde/255, 0xde/255, 0xd7/255]), [0xde/255, 0xde/255, 0xd7/255])
+
     def test_dna_styles_map_like_the_godot_shader(self):
         panel = {'architecture': 'panel', 'material': 'concrete'}
         self.assertEqual(ts.dna_kind(panel, 'kyiv_dna_fac_panel_x_deded7'), 'panel')
