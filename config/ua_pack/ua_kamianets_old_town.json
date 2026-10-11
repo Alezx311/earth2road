@@ -1,0 +1,53 @@
+{
+  "id": "ua_kamianets_old_town",
+  "name": "Кам'янець-Подільський · Старе місто",
+  "note": "2.5 km square over the old town on the Smotrych canyon loop and the fortress bridge. Manual choice for the Ukraine BeamNG pack (2026-10-11); not an administrative boundary.",
+  "bbox": [
+    26.555695,
+    48.663671,
+    26.589705,
+    48.686129
+  ],
+  "center": [
+    26.5727,
+    48.6749
+  ],
+  "region_profile": "ukraine",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "chunk_size": 250,
+  "traffic_count": 150,
+  "demand_pool": 300,
+  "start_time": "10:30",
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Старий замок",
+        "lon": 26.5636,
+        "lat": 48.6731
+      },
+      {
+        "name": "Ратуша",
+        "lon": 26.5727,
+        "lat": 48.6749
+      },
+      {
+        "name": "Новоплянівський міст",
+        "lon": 26.5826,
+        "lat": 48.6794
+      }
+    ]
+  },
+  "geofabrik": {
+    "url": "https://download.geofabrik.de/europe/ukraine-260918.osm.pbf",
+    "md5": "8357c720d91f72db3aa5feb6dea04bf3",
+    "note": "Dated Geofabrik extract (OSM data 2026-09-18), cut locally per map."
+  },
+  "level_id": "ua_kamianets_old_town"
+}

@@ -1,5 +1,52 @@
 # Earth2Road handoff
 
+## 2026-10-11 (night) — Bilychi F9 notes fixed; Ukraine BeamNG pack (Claude)
+
+- Owner's five F9 notes on `bilychy_dna`: findings and changes per note in
+  [PLAYTEST_2026-10-11.md](PLAYTEST_2026-10-11.md). One commit per fix: facade `textureGrad`
+  from uniform control flow (sparkling loggias, reproduced and checked with `--shots-file`),
+  DNA storey cap by footprint, 4.5 m storeys for tagged shop halls, coping at `wall_height`,
+  churches and their parts keep `historic`, loggias on 5–16-storey panel blocks only (Godot and
+  BeamNG `_lg` facade materials), lawn recipes, yard-lawn shrub clumps (`yards.py` step 6),
+  and the Poly Haven `shrub_03` "shrub" (four tiny weed stalks — every yard shrub was a speck)
+  dropped from `downloads.json`. `bilychy_dna` rebuilt offline from its recorded inputs and
+  installed with `--replace` (backup `.cache/replaced/bilychy_dna-20261011T023638Z`); the five
+  F9 poses re-shot with `--shots-file`, all changed as intended. Full suite: 555 OK, 1 skipped
+  (`logs/ua_pack/unittest-final.log`).
+- Not changed (note 3): the 10-storey `49225378` next to the 19-storey block is a DNA `brick`
+  pick and still draws photo brick with procedural windows; deciding brick vs panel for tall
+  untagged blocks is a profile question for the owner.
+- Ukraine pack (`config/ua_pack/*.json`, v2 roads, full Geofabrik PBF 2026-09-18 from
+  `out/districts/.inputs`, panelka, compact). Runner `out/ua_pack/run.py` (ignored), logs
+  `logs/ua_pack/`. Builds ran three in parallel (lowest free RAM 5.5 GB); later rebuilds were
+  `--inputs <world>/inputs --offline` with the final code.
+
+  | map | size | build | BeamNG export | ZIP | load (cold, to ready) | FPS (6 views) |
+  |---|---|---:|---:|---:|---:|---|
+  | ua_lviv_old_town | 2.5 km | 42 min | 8 min | 96 MB | 66 s | 67–98 |
+  | ua_odesa_center | 2.5 km | 34 min | 8 min | 108 MB | 85 s | 60–103 |
+  | ua_kharkiv_center | 2.5 km | 44 min | 10 min | 384 MB | 100 s | 28–75 |
+  | ua_kamianets_old_town | 2.5 km | 19 min | 5 min | 80 MB | 60 s | 80–90 |
+  | ua_yaremche (rural) | 3 km | 13 min | 6 min | 69 MB | 45 s | 82–89 |
+
+  Load/FPS: `out/ua_pack/bench.py` (= `tools/beamng_bench.py` with camera points from a world
+  folder), cold run only, isolated profiles, other builds running at the same time — noisy.
+  Combined `out/ua_pack/release/earth2road_ukraine_pack.zip` (737 MB, all five levels, loads)
+  copied into the BeamNG mods folder; single ZIPs and `pack.json` (SHA-256) next to it.
+  Not driven by hand; traffic, signals and weather not checked in game.
+- Generator fixes found by the pack (own commits): Geofabrik extract relations with members
+  outside the country file are left out (Odesa failed on relation 7160849); the sea from
+  `natural=coastline` (land left, water right); river/canal lines without a water area become
+  water strips of tagged or assumed width in 150 m pieces (Smotrych canyon in Kamianets); BeamNG
+  loggia sheets snap to the 10 DNA palette colours (Kharkiv 945 → 384 MB; the rest is ~1000
+  small tiles for 533 observed OSM colours).
+- Seen, not fixed: BeamNG compact TerrainBlock outside the map and under open ground keeps its
+  flat beige base maps (Odesa's sea starts beyond the 2.5 km square, so the horizon is beige);
+  Kharkiv FPS is the lowest (dense S3DB centre, ~1000 facade materials).
+- My mistake this session: a shots helper ran `rm -rf logs/shots` and deleted the earlier QA
+  shot folders kept there (`ground-synth*`, `ground-procedural`, `ground-panelka3`, `synth4`,
+  …). They were ignored files, not in Git; they can be retaken with `--shots`.
+
 ## 2026-10-11 — honest waiting time and drawn areas in the picker (Claude)
 
 - Owner direction: instead of 30 s streaming, show before the build how long it will

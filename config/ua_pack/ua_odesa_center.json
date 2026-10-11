@@ -1,0 +1,53 @@
+{
+  "id": "ua_odesa_center",
+  "name": "Одеса · Центр",
+  "note": "2.5 km square around Derybasivska St: Prymorskyi Boulevard, Potemkin Stairs, the port road. Manual choice for the Ukraine BeamNG pack (2026-10-11); not an administrative boundary.",
+  "bbox": [
+    30.720692,
+    46.474271,
+    30.753308,
+    46.496729
+  ],
+  "center": [
+    30.737,
+    46.4855
+  ],
+  "region_profile": "ukraine",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "chunk_size": 250,
+  "traffic_count": 150,
+  "demand_pool": 300,
+  "start_time": "10:30",
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Дерибасівська",
+        "lon": 30.738,
+        "lat": 46.4843
+      },
+      {
+        "name": "Потьомкінські сходи",
+        "lon": 30.7432,
+        "lat": 46.4887
+      },
+      {
+        "name": "Привокзальна площа",
+        "lon": 30.7316,
+        "lat": 46.4699
+      }
+    ]
+  },
+  "geofabrik": {
+    "url": "https://download.geofabrik.de/europe/ukraine-260918.osm.pbf",
+    "md5": "8357c720d91f72db3aa5feb6dea04bf3",
+    "note": "Dated Geofabrik extract (OSM data 2026-09-18), cut locally per map."
+  },
+  "level_id": "ua_odesa_center"
+}
