@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon
-from shapely import set_precision
+from shapely import make_valid, set_precision
 from shapely.errors import GEOSException
 from shapely.ops import nearest_points, unary_union
 from shapely.strtree import STRtree
@@ -29,13 +29,20 @@ GRIDS = (1e-6, 1e-4, 1e-3)  # metres; snapping used only after a GEOS noding fai
 def _snapped(run, geoms):
     try:
         return run(geoms)
+    except GEOSException as error:
+        first = error
+    for grid in GRIDS:
+        try:
+            return run([set_precision(g, grid) for g in geoms])
+        except GEOSException:
+            pass
+    # Last resort, reached only where every grid failed (Singapore 1.5 km legacy,
+    # 2026-10-11: "Ring edge missing" on a junction cut): an invalid input ring is
+    # repaired, then snapped to the coarsest grid.
+    try:
+        return run([set_precision(make_valid(g), GRIDS[-1]) for g in geoms])
     except GEOSException:
-        for i, grid in enumerate(GRIDS):
-            try:
-                return run([set_precision(g, grid) for g in geoms])
-            except GEOSException:
-                if i == len(GRIDS)-1:
-                    raise
+        raise first
 
 
 def robust(name, a, b):
@@ -79,6 +86,16 @@ def smooth_turn(points, tolerance=.3):
     return result
 
 
+def junction_metadata(net, members, lane_metadata):
+    """Topology survives trimming/absorption of short approach meshes."""
+    records = [lane_metadata[lane.getID()] for member in members
+               for edge in net.getNode(member).getIncoming()+net.getNode(member).getOutgoing()
+               for lane in edge.getLanes() if lane.getID() in lane_metadata]
+    return {'nodes': sorted(members),
+            'ways': sorted({w for r in records for w in r['ways']}),
+            'levels': [list(s) for s in sorted({tuple(s) for r in records for s in r['levels']})]}
+
+
 def metadata(net, tags, refs):
     result = {}
     for edge in net.getEdges():
@@ -105,6 +122,17 @@ def height_on(mesh, x, y, fallback=None):
         return fallback
     i = int(mesh.tree.nearest(Point(x, y)))
     return at(mesh.planes[i], x, y)
+
+
+def height_or(mesh, x, y, field):
+    """height_on(mesh, x, y, field(x, y)), evaluating the field only when it decides.
+
+    A single covering triangle is returned whatever the fallback; chained patch
+    height fields then stop at the first surface that answers alone."""
+    hits = mesh.hits(x, y)
+    if len(hits) == 1:
+        return hits[0][0]
+    return height_on(mesh, x, y, field(x, y))
 
 
 def align_strips(strips):
@@ -160,7 +188,7 @@ def align_strips(strips):
         if contact.is_empty:
             continue
         bases = {r['lane']: densify(r['points']) for r in group}
-        original = TriangleIndex((r['lane'], ribbon_triangles(bases[r['lane']], r['width']), meta) for r in group)
+        original = TriangleIndex((r['lane'], r.get('triangles', ribbon_triangles(bases[r['lane']], r['width'])), meta) for r in group)
         line = LineString([p[:2] for p in group[0]['points']])
         contact_points = [p for pg in scene.polygons(contact) for p in pg.exterior.coords]
         distances = [line.project(Point(p)) for p in contact_points]
@@ -174,7 +202,7 @@ def align_strips(strips):
             base_points = bases[road['lane']]
             road['points'] = [(x, y, corrected(x, y)) for x, y, _ in base_points]
             tris = []
-            for tri in ribbon_triangles(base_points, road['width']):
+            for tri in road.get('triangles', ribbon_triangles(base_points, road['width'])):
                 poly = robust('difference', Polygon([p[:2] for p in tri]), main_area)
                 for cut in scene.triangles(poly):
                     tris.append([(x, y, corrected(x, y)) for x, y in cut])
@@ -202,9 +230,57 @@ def make_height(original, main_mesh, main_area, line, start, end):
     return height
 
 
-def junction_surface(poly, adjoining, fallback):
-    """Constrained boundary + harmonic interior, after subtracting same-level roads."""
-    mesh = TriangleIndex((r['lane'], r.get('triangles', list(ribbon_triangles(r['points'], r['width']))), r['topology']) for r in adjoining)
+def harmonic(values, fixed, src, dst, count, tol=1e-6):
+    """Solve the graph Laplace equation for the free vertices (conjugate gradients).
+
+    Free vertices on the outline average their neighbours like interior ones, a
+    natural boundary: the surface between road mouths follows the roads instead
+    of an independent kerb estimate. Starting from `values`, a component without
+    any fixed vertex keeps its mean."""
+    free = ~fixed
+    if not free.any() or fixed.sum() == 0:
+        return values
+    n = len(values)
+    def apply(x):  # (D - W) x
+        return count*x-np.bincount(src, weights=x[dst], minlength=n)
+    base = values.copy()
+    base[free] = 0.
+    b = -apply(base)
+    x = values.copy()
+    x[fixed] = 0.
+    r = np.where(free, b-apply(x), 0.)
+    p = r.copy()
+    rr = float(r@r)
+    for _ in range(4*n):
+        if rr < tol*tol:
+            break
+        q = np.where(free, apply(p), 0.)
+        pq = float(p@q)
+        if pq <= 1e-30:
+            break
+        a = rr/pq
+        x += a*p
+        r -= a*q
+        new = float(r@r)
+        p = r+(new/rr)*p
+        rr = new
+    out = values.copy()
+    out[free] = x[free]
+    return out
+
+
+def junction_surface(poly, adjoining, fallback, free_boundary=False, anchors=()):
+    """Constrained boundary + harmonic interior, after subtracting same-level roads.
+
+    With `free_boundary` only the road mouths are fixed; the rest of the outline
+    is solved with the interior instead of pinned to `fallback`, whose inverse
+    distance blend bulges between approaches of different grade. `anchors` are
+    connected roads that overlap the junction without being cut from it; the
+    footprint is subtracted too. Merely pinning vertices above an overlapping
+    road still leaves triangles interpolating across its edge at another height.
+    """
+    roads = list(adjoining)+list(anchors) if free_boundary else adjoining
+    mesh = TriangleIndex((r['lane'], r.get('triangles', list(ribbon_triangles(r['points'], r['width']))), r['topology']) for r in roads)
     cut = union(mesh.polys)
     poly = union(scene.polygons(robust('difference', poly, cut)))
     knots = [p for pg in mesh.polys for p in pg.exterior.coords]
@@ -222,7 +298,7 @@ def junction_surface(poly, adjoining, fallback):
             row.append(lookup[key])
         ids.append(row)
     if not points:
-        return poly, [], fallback
+        return poly, [], lambda x,y:height_or(mesh,x,y,fallback) if mesh.polys else fallback(x,y)
     values = np.array([fallback(*p) for p in points])
     fixed = np.zeros(len(points), dtype=bool)
     boundary = poly.boundary
@@ -231,7 +307,7 @@ def junction_surface(poly, adjoining, fallback):
         if mesh.polys and cut.distance(q) < .003:
             values[i] = height_on(mesh, *p, values[i])
             fixed[i] = True
-        elif boundary.distance(q) < 1e-7:
+        elif boundary.distance(q) < 1e-7 and not (free_boundary and mesh.polys):
             fixed[i] = True
     neighbors = [set() for _ in points]
     for tri in ids:
@@ -240,20 +316,22 @@ def junction_surface(poly, adjoining, fallback):
     src = np.array([i for i, ns in enumerate(neighbors) for _ in ns], dtype=int)
     dst = np.array([j for ns in neighbors for j in sorted(ns)], dtype=int)
     count = np.maximum(1, np.bincount(src, minlength=len(points)))
-    for _ in range(250):
+    for _ in range(0 if free_boundary else 250):
         avg = np.bincount(src, weights=values[dst], minlength=len(points))/count
         avg[fixed] = values[fixed]
         if np.max(np.abs(avg-values)) < 1e-5:
             values = avg
             break
         values = avg
+    if free_boundary:
+        values = harmonic(values, fixed, src, dst, count)
     triangles = [[(*points[i], float(values[i])) for i in tri] for tri in ids]
     output = TriangleIndex([('junction', triangles, {})])
     def height(x, y):
         hits = output.hits(x, y)
         if hits:
             return hits[0][0]
-        return height_on(mesh, x, y, fallback(x, y)) if mesh.polys else fallback(x, y)
+        return height_or(mesh, x, y, fallback) if mesh.polys else fallback(x, y)
     return poly, triangles, height
 
 

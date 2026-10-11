@@ -33,7 +33,16 @@ const MIN_SIZE_KM := 0.3
 const MAX_SIZE_KM := 5.0
 const LARGE_KM := 2.5
 const Ui = preload("res://scripts/ui_theme.gd")
+const Estimates = preload("res://scripts/estimates.gd")
+const SETTINGS := "user://settings.cfg"
 const SIDE_W := 536.0
+## Road builders (tools/generate_map.py --road-geometry): id, name, note.
+const ROAD_MODES := [
+	["legacy", "Fast: classic roads",
+		"Previous road builder: flat junctions, roads follow the terrain directly. Best for trying a place out."],
+	["v2", "Roadgen v2: detailed roads",
+		"Smooth road elevation, bridges with clearance, level junctions, clean sidewalks and kerbs. Many times slower."],
+]
 ## Plain-language status per generator stage (tools/generate_map.py, akadem_maps/world.py);
 ## the raw phase/stage stays in the technical details.
 const STAGE_TEXT := {
@@ -43,6 +52,7 @@ const STAGE_TEXT := {
 	"geometry": "Reading the map data…",
 	"terrain": "Shaping the terrain…",
 	"network": "Building the road network…",
+	"road_geometry": "Building roads and scenery…",
 	"roads": "Building roads and scenery…",
 	"ground": "Building roads and scenery…",
 	"landcover": "Building roads and scenery…",
@@ -80,6 +90,10 @@ var size_label: Label
 var size_warning: Label
 var name_edit: LineEdit
 var signs_box: CheckBox
+var road_menu: OptionButton
+var road_note: Label
+var elapsed_label: Label
+var started_ms := 0
 var status: Label
 var progress: ProgressBar
 var generate_button: Button
@@ -113,12 +127,34 @@ var finished := false
 var last_stage := ""
 var cancel_path := ""
 var cancelling := false
+## Density-aware waiting time from generate_map.py --action estimate (akadem_maps/estimates.py).
+## Readiness checks run in the background: the area stays editable while they count.
+const CHECKS := ["status", "estimate"]
+var estimate: Dictionary = {}
+var wait_label: Label
+var wait_detail: Label
+var current_group := ""
+var group_started_ms := 0
+var groups_done: Dictionary = {}               # estimate group -> measured seconds
+## Drawn area (akadem_maps/core/corridor.drawn_area): the player's own outline instead of
+## the square, e.g. a ring road with its avenue. Points are (lon, lat).
+const VERTEX_PICK_PX := 12.0
+const DRAWN_MIN_KM2 := 0.05
+const DRAWN_MAX_KM2 := 25.0
+var draw_mode := false
+var polygon: Array[Vector2] = []
+var polygon_closed := false
+var drag_vertex := -1
+var mode_button: OptionButton
+var polygon_hint: Label
+var polygon_clear: Button
 
 func _ready() -> void:
 	theme = Ui.make()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	DirAccess.make_dir_recursive_absolute(TILE_CACHE)
+	Estimates.load_table(project_root())
 	var bg := ColorRect.new()
 	bg.color = Ui.BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -196,8 +232,25 @@ func build_side() -> void:
 	box.add_child(coords)
 	box.add_child(HSeparator.new())
 	box.add_child(Ui.label("2 / AREA & DETAILS", 18, Ui.ACCENT))
+	mode_button = OptionButton.new()
+	mode_button.add_item(tr("Square around the point"))
+	mode_button.add_item(tr("Draw my own area"))
+	mode_button.item_selected.connect(func(i):
+		draw_mode = i == 1
+		drag_vertex = -1
+		area_changed())
+	box.add_child(mode_button)
 	size_label = Ui.label("", 20, Ui.TEXT, true)
 	box.add_child(size_label)
+	polygon_hint = Ui.label("Click the map to add corners · drag a corner to move it · right-click removes · click the first corner or press Enter to close", 16, Ui.MUTED, true)
+	polygon_hint.visible = false
+	box.add_child(polygon_hint)
+	polygon_clear = Ui.button("Clear the outline", func():
+		polygon.clear()
+		polygon_closed = false
+		area_changed())
+	polygon_clear.visible = false
+	box.add_child(polygon_clear)
 	size_slider = HSlider.new()
 	size_slider.custom_minimum_size.y = 32
 	size_slider.min_value = MIN_SIZE_KM
@@ -206,13 +259,32 @@ func build_side() -> void:
 	size_slider.value = size_km
 	size_slider.value_changed.connect(func(v):
 		size_km = v
+		estimate.clear()
 		source_check_at = Time.get_ticks_msec() + 700
 		package_offer.clear()
 		if download_package_button: download_package_button.visible = false
 		update_size()
 		view.queue_redraw())
 	box.add_child(size_slider)
+	box.add_child(Ui.label("Road builder", 18, Ui.MUTED))
+	road_menu = OptionButton.new()
+	road_menu.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	for mode in ROAD_MODES:
+		road_menu.add_item(tr(mode[1]))
+	var settings := ConfigFile.new()
+	settings.load(SETTINGS)
+	var saved := str(settings.get_value("generator", "road_geometry", "legacy"))
+	road_menu.select(maxi(0, ROAD_MODES.map(func(m): return m[0]).find(saved)))
+	road_menu.item_selected.connect(func(_i):
+		estimate.clear()
+		source_check_at = Time.get_ticks_msec() + 300
+		update_size())
+	box.add_child(road_menu)
+	road_note = Ui.label("", 18, Ui.MUTED, true)
+	road_note.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	box.add_child(road_note)
 	size_warning = Ui.label("", 18, Ui.MUTED, true)
+	size_warning.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	box.add_child(size_warning)
 	box.add_child(Ui.label("Map name", 18, Ui.MUTED))
 	name_edit = LineEdit.new()
@@ -277,6 +349,12 @@ func build_side() -> void:
 	box.add_child(details)
 	side.add_child(HSeparator.new())
 	side.add_child(Ui.label("3 / BUILD", 18, Ui.ACCENT))
+	wait_label = Ui.label("", 22, Ui.TEXT, true)
+	wait_label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	side.add_child(wait_label)
+	wait_detail = Ui.label("", 16, Ui.MUTED, true)
+	wait_detail.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	side.add_child(wait_detail)
 	status = Ui.label("Select an area, then Generate", 20, Ui.TEXT, true)
 	side.add_child(status)
 	progress = ProgressBar.new()
@@ -285,6 +363,9 @@ func build_side() -> void:
 	progress.step = 0.001
 	progress.visible = false
 	side.add_child(progress)
+	elapsed_label = Ui.label("", 18, Ui.MUTED)
+	elapsed_label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	side.add_child(elapsed_label)
 	var buttons := HBoxContainer.new()
 	side.add_child(buttons)
 	back_button = Ui.button("Back", back_or_cancel)
@@ -346,6 +427,15 @@ func lonlat_to_screen(ll: Vector2) -> Vector2:
 
 ## Same square as tools/generate_map.py bbox_around: [west, south, east, north].
 func area_bbox() -> Array:
+	if draw_mode:
+		if polygon.is_empty():
+			return [selected.x, selected.y, selected.x, selected.y]
+		var lo := polygon[0]
+		var hi := polygon[0]
+		for q in polygon:
+			lo = Vector2(minf(lo.x, q.x), minf(lo.y, q.y))
+			hi = Vector2(maxf(hi.x, q.x), maxf(hi.y, q.y))
+		return [lo.x, lo.y, hi.x, hi.y]
 	var dlat := size_km / 2.0 / KM_PER_DEG_LAT
 	var dlon := size_km / 2.0 / (KM_PER_DEG_LON * cos(deg_to_rad(selected.y)))
 	return [selected.x - dlon, selected.y - dlat, selected.x + dlon, selected.y + dlat]
@@ -370,6 +460,9 @@ func draw_map() -> void:
 			else:
 				view.draw_rect(Rect2(pos, Vector2(ts, ts)), Color("dfe6e8"))
 				request_tile(key)
+	if draw_mode:
+		draw_polygon_outline()
+		return
 	# Build area and centre marker.
 	var b := area_bbox()
 	var a := lonlat_to_screen(Vector2(b[0], b[3]))
@@ -455,7 +548,11 @@ func map_input(event: InputEvent) -> void:
 			KEY_EQUAL: zoom_at(view.size / 2.0, 1)
 			KEY_MINUS: zoom_at(view.size / 2.0, -1)
 			KEY_ENTER:
-				if pid < 0: select(center, false)
+				if draw_mode:
+					if not busy() and polygon.size() >= 3:
+						polygon_closed = true
+						area_changed()
+				elif not busy(): select(center, false)
 		if movement != Vector2.ZERO:
 			center = from_tile(to_tile(center, zoom) + movement * 0.25, zoom)
 		view.queue_redraw()
@@ -463,15 +560,33 @@ func map_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and event.pressed:
 			zoom_at(event.position, 1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -1)
+		elif draw_mode and not busy() and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			var hit := vertex_at(event.position)
+			if hit >= 0:
+				polygon.remove_at(hit)
+				polygon_closed = polygon_closed and polygon.size() >= 3
+				area_changed()
 		elif event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
+			if event.pressed and draw_mode and not busy() and vertex_at(event.position) >= 0 \
+					and not (not polygon_closed and vertex_at(event.position) == 0 and polygon.size() >= 3):
+				drag_vertex = vertex_at(event.position)
+			elif not event.pressed and drag_vertex >= 0:
+				drag_vertex = -1
+				area_changed()
+			elif event.pressed:
 				dragging = true
 				press_at = event.position
 				moved = 0.0
 			else:
 				dragging = false
-				if moved < 5.0 and pid < 0:
-					select(screen_to_lonlat(event.position), false)
+				if moved < 5.0 and not busy():
+					if draw_mode:
+						add_vertex(event.position)
+					else:
+						select(screen_to_lonlat(event.position), false)
+	elif event is InputEventMouseMotion and drag_vertex >= 0:
+		polygon[drag_vertex] = screen_to_lonlat(event.position)
+		view.queue_redraw()
 	elif event is InputEventMouseMotion and dragging:
 		moved += event.relative.length()
 		center = from_tile(to_tile(center, zoom) - event.relative / tile_px(), zoom)
@@ -493,6 +608,8 @@ func select(lonlat: Vector2, recenter: bool) -> void:
 	selected = Vector2(wrapf(lonlat.x, -180.0, 180.0), clampf(lonlat.y, -84.9, 84.9))
 	if recenter:
 		center = selected
+	if changed:
+		estimate.clear()
 	sync_fields()
 	source_check_at = Time.get_ticks_msec() + 700
 	if changed:
@@ -507,7 +624,7 @@ func sync_fields() -> void:
 
 ## "50.45, 30.52", "50.45 30.52" or "50.45;30.52" (latitude first, as web maps copy it).
 func apply_coords() -> bool:
-	if pid >= 0: return false
+	if busy(): return false
 	var parts := coords.text.replace(";", ",").replace(",", " ").split(" ", false)
 	if parts.size() == 2 and parts[0].is_valid_float() and parts[1].is_valid_float():
 		var lat := parts[0].to_float()
@@ -522,31 +639,43 @@ func update_size() -> void:
 	if size_label == null:
 		return
 	size_label.text = tr("Area: %.1f × %.1f km (%.1f km²)") % [size_km, size_km, size_km * size_km]
-	size_warning.text = tr("Large area: may take 10–30 minutes and several GB of memory") if size_km > LARGE_KM else tr("Usually a few minutes")
-	size_warning.add_theme_color_override("font_color", Color("e08a6a") if size_km > LARGE_KM else Color("859ca7"))
+	if draw_mode:
+		size_label.text = polygon_status()
+	size_slider.visible = not draw_mode
+	polygon_hint.visible = draw_mode
+	polygon_clear.visible = draw_mode and not polygon.is_empty()
+	mode_button.disabled = busy()
+	var large := area_km2() > LARGE_KM * LARGE_KM
+	if road_menu:
+		road_note.text = tr(ROAD_MODES[road_menu.selected][2])
+		road_menu.disabled = busy()
+	size_warning.text = tr("Large area: needs several GB of memory") if large else ""
+	size_warning.visible = large
+	show_estimate()
+	size_warning.add_theme_color_override("font_color", Color("e08a6a") if large else Color("859ca7"))
 	# Edges near the antimeridian or the poles cannot be built.
 	var b := area_bbox()
 	if generate_button:
 		generate_button.text = "Retry" if had_error else "Generate"
-		search.editable = pid < 0
-		coords.editable = pid < 0
-		name_edit.editable = pid < 0
-		size_slider.editable = pid < 0
-		signs_box.disabled = pid >= 0
-		generate_button.disabled = pid >= 0 or b[0] < -180.0 or b[2] > 180.0 or b[1] <= -85.0 or b[3] >= 85.0
+		search.editable = not busy()
+		coords.editable = not busy()
+		name_edit.editable = not busy()
+		size_slider.editable = not busy()
+		signs_box.disabled = busy()
+		generate_button.disabled = busy() or (draw_mode and polygon_error() != "") or b[0] < -180.0 or b[2] > 180.0 or b[1] <= -85.0 or b[3] >= 85.0
 	if source_mode:
-		source_mode.disabled = pid >= 0
-		local_package.disabled = pid >= 0
-		saved_area.disabled = pid >= 0
-		refresh_source.disabled = pid >= 0 or source_mode.selected == 1
-		for button in source_buttons: button.disabled = pid >= 0
-		source_buttons[2].disabled = pid >= 0 or source_mode.selected == 1
-		download_package_button.disabled = pid >= 0 or source_mode.selected == 1
+		source_mode.disabled = busy()
+		local_package.disabled = busy()
+		saved_area.disabled = busy()
+		refresh_source.disabled = busy() or source_mode.selected == 1
+		for button in source_buttons: button.disabled = busy()
+		source_buttons[2].disabled = busy() or source_mode.selected == 1
+		download_package_button.disabled = busy() or source_mode.selected == 1
 
 # --- Search -----------------------------------------------------------------------
 
 func run_search() -> void:
-	if pid >= 0: return
+	if busy(): return
 	if source_mode.selected == 1:
 		set_search_status(tr("Offline: use coordinates or a saved area"))
 		return
@@ -588,7 +717,7 @@ func search_done(result: int, code: int, _headers: PackedStringArray, body: Pack
 		b.custom_minimum_size = Vector2(0, 48)
 		b.add_theme_font_size_override("font_size", 18)
 		b.pressed.connect(func():
-			if pid >= 0: return
+			if busy(): return
 			zoom = 14
 			select(Vector2(lon, lat), true)
 			if name_edit.text.strip_edges() == "":
@@ -597,6 +726,9 @@ func search_done(result: int, code: int, _headers: PackedStringArray, body: Pack
 
 # --- Generation -------------------------------------------------------------------
 
+func road_geometry() -> String:
+	return ROAD_MODES[road_menu.selected][0] if road_menu else "legacy"
+
 static func project_root() -> String:
 	return ProjectSettings.globalize_path("res://").trim_suffix("/").get_base_dir()
 
@@ -604,6 +736,8 @@ func start_generation() -> void:
 	start_data_action("generate")
 
 func start_data_action(action: String) -> void:
+	if checking():
+		abort_check()
 	if pid >= 0:
 		return
 	var accepted_offer := package_offer.duplicate()
@@ -629,6 +763,15 @@ func start_data_action(action: String) -> void:
 		"--events", events_path, "--log", events_path + ".log", "--exit-with-parent",
 		"--parent-pid", str(OS.get_process_id()), "--cancel-file", cancel_path])
 	args.append_array(["--action", action, "--mode", "offline" if source_mode.selected == 1 else "auto"])
+	if draw_mode:
+		args.append_array(["--polygon", write_polygon(events_path.get_basename() + ".area.geojson")])
+	if action in ["generate", "estimate"]:
+		args.append_array(["--road-geometry", road_geometry()])
+	if action == "generate":
+		var settings := ConfigFile.new()
+		settings.load(SETTINGS)
+		settings.set_value("generator", "road_geometry", road_geometry())
+		settings.save(SETTINGS)
 	if local_package.selected > 0:
 		args.append_array(["--package", str(local_package.get_item_metadata(local_package.selected))])
 	if refresh_source.button_pressed and action in ["generate", "prepare"]:
@@ -655,6 +798,12 @@ func start_data_action(action: String) -> void:
 	finished = false
 	last_stage = ""
 	print("Map generator started (pid %d); full log: %s" % [pid, events_path + ".log"])
+	started_ms = Time.get_ticks_msec()
+	current_group = ""
+	groups_done.clear()
+	if action in CHECKS:
+		update_size()
+		return
 	status.text = tr("Starting the generator…")
 	progress.value = 0.0
 	progress.visible = true
@@ -675,6 +824,8 @@ func stop_generator() -> void:
 		OS.kill(pid)
 
 func back_or_cancel() -> void:
+	if checking():
+		abort_check()
 	if pid >= 0:
 		stop_generator()
 		cancelling = true
@@ -684,10 +835,15 @@ func back_or_cancel() -> void:
 		back.emit()
 
 func _process(delta: float) -> void:
-	if pid < 0 and source_check_at >= 0 and Time.get_ticks_msec() >= source_check_at:
-		start_data_action("status")
+	if not busy() and source_check_at >= 0 and Time.get_ticks_msec() >= source_check_at:
+		if draw_mode and polygon_error() != "":
+			source_check_at = -1
+		else:
+			start_data_action("estimate")
 	if pid < 0 or finished:
 		return
+	if active_action == "generate":
+		elapsed_label.text = countdown()
 	poll_clock += delta
 	if poll_clock < 0.25:
 		return
@@ -696,6 +852,11 @@ func _process(delta: float) -> void:
 	if not finished and not OS.is_process_running(pid):
 		read_events()
 		if not finished:
+			if active_action in CHECKS:
+				finished = true
+				pid = -1
+				update_size()
+				return
 			if cancelling:
 				fail(tr("Generation cancelled"))
 				return
@@ -718,6 +879,8 @@ func read_events() -> void:
 				progress.value = maxf(progress.value, float(record.get("progress", progress.value)))
 				back_button.disabled = cancelling or record.get("phase", "") == "install"
 				status.text = stage_text(str(record.get("phase", "")), str(record.get("stage", "")))
+				if active_action == "generate":
+					enter_group(group_of(str(record.get("stage", ""))))
 				var stage := "%s · %s" % [record.get("phase", ""), record.get("stage", "")]
 				if stage != last_stage:
 					last_stage = stage
@@ -750,6 +913,12 @@ func read_events() -> void:
 				var message := str(record.get("message", record.get("code", "")))
 				printerr("Map generator failed: %s (log: %s.log)" % [message, events_path])
 				technical(message)
+				if active_action in CHECKS:
+					# Advisory only: keep the area-only line, no error banner.
+					finished = true
+					pid = -1
+					update_size()
+					continue
 				had_error = record.get("code", "") != "cancelled"
 				fail(error_text(message, str(record.get("code", ""))) if had_error else tr("Generation cancelled"))
 	lines_seen = lines.size()
@@ -796,7 +965,10 @@ func data_result(record: Dictionary) -> void:
 	fail(tr("Local data updated"))
 	had_error = false
 	match active_action:
-		"status":
+		"status", "estimate":
+			if active_action == "estimate":
+				estimate = record
+				show_estimate()
 			readiness.text = tr("OSM: %s · Terrain: %s") % [tr("ready") if record.get("osm_ready") else tr("missing"), tr("ready") if record.get("terrain_ready") else tr("missing")]
 			var selected_package := ""
 			if local_package.selected > 0: selected_package = str(local_package.get_item_metadata(local_package.selected))
@@ -838,10 +1010,224 @@ func fail(message: String) -> void:
 	finished = true
 	pid = -1
 	progress.visible = false
+	elapsed_label.text = ""
 	back_button.text = "Back"
 	back_button.disabled = false
 	status.text = message
 	update_size()
+
+# --- Drawn area -------------------------------------------------------------------
+
+func area_km2() -> float:
+	return polygon_km2() if draw_mode else size_km * size_km
+
+## Local equirectangular km (same constants as the square), fine at map scale.
+func polygon_km() -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if polygon.is_empty():
+		return out
+	var lat0 := deg_to_rad(polygon[0].y)
+	for q in polygon:
+		out.append(Vector2(q.x * KM_PER_DEG_LON * cos(lat0), q.y * KM_PER_DEG_LAT))
+	return out
+
+func polygon_km2() -> float:
+	var pts := polygon_km()
+	var twice := 0.0
+	for i in pts.size():
+		var a := pts[i]
+		var b := pts[(i + 1) % pts.size()]
+		twice += a.x * b.y - b.x * a.y
+	return absf(twice) / 2.0
+
+static func segments_cross(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool:
+	var d1 := (b - a).cross(c - a)
+	var d2 := (b - a).cross(d - a)
+	var d3 := (d - c).cross(a - c)
+	var d4 := (d - c).cross(b - c)
+	return d1 * d2 < 0.0 and d3 * d4 < 0.0
+
+func polygon_crosses_itself() -> bool:
+	var pts := polygon_km()
+	var n := pts.size()
+	for i in n:
+		for j in range(i + 1, n):
+			if absi(i - j) <= 1 or (i == 0 and j == n - 1):
+				continue   # neighbouring edges share a corner
+			if segments_cross(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]):
+				return true
+	return false
+
+## Empty when the outline can be built; mirrors corridor.drawn_area on the generator side.
+func polygon_error() -> String:
+	if polygon.size() < 3:
+		return tr("Add at least three corners")
+	if not polygon_closed:
+		return tr("Close the outline: click the first corner or press Enter")
+	if polygon_crosses_itself():
+		return tr("The outline crosses itself")
+	var km2 := polygon_km2()
+	if km2 < DRAWN_MIN_KM2:
+		return tr("The area is too small (%.2f km²)") % km2
+	if km2 > DRAWN_MAX_KM2:
+		return tr("The area is too large: %.1f km² (up to %d km²)") % [km2, int(DRAWN_MAX_KM2)]
+	return ""
+
+func polygon_status() -> String:
+	var error := polygon_error()
+	if error != "":
+		return error
+	return tr("Drawn area: %.2f km², %d corners") % [polygon_km2(), polygon.size()]
+
+func vertex_at(p: Vector2) -> int:
+	for i in polygon.size():
+		if lonlat_to_screen(polygon[i]).distance_to(p) <= VERTEX_PICK_PX:
+			return i
+	return -1
+
+func add_vertex(p: Vector2) -> void:
+	if polygon_closed:
+		return
+	if polygon.size() >= 3 and vertex_at(p) == 0:
+		polygon_closed = true
+	else:
+		polygon.append(screen_to_lonlat(p))
+	area_changed()
+
+## Any change of the drawn outline: centre, fields, estimate and redraw follow it.
+func area_changed() -> void:
+	estimate.clear()
+	if draw_mode and polygon.size() >= 3:
+		var sum := Vector2.ZERO
+		for q in polygon:
+			sum += q
+		selected = sum / polygon.size()
+		coords.text = "%.5f, %.5f" % [selected.y, selected.x]
+	source_check_at = Time.get_ticks_msec() + 700
+	package_offer.clear()
+	if download_package_button: download_package_button.visible = false
+	update_size()
+	view.queue_redraw()
+
+func draw_polygon_outline() -> void:
+	if polygon.is_empty():
+		return
+	var ok := polygon_error() == ""
+	var line := Color("208d7d") if ok or not polygon_closed else Color("d0573a")
+	var points := PackedVector2Array()
+	for q in polygon:
+		points.append(lonlat_to_screen(q))
+	if polygon_closed and points.size() >= 3 and not polygon_crosses_itself():
+		view.draw_colored_polygon(points, Color(line, 0.18))
+	for i in points.size() - (0 if polygon_closed else 1):
+		view.draw_line(points[i], points[(i + 1) % points.size()], line, 2.0, true)
+	for i in points.size():
+		view.draw_circle(points[i], 6.0 if i == 0 and not polygon_closed else 4.5, line)
+		view.draw_circle(points[i], 2.0, Color.WHITE)
+
+## GeoJSON for generate_map.py --polygon; the same outline is stored in the map config.
+func write_polygon(path: String) -> String:
+	var ring: Array = []
+	for q in polygon:
+		ring.append([snappedf(q.x, 0.0000001), snappedf(q.y, 0.0000001)])
+	ring.append(ring[0])
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify({"type": "Polygon", "coordinates": [ring]}))
+	file.close()
+	return path
+
+## A user-visible job (generate, prepare, download…) runs; background checks do not count.
+func busy() -> bool:
+	return pid >= 0 and not checking()
+
+func checking() -> bool:
+	return pid >= 0 and not finished and active_action in CHECKS
+
+## A readiness/estimate check is only advisory: stop it at once for a real action.
+func abort_check() -> void:
+	if OS.get_name() == "Windows":
+		OS.execute("taskkill", ["/PID", str(pid), "/T", "/F"])
+	else:
+		OS.kill(pid)
+	pid = -1
+	finished = true
+
+static func duration(seconds: float) -> String:
+	if seconds < 90.0:
+		return TranslationServer.translate("%d s") % maxi(5, roundi(seconds / 5.0) * 5)
+	if seconds < 5400.0:
+		return TranslationServer.translate("%d min") % roundi(seconds / 60.0)
+	return TranslationServer.translate("%.1f h") % (seconds / 3600.0)
+
+## The waiting-time card: density-aware once counted, the old area-only range before.
+func show_estimate() -> void:
+	if wait_label == null:
+		return
+	if not estimate.has("estimate"):
+		wait_label.text = tr("Waiting time: %s") % Estimates.span(Estimates.minutes("build", road_geometry(), area_km2()))
+		wait_detail.text = tr("Counting roads and buildings in this area…")
+		return
+	var e: Dictionary = estimate["estimate"]
+	var f: Dictionary = estimate["features"]
+	var range_s: Array = e["seconds"]
+	wait_label.text = tr("Waiting time: ≈ %s (%s – %s)") % [duration(float(e["expected_s"])),
+		duration(float(range_s[0])), duration(float(range_s[1]))]
+	var parts: Array[String] = []
+	if str(f.get("basis", "")) == "area_only":
+		parts.append(tr("Rough: only the area is known, roads and buildings were not counted"))
+	else:
+		parts.append(tr("%d roads · %d buildings") % [int(f.get("roads", 0)), int(f.get("buildings", 0))])
+	parts.append(tr("map data is here") if f.get("osm_ready", false) else tr("map data will be downloaded"))
+	if int(f.get("dem_missing", 0)) > 0:
+		parts.append(tr("terrain: %d tiles to download") % int(f["dem_missing"]))
+	if int(e.get("machine_runs", 0)) > 0:
+		parts.append(tr("tuned by %d of your builds") % int(e["machine_runs"]))
+	wait_detail.text = " · ".join(parts)
+
+func group_of(stage: String) -> String:
+	if estimate.has("estimate"):
+		var groups: Dictionary = estimate["estimate"]["stage_groups"]
+		for group in groups:
+			if stage in groups[group]:
+				return group
+	return current_group
+
+func enter_group(group: String) -> void:
+	if group == current_group:
+		return
+	var now := Time.get_ticks_msec()
+	if current_group != "":
+		groups_done[current_group] = float(groups_done.get(current_group, 0.0)) + (now - group_started_ms) / 1000.0
+	current_group = group
+	group_started_ms = now
+
+## "About 3 min left" from the estimate, re-paced by how the finished groups went.
+func countdown() -> String:
+	var elapsed := (Time.get_ticks_msec() - started_ms) / 1000.0
+	if not estimate.has("estimate"):
+		return tr("Elapsed: %s") % duration(elapsed)
+	var expected: Dictionary = estimate["estimate"]["stages"]
+	var done_actual := 0.0
+	var done_expected := 0.0
+	for group in groups_done:
+		done_actual += float(groups_done[group])
+		done_expected += float(expected.get(group, 0.0))
+	# Pace from finished work, only once it is long enough to mean something.
+	var pace := clampf(done_actual / done_expected, 0.5, 3.0) if done_expected >= 10.0 else 1.0
+	var left := 0.0
+	var overrun := false
+	for group in expected:
+		if groups_done.has(group):
+			continue
+		var share := float(expected[group]) * pace
+		if group == current_group:
+			var spent := (Time.get_ticks_msec() - group_started_ms) / 1000.0
+			overrun = spent > share * 1.2 + 10.0
+			share = maxf(share - spent, 0.0)
+		left += share
+	if overrun or elapsed > float(estimate["estimate"]["seconds"][1]):
+		return tr("Taking longer than expected · elapsed %s") % duration(elapsed)
+	return tr("About %s left · elapsed %s") % [duration(maxf(left, 5.0)), duration(elapsed)]
 
 func _exit_tree() -> void:
 	if pid >= 0:

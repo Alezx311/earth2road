@@ -1,0 +1,4 @@
+interface:
+  display_name: "Earth2Road Director"
+  short_description: "Plan geographic showcases and clean BeamNG videos"
+  default_prompt: "Use $earth2road-director to plan and capture a photo-matched city showcase."

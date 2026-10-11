@@ -1,0 +1,18 @@
+{
+  "cases": [{
+    "category": "synthetic",
+    "inputs": "examples/tiny/inputs",
+    "config": {
+      "bbox": [30.348, 50.448, 30.364, 50.46],
+      "center": [30.356, 50.454],
+      "demand_pool": 5,
+      "id": "tiny",
+      "name": "Streaming probe synthetic fixture",
+      "region_profile": "experimental",
+      "source_kind": "synthetic",
+      "road_geometry": {"mode": "v2"},
+      "terrain_zoom": 12,
+      "seed": 311
+    }
+  }]
+}

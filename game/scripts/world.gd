@@ -9,9 +9,9 @@ const MARK_LIFT := 0.025
 const CURB := 0.15
 const BRIDGE_DEPTH := 1.2
 const CHUNK := 250.0
-const COLLIDE := {"road": 1, "dirt": 1, "gravel": 1, "farmland": 2, "garden": 2, "orchard": 2, "yard": 2, "fence": 4, "ground": 2, "green": 2, "wood": 2, "parking": 2, "building": 4, "bridge": 4, "sidewalk": 8}
+const COLLIDE := {"road": 1, "dirt": 1, "gravel": 1, "farmland": 2, "garden": 2, "orchard": 2, "yard": 2, "fence": 4, "ground": 2, "green": 2, "wood": 2, "water": 2, "pitch": 2, "track": 2, "parking": 2, "building": 4, "bridge": 4, "sidewalk": 8}
 ## Tyre surface for GEVP wheels (Wheel reads the collider's first group).
-const SURFACE := {"road": "Road", "dirt": "Dirt", "gravel": "Dirt", "farmland": "Dirt", "garden": "Dirt", "orchard": "Grass", "yard": "Dirt", "parking": "Road", "sidewalk": "Road", "bridge": "Road", "building": "Road", "ground": "Dirt", "green": "Grass", "wood": "Grass"}
+const SURFACE := {"road": "Road", "dirt": "Dirt", "gravel": "Dirt", "farmland": "Dirt", "garden": "Dirt", "orchard": "Grass", "yard": "Dirt", "parking": "Road", "sidewalk": "Road", "bridge": "Road", "building": "Road", "ground": "Dirt", "green": "Grass", "wood": "Grass", "water": "Dirt", "pitch": "Grass", "track": "Road"}
 const Materials = preload("res://scripts/materials.gd")
 const VisualTile = preload("res://visuals/tile.gd")
 
@@ -52,6 +52,7 @@ func tri(a: Vector3, b: Vector3, c: Vector3, kind: String, facing_up := true, uv
 	for v in [a, b, c]:
 		st.set_color(color)
 		st.set_uv(Vector2(v.x, v.z) if uv == Vector2.INF else uv)
+		st.set_uv2(Vector2.ZERO)
 		st.add_vertex(v)
 
 func wall(a: Vector3, b: Vector3, bottom: float, top: float, kind: String, color := Color.WHITE) -> void:
@@ -62,6 +63,8 @@ func wall(a: Vector3, b: Vector3, bottom: float, top: float, kind: String, color
 	for i in [0, 1, 2, 0, 2, 3]:
 		st.set_color(color)
 		st.set_uv(uvs[i])
+		# UV2 = (wall length, wall top): facade.gdshader finds the corners and the roof line.
+		st.set_uv2(Vector2(run, top))
 		st.add_vertex(quad[i])
 
 ## Left/right borders of a polyline ribbon with mitred joints (no wedges on bends).
@@ -161,7 +164,7 @@ static func shared() -> Dictionary:
 ## (far tiles). collide: create trimesh collisions now, else queue them for add_collisions().
 func build(source: Dictionary, level := "full", collide := true) -> void:
 	data = source
-	mats = shared()
+	mats = shared().duplicate()
 	var full := level == "full"
 	for t in data.get("ground", []):
 		tri(vec(t[0]), vec(t[1]), vec(t[2]), "ground")
@@ -208,6 +211,8 @@ func build(source: Dictionary, level := "full", collide := true) -> void:
 				wall(side[i], side[i+1], -0.1, float(fence.height), "fence")
 				wall(side[i+1], side[i], -0.1, float(fence.height), "fence")
 	commit(collide)
+	if full:
+		build_parked_cars()
 	var visual := VisualTile.new()
 	visual.name = "KyivVisuals"
 	add_child(visual)
@@ -227,6 +232,19 @@ func build_deck_sides(sides: Array) -> void:
 		tri(l[i] + down, r[i + 1] + down, l[i + 1] + down, "bridge", false)
 
 func build_building(building: Dictionary) -> void:
+	var facade_kind := "facade"
+	if building.has("local_style"):
+		var style: Dictionary = building.local_style
+		var shade: String = str(style.get("color") if style.get("color") != null else "#b5b2aa")
+		var material_id := ["plaster", "brick", "concrete", "glass", "metal", "stone"].find(str(style.material))
+		facade_kind = "dna_facade_" + str(style.architecture) + "_" + str(material_id) + "_" + shade.substr(1)
+		if not mats.has(facade_kind):
+			var material: ShaderMaterial = mats.facade.duplicate()
+			material.set_shader_parameter("dna_enabled", true)
+			material.set_shader_parameter("dna_color", Color(shade))
+			material.set_shader_parameter("dna_architecture", ["historic", "brick", "panel", "modern", "industrial"].find(style.architecture))
+			material.set_shader_parameter("dna_material", material_id)
+			mats[facade_kind] = material
 	var pts: Array = building.points.duplicate()
 	var area := 0.0
 	for i in range(pts.size()):
@@ -244,25 +262,46 @@ func build_building(building: Dictionary) -> void:
 	for p in pts:
 		poly.append(Vector2(p[0], p[2]))
 	var indices := Geometry2D.triangulate_polygon(poly)
+	var roof_kind := str(building.get("roof_material", "roof"))
+	var flat_roof := "roof"
+	# Observed OSM roof:colour (playtest 2026-10-06, note 10): one material per colour.
+	if building.has("roof_color"):
+		roof_kind = "roof_c_" + str(building.roof_color).substr(1)
+		flat_roof = roof_kind
+		if not mats.has(roof_kind):
+			mats[roof_kind] = Materials.surface("", 1.0, Color.WHITE, Color(str(building.roof_color)), {"roughness_bias": -0.1})
 	for t in building.get("roof_triangles", []):
-		tri(vec(t[0]), vec(t[1]), vec(t[2]), str(building.get("roof_material", "roof")))
+		tri(vec(t[0]), vec(t[1]), vec(t[2]), roof_kind)
 	for t in building.get("roof_gables", []):
-		tri(vec(t[0]), vec(t[1]), vec(t[2]), str(building.get("roof_material", "roof")), false)
-		tri(vec(t[2]), vec(t[1]), vec(t[0]), str(building.get("roof_material", "roof")), false)
-	for i in range(0, indices.size(), 3) if not building.has("roof_triangles") else []:
+		tri(vec(t[0]), vec(t[1]), vec(t[2]), roof_kind, false)
+		tri(vec(t[2]), vec(t[1]), vec(t[0]), roof_kind, false)
+	var shaped := building.has("roof_triangles")
+	for i in range(0, indices.size(), 3) if not shaped or base > 0.0 else []:
 		var a := Vector3(poly[indices[i]].x, top, poly[indices[i]].y)
 		var b := Vector3(poly[indices[i + 1]].x, top, poly[indices[i + 1]].y)
 		var c := Vector3(poly[indices[i + 2]].x, top, poly[indices[i + 2]].y)
-		tri(a, b, c, "roof")
+		if not shaped:
+			tri(a, b, c, flat_roof)
 		if base > 0.0:
 			tri(Vector3(a.x, bottom, a.z), Vector3(b.x, bottom, b.z), Vector3(c.x, bottom, c.z), "facade", false, Vector2(0, -1))
 	# COLOR.r: tint from the OSM id; COLOR.g: shop ground floor; COLOR.b: facade family / 5 (facade.gdshader).
-	var tint := Color(fposmod(float(hash(str(building.id))) / 7919.0, 1.0), 1.0 if building.get("ground_floor", "") == "shop" else 0.0, float(VisualTile.family(building)) / 5.0)
+	# COLOR.a: 1 = single windows, 0.5 = loggia facade (VisualTile.loggias); 0.25 less on an end
+	# wall (VisualTile.end_walls), which the photo style draws blank.
+	var tint := Color(fposmod(float(hash(str(building.id))) / 7919.0, 1.0), 1.0 if building.get("ground_floor", "") == "shop" else 0.0, float(VisualTile.family(building)) / 5.0, 0.5 if VisualTile.loggias(building) else 1.0)
+	var ends := VisualTile.end_walls(pts)
+	# S3DB parts (and touching outlines) often share an outer wall plane over the same heights;
+	# with photo facades that z-fought. Each record's walls step inward by 0–2 cm, keyed by its
+	# height range, so coplanar walls get distinct depths; the roof edge hides the step.
+	var inset := 0.02 * fposmod((top - bottom) * 0.37 + base * 0.11, 1.0)
 	for i in range(pts.size()):
 		var j := (i + 1) % pts.size()
 		var a := Vector3(pts[i][0], floor_y, pts[i][2])
 		var b := Vector3(pts[j][0], floor_y, pts[j][2])
-		wall(a, b, bottom - floor_y, top - floor_y, "facade", tint)
+		var inward := Vector3(a.z - b.z, 0, b.x - a.x).normalized() * inset
+		var wall_tint := tint
+		if ends[i]:
+			wall_tint.a -= 0.25
+		wall(a + inward, b + inward, bottom - floor_y, top - floor_y, facade_kind, wall_tint)
 
 func commit(collide := true) -> void:
 	for key in buckets:
@@ -276,10 +315,13 @@ func commit(collide := true) -> void:
 		# Wide ranges: the spectator camera looks at the whole district from kilometres up.
 		inst.visibility_range_end = 5000 if item.kind in ["facade", "roof", "roof_tile", "roof_metal"] else (500 if item.kind in ["mark", "path", "curb", "fence"] else 9000)
 		# Flat cover cannot shade anything visible; skipping it keeps the shadow passes cheap.
-		if item.kind in ["mark", "path", "ground", "green", "wood", "water", "parking", "road", "sidewalk", "curb", "dirt", "gravel", "farmland", "garden", "orchard", "yard"]:
+		if item.kind in ["mark", "path", "ground", "green", "wood", "water", "pitch", "track", "parking", "road", "sidewalk", "curb", "dirt", "gravel", "farmland", "garden", "orchard", "yard"]:
 			inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(inst)
 		var layer_kind: String = "building" if item.kind in ["facade", "roof", "roof_tile", "roof_metal"] else item.kind
+		if str(item.kind).begins_with("dna_facade_") or str(item.kind).begins_with("roof_c_"):
+			layer_kind = "building"
+			inst.visibility_range_end = 5000
 		if COLLIDE.has(layer_kind):
 			pending_collisions.append([inst, layer_kind])
 	buckets.clear()
@@ -299,6 +341,27 @@ func add_collisions(budget_ms: float) -> bool:
 		if (Time.get_ticks_usec() - start) / 1000.0 > budget_ms:
 			break
 	return pending_collisions.is_empty()
+
+## Courtyard parked cars (visual_props, drawn by VisualTile): one box each, solid like a
+## wall, so the player cannot drive through them. Traffic never reaches them (off-lane).
+func build_parked_cars() -> void:
+	var body: StaticBody3D = null
+	for item in data.get("visual_props", []):
+		if item.kind != "parked_car":
+			continue
+		if body == null:
+			body = StaticBody3D.new()
+			body.name = "ParkedCars"
+			body.collision_layer = COLLIDE.building
+			body.add_to_group(SURFACE.get("building", "Road"))
+			add_child(body)
+		var size: Array = item.get("size", [1.8, 1.45, 4.5])
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(size[0], size[1], size[2])
+		var col := CollisionShape3D.new()
+		col.shape = shape
+		col.transform = Transform3D(Basis(Vector3.UP, float(item.get("yaw", 0))), vec(item.position) + Vector3.UP * float(size[1]) * 0.5)
+		body.add_child(col)
 
 ## One pole per signalised approach at the right edge, heads over each lane on an arm.
 func build_signals() -> void:

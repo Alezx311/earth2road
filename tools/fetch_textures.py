@@ -17,11 +17,13 @@ def main():
     DEST.mkdir(parents=True, exist_ok=True)
     manifest_path = DEST/'manifest.json'
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-    for name, asset in cfg['sets'].items():
+    for name, entry in cfg['sets'].items():
+        asset = entry['asset'] if isinstance(entry, dict) else entry
+        resolution = entry.get('resolution', cfg['resolution']) if isinstance(entry, dict) else cfg['resolution']
         folder = DEST/name
-        if manifest.get(name, {}).get('asset') == asset and all((folder/f'{m}.jpg').exists() for m in MAPS.values()):
+        if manifest.get(name, {}).get('asset') == asset and manifest[name].get('source', '').endswith(f'_{resolution}.zip') and all((folder/f'{m}.jpg').exists() for m in MAPS.values()):
             continue
-        url = f"https://ambientcg.com/get?file={asset}_{cfg['resolution']}.zip"
+        url = f"https://ambientcg.com/get?file={asset}_{resolution}.zip"
         blob = subprocess.run(['curl', '-fsSL', '--retry', '2', '--max-time', '300', url], check=True, capture_output=True).stdout
         folder.mkdir(exist_ok=True)
         files = {}

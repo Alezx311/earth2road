@@ -16,6 +16,7 @@ from pathlib import Path
 import time
 
 import osmium
+from akadem_maps.core.landmarks import category as landmark_category
 
 POI_TAGS = {'amenity': {'fuel'},
             'shop': {'supermarket', 'hypermarket', 'mall', 'doityourself', 'department_store'}}
@@ -23,6 +24,19 @@ POI_TAGS = {'amenity': {'fuel'},
 
 def poi(tags):
     return any(tags.get(key) in values for key, values in POI_TAGS.items())
+
+
+def drop_incomplete(relations, members, written):
+    """Selected relation ids whose members (recursively) are all in ``written`` / the selection."""
+    keep = set(relations)
+    changed = True
+    while changed:
+        bad = {rid for rid in keep if rid not in members or any(
+            (kind == 'r' and ref not in keep) or (kind in written and ref not in written[kind])
+            for kind, ref in members[rid])}
+        keep -= bad
+        changed = bool(bad)
+    return keep
 
 
 def extract(pbf, out, bbox, polygon=None):
@@ -47,14 +61,14 @@ def extract(pbf, out, bbox, polygon=None):
         if obj.is_node():
             if inside(obj.location):
                 inside_nodes.add(obj.id)
-                if obj.tags and poi(obj.tags):
+                if obj.tags and (poi(obj.tags) or landmark_category(obj.tags)):
                     member_nodes.add(obj.id)
         elif obj.is_way():
             if any(inside(nd.location) for nd in obj.nodes):
                 ways.add(obj.id)
         elif obj.is_relation():
             relation_members[obj.id] = [(m.type, m.ref) for m in obj.members]
-            if obj.tags.get('type') in ('restriction', 'multipolygon'):
+            if obj.tags.get('type') in ('restriction', 'multipolygon') or landmark_category(obj.tags):
                 relevant.add(obj.id)
                 for member in obj.members:
                     if member.type == 'n':
@@ -92,10 +106,19 @@ def extract(pbf, out, bbox, polygon=None):
     # Pass 3: write in file order (nodes, ways, relations).
     tmp = Path(str(out) + '.part')
     tmp.parent.mkdir(parents=True, exist_ok=True)
+    written = {'n': set(), 'w': set()}
     with osmium.SimpleWriter(osmium.io.File(str(tmp), 'osm'), overwrite=True) as writer:
-        for kind, ids, add in ((osmium.osm.NODE, nodes, writer.add_node), (osmium.osm.WAY, ways, writer.add_way), (osmium.osm.RELATION, relations, writer.add_relation)):
+        for kind, key, ids, add in ((osmium.osm.NODE, 'n', nodes, writer.add_node), (osmium.osm.WAY, 'w', ways, writer.add_way)):
             for obj in osmium.FileProcessor(str(pbf), kind).with_filter(osmium.filter.IdFilter(ids)):
                 add(obj)
+                written[key].add(obj.id)
+        # A country extract keeps relations whose members lie outside it (Odesa 2026-10-11:
+        # relation 7160849). Such a relation, and any parent of it, is left out and counted.
+        complete = drop_incomplete(relations, relation_members, written)
+        if len(complete) < len(relations):
+            print(f'left out {len(relations)-len(complete)} relations with members outside the package', flush=True)
+        for obj in osmium.FileProcessor(str(pbf), osmium.osm.RELATION).with_filter(osmium.filter.IdFilter(complete)):
+            writer.add_relation(obj)
     from akadem_maps.sources import validate_osm
     try:
         validate_osm(tmp, require_roads=False)

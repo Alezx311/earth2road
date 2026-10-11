@@ -11,6 +11,8 @@ const Modal = preload("res://scripts/ui_modal.gd")
 const IncidentView = preload("res://scripts/incident_view.gd")
 const MapMenu = preload("res://scripts/map_menu.gd")
 const I18n = preload("res://scripts/i18n.gd")
+const Styles = preload("res://scripts/styles.gd")
+const DefectMarker = preload("res://scripts/defect_marker.gd")
 const SPEEDS := [0, 1, 2, 4, 8, 16]
 const MAX_DENSITY := 10000       # fallback; the bridge reports its own limit on connect
 ## Seconds between automatic reconnect attempts while the bridge is unreachable.
@@ -57,6 +59,7 @@ var last_header: Dictionary = {}
 var start_args := {}
 var capture_focus = null
 var map_menu: Control
+var defect_dialog: Control
 ## The traffic socket is opened from _process, never from _ready: Godot sends the WebSocket
 ## handshake only while polling, and building a large map (plus the first shader compile)
 ## can block the main thread for longer than the bridge used to wait for it.
@@ -69,6 +72,11 @@ const UNREACHABLE_SECONDS := 6.0
 
 func _ready() -> void:
 	I18n.setup()
+	Styles.apply(Styles.current())
+	# --texture-style=ID: QA captures of one style without touching the remembered choice.
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--texture-style="):
+			Styles.apply(arg.split("=", true, 1)[1])
 	var args := OS.get_cmdline_user_args()
 	for arg in args:
 		if arg.begins_with("--seconds="):
@@ -120,6 +128,7 @@ func _ready() -> void:
 	sun.directional_shadow_split_3 = 0.45
 	sun.directional_shadow_blend_splits = true
 	add_child(sun)
+	apply_atmosphere()
 	world = WorldStream.new()
 	add_child(world)
 	var sp: Array = data.spawn.position
@@ -146,9 +155,94 @@ func _ready() -> void:
 	reconnect_clock = RECONNECT_SECONDS - 0.5
 	print("WORLD_READY map=%s lanes=%d tiles=%d" % [WorldStream.map_id(),data.lanes.size(),data.tiles.size()])
 
+var day_sky: Material
+var synth_sky: ShaderMaterial
+var nes_sky: ShaderMaterial
+var nes_post: MeshInstance3D
+
+## Sky, sun, fog and glow of the active texture style (Styles.active): the daylight look,
+## for synthwave (2) a dusk with a striped-sun sky, violet fog and strong neon bloom, for
+## 8-bit NES (3) a flat blue sky with block clouds, even light and the palette screen filter.
+func apply_atmosphere() -> void:
+	var synth := Styles.active == 2
+	var nes := Styles.active == 3
+	if synth and synth_sky == null:
+		synth_sky = ShaderMaterial.new()
+		synth_sky.shader = preload("res://shaders/synth_sky.gdshader")
+	if nes and nes_sky == null:
+		nes_sky = ShaderMaterial.new()
+		nes_sky.shader = preload("res://shaders/nes_sky.gdshader")
+	env.sky.sky_material = synth_sky if synth else (nes_sky if nes else day_sky)
+	env.ambient_light_energy = 0.55 if synth else (0.75 if nes else 0.9)
+	# NES: neutral fill light; the blue sky as ambient tinted every grey towards the palette blues.
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR if nes else Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_color = Color.WHITE
+	env.fog_light_color = Color("3a1450") if synth else (Color("5c94fc") if nes else Color("c3d2dc"))
+	env.fog_density = 0.6 if synth else (0.2 if nes else 0.35)
+	env.fog_aerial_perspective = 0.15 if synth else (0.0 if nes else 0.4)
+	env.glow_intensity = 1.0 if synth else (0.0 if nes else 0.35)
+	env.glow_bloom = 0.12 if synth else 0.02
+	env.glow_hdr_threshold = 0.8 if synth else 1.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE if synth else Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	env.adjustment_saturation = 1.2 if synth else (1.1 if nes else 1.05)
+	env.tonemap_exposure = 1.0 if synth else (1.0 if nes else 1.05)
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR if nes else Environment.TONE_MAPPER_AGX
+	env.ssao_enabled = not nes
+	if sun != null:
+		sun.light_color = Color("ff5fb4") if synth else (Color.WHITE if nes else Color("fff1dc"))
+		sun.light_energy = 0.45 if synth else (0.7 if nes else 1.25)
+	if nes and nes_post == null:
+		# Full-screen quad after the 3D scene (shaders/nes_post.gdshader): console pixels,
+		# outlines from depth and normals, palette snap. The HUD is drawn over it.
+		nes_post = MeshInstance3D.new()
+		var quad := QuadMesh.new()
+		quad.size = Vector2(2, 2)
+		quad.flip_faces = true
+		nes_post.mesh = quad
+		nes_post.extra_cull_margin = 16384.0
+		nes_post.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := ShaderMaterial.new()
+		mat.shader = preload("res://shaders/nes_post.gdshader")
+		mat.set_shader_parameter("block", maxf(2.0, roundf(get_viewport().get_visible_rect().size.y / 270.0)))
+		nes_post.material_override = mat
+		add_child(nes_post)
+		nes_tune_time = -1
+	if nes_post != null:
+		nes_post.visible = nes
+
+const NES_TUNE := "res://../config/visuals/nes_tune.json"
+var nes_tune_time := -1
+var nes_tune_clock := 0.0
+
+## Live tuning of the NES post effect: config/visuals/nes_tune.json is re-read when it changes
+## (every half second), each key a uniform of shaders/nes_post.gdshader.
+func nes_tune(delta: float) -> void:
+	if nes_post == null or not nes_post.visible:
+		return
+	nes_tune_clock += delta
+	if nes_tune_clock < 0.5:
+		return
+	nes_tune_clock = 0.0
+	var path := ProjectSettings.globalize_path(NES_TUNE)
+	if not FileAccess.file_exists(path):
+		return
+	var t := FileAccess.get_modified_time(path)
+	if t == nes_tune_time:
+		return
+	nes_tune_time = t
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		push_warning("nes_tune.json: not a JSON object")
+		return
+	for key in parsed:
+		if not str(key).begins_with("_"):
+			nes_post.material_override.set_shader_parameter(key, parsed[key])
+	print("NES_TUNE ", JSON.stringify(parsed))
+
 ## Daylight look: physical-ish sky, SSAO for contact shadows, light aerial fog.
 func make_environment() -> WorldEnvironment:
 	var sky_mat := ProceduralSkyMaterial.new()
+	day_sky = sky_mat
 	sky_mat.sky_top_color = Color("5f8fc4")
 	sky_mat.sky_horizon_color = Color("c9d8e3")
 	sky_mat.ground_horizon_color = Color("b9c3c6")
@@ -242,8 +336,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif code==KEY_L:
 		# Labels re-translate themselves; formatted texts follow NOTIFICATION_TRANSLATION_CHANGED.
 		I18n.toggle()
+	elif code==KEY_K:
+		show_style(Styles.cycle())
+		apply_atmosphere()
 	elif code==KEY_F12:
 		capture()
+	elif code==KEY_F9:
+		mark_defect()
 	elif spectating:
 		return
 	elif code==KEY_C:
@@ -275,7 +374,7 @@ func switch_map(id: String) -> void:
 	get_tree().reload_current_scene()
 
 func modal_open() -> bool:
-	return map_menu != null or help_panel != null or paused
+	return map_menu != null or help_panel != null or paused or defect_dialog != null
 
 ## Called at the opening event, before the next physics tick. Raw Input polling
 ## must be gated as well as GUI events (a modal only consumes the latter).
@@ -314,6 +413,12 @@ func set_paused(on: bool) -> void:
 		body.add_child(Ui.button("Maps · M", func(): open_map_menu(hud, true)))
 		body.add_child(Ui.button("Help · F1", func(): set_help(true)))
 		body.add_child(Ui.button("Language: English", func(): I18n.toggle()))
+		var style_button := Ui.button(tr("Textures · K") + ": " + Styles.label(Styles.current(), I18n.current()), func(): pass)
+		style_button.pressed.connect(func():
+			var id := Styles.cycle()
+			apply_atmosphere()
+			style_button.text = tr("Textures · K") + ": " + Styles.label(id, I18n.current()))
+		body.add_child(style_button)
 		resume.grab_focus.call_deferred()
 	sync_modal_state()
 
@@ -363,6 +468,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		panel.world_click(point)
 
 func _process(delta: float) -> void:
+	nes_tune(delta)
 	if player==null: return
 	runtime+=delta
 	frame_age+=delta
@@ -586,6 +692,11 @@ func build_ui() -> void:
 	hud_view = Hud.new()
 	hud.add_child(hud_view)
 	hud_view.action.connect(ui_action)
+	# Aim for F9: the defect point is whatever lies under the screen centre.
+	var crosshair := Ui.label("+", 22, Color(1, 1, 1, 0.55))
+	crosshair.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(crosshair)
 	status = hud_view.status
 	speed_label = hud_view.speed_label
 	detail = hud_view.detail
@@ -607,7 +718,7 @@ func build_ui() -> void:
 const HELP_LINES := [
 	["DRIVING","WASD or arrows — throttle, brake, steer (S when stopped — reverse) · SPACE — handbrake\nC — camera · RMB + mouse — look around · wheel — camera distance · V — car model · R — back to start"],
 	["SPECTATOR","F — free camera over the city · WASD move · wheel or Q/E height\nRMB + mouse — turn and tilt · MMB — pan · Z/X — rotate · SHIFT — faster"],
-	["TIME AND TRAFFIC","1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot"],
+	["TIME AND TRAFFIC","1–6 or [ ] — time speed ×0 … ×16 · −/+ or slider — traffic density\nP or ESC — pause · F5 — reconnect traffic · F12 — screenshot · F9 — mark a defect · K — textures"],
 	["ROAD SITUATIONS","T — panel: accident, lane closure, roadworks, jam, speed limit\nPick a situation and click a road · a click without one shows what is there and unlocks the traffic light"],
 ]
 const ATTRIBUTION := "© OpenStreetMap contributors · ODbL  |  Mapzen Terrain"
@@ -642,6 +753,24 @@ func capture() -> void:
 	get_viewport().get_texture().get_image().save_png("res://../logs/screenshot.png")
 	print("SCREENSHOT logs/screenshot.png")
 
+## F9: the frame is grabbed before the dialog appears; the crosshair marks the recorded point.
+func mark_defect() -> void:
+	if defect_dialog or DisplayServer.get_name()=="headless": return
+	await RenderingServer.frame_post_draw
+	var exclude: Array[RID] = []
+	if player.body: exclude.append(player.body.get_rid())
+	var dialog := DefectMarker.new()
+	dialog.image = get_viewport().get_texture().get_image()
+	dialog.record = DefectMarker.describe(get_viewport(), WorldStream.map_id(), data.offset,
+		player.body, exclude, "spectator" if spectating else ("cockpit" if player.cockpit else "chase"))
+	dialog.closed.connect(func():
+		dialog.queue_free()
+		defect_dialog = null
+		sync_modal_state())
+	defect_dialog = dialog
+	hud.add_child(dialog)
+	sync_modal_state()
+
 func write_metrics() -> void:
 	if fps_samples.is_empty():return
 	fps_samples.sort()
@@ -651,6 +780,17 @@ func write_metrics() -> void:
 	cpu_samples.sort()
 	var f:=FileAccess.open("res://../logs/render_metrics.json",FileAccess.WRITE)
 	f.store_string(JSON.stringify({"duration":runtime,"median_frame_ms":median,"p95_frame_ms":p95,"median_fps":1000.0/median,"median_gpu_ms":gpu_samples[gpu_samples.size()/2],"p95_gpu_ms":gpu_samples[int(gpu_samples.size()*0.95)],"median_render_cpu_ms":cpu_samples[cpu_samples.size()/2],"vsync":DisplayServer.window_get_vsync_mode(),"renderer":RenderingServer.get_video_adapter_name(),"display":DisplayServer.get_name(),"cars":traffic.count(),"far_cars":traffic.far_count,"near_cars":traffic.cars.size(),"spectating":spectating,"camera_distance":free_cam.distance,"sim_speed":SPEEDS[speed_index],"sim_actual":last_header.get("actual",0),"sumo_step_ms":last_header.get("step_ms",0),"player_position":[player.pos.x,player.pos.y,player.pos.z],"player_contacts":player.contacts,"window_resolution":[get_viewport().size.x,get_viewport().size.y],"render_resolution":[1920,1080]}))
+
+## Brief on-screen name of the texture style just chosen (K).
+func show_style(id: String) -> void:
+	var note := Ui.label(tr("Textures") + ": " + Styles.label(id, I18n.current()), 22, Color.WHITE)
+	note.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	note.position.y = 140
+	hud.add_child(note)
+	var fade := note.create_tween()
+	fade.tween_interval(1.6)
+	fade.tween_property(note, "modulate:a", 0.0, 0.4)
+	fade.tween_callback(note.queue_free)
 
 # Fixed camera poses from config/shots.json, for before/after visual comparison.
 func run_shots() -> void:
@@ -674,7 +814,12 @@ func run_shots() -> void:
 		while waited < 12.0:
 			await get_tree().process_frame
 			waited += get_process_delta_time()
-	for shot in data.get("shots",[]):
+	var shots: Array = data.get("shots",[])
+	# --shots-file=PATH: ad-hoc QA poses in world coordinates (tools/shots_file.py), no rebuild.
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--shots-file="):
+			shots = JSON.parse_string(FileAccess.get_file_as_string(arg.split("=", true, 1)[1])).shots
+	for shot in shots:
 		if data.get("visual_profile", "") == "rural":
 			env.fog_depth_begin = maxf(600.0, float(shot.height)*2.0)
 			env.fog_depth_end = maxf(4500.0, float(shot.height)*8.0)
@@ -685,15 +830,18 @@ func run_shots() -> void:
 		world.focus = cam.position
 		var waited := 0.0
 		while waited < 1.0 or world.pending() > 0:
+			# The player's chase camera re-takes the viewport after a reset/menu sync.
+			cam.make_current()
 			await get_tree().process_frame
 			waited += get_process_delta_time()
 			if waited > 90.0:
 				push_error("Capture tile timeout")
 				get_tree().quit(2)
 				return
+		cam.make_current()
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(dir+"/"+shot.name+".png")
-		print("SHOT ",shot.name)
+		print("SHOT ",shot.name," camera=",get_viewport().get_camera_3d() == cam)
 	get_tree().quit()
 
 ## Every catalogue model parked in a row next to the spawn, photographed from the side

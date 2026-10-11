@@ -56,6 +56,28 @@ Hold the right mouse button and move the mouse to look around the car; in the co
 this turns the head. The mouse wheel sets the chase camera distance. The view returns
 behind the car shortly after the button is released.
 
+Texture styles (`config/visuals/texture_styles.json`): K, or the Textures button in the pause
+menu, switches facade looks at run time (no reload) and remembers the choice. `procedural` is
+always there; `panelka` (photo panels, brick and plaster from Kureca's CC0 Panelka pack) appears
+after unpacking the pack into `texture_packs/Panelka` and running `tools/import_panelka.py`,
+plus the `photo_*` ground sets that `tools/fetch_textures.py` downloads (setup does). In
+`panelka` lawns, verges, woods and yards also switch to photo ground: a base cover with
+patches of a second cover and worn spots (`shaders/surface.gdshader`, `materials.gd`
+`photo_ground`). QA captures of one style: `-- --shots --texture-style=ID`.
+`synthwave` needs nothing installed: dark walls with neon windows, corners and roof lines
+(wall length/top in UV2 from `world.gd`), a neon grid on the ground (teal on greens), glossy
+black roads, glowing marks, neon-rimmed props and balconies (`visuals/prop.gdshader`), and a
+striped-sun dusk sky with violet fog and strong bloom (`shaders/synth_sky.gdshader`,
+`main.gd apply_atmosphere`).
+`nes` (8-bit NES) needs nothing installed either: walls and ground drawn in world-space pixels
+from the console palette (SMB brick, grey panels, framed windows with a glint, black sprite
+outlines, two-green grass with dirt patches, wave dashes on water), a flat blue sky with block
+clouds (`shaders/nes_sky.gdshader`), even light, and a post effect under the HUD
+(`shaders/nes_post.gdshader`): console pixels of about 480×270, black outlines from depth and
+normals, colours snapped to the NES palette. Its uniforms are tuned live from
+`config/visuals/nes_tune.json` (re-read twice a second). `config/nes_lab.json` is a 500 m test
+cut for such work.
+
 The UI is in English by default. L, or the language button in the map menu, switches to
 Ukrainian, and the choice is remembered. The game connects to the traffic bridge by itself
 and reconnects if the bridge restarts. The car drives with or without traffic. On first launch `start.ps1`/`start.sh` import the
@@ -101,7 +123,9 @@ Options (local map metres): `--timelapse-near=X,Z` centre, `--timelapse-fly=X1,Z
 street-level flight path (keep it on the street axis; more points follow a curved street),
 `--timelapse-cars=N` cars in the simulation before recording starts (large maps fill slowly),
 `--timelapse-title=TEXT`, `--timelapse-outro=TEXT`, `--timelapse-output=PATH` (fresh directory),
-`--timelapse-overlay=false` (clean frames for editing). Use an absolute output path or
+`--timelapse-overlay=false` (clean frames for editing), `--timelapse-close=D` (junction
+close-up: orbit the `--timelapse-near` point at about D metres, e.g. 75; the reveal wave and
+street flight stay within view). Use an absolute output path or
 `res://../logs/timelapse/my-take` for a path relative to the project.
 This is an animated reveal of an already generated map, not a recording of generator
 execution time. The game itself is unchanged without `--timelapse`.

@@ -1,0 +1,230 @@
+{
+  "cases": [
+    {
+      "category": "city",
+      "config": {
+        "bbox": [
+          30.51997993053151,
+          50.449752561357435,
+          30.527020069468488,
+          50.45424743776985
+        ],
+        "center": [
+          30.5235,
+          50.452
+        ],
+        "id": "city_500",
+        "name": "Streaming probe city 500 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 500
+    },
+    {
+      "category": "city",
+      "config": {
+        "bbox": [
+          30.51645986107882,
+          50.447505121842134,
+          30.53054013892118,
+          50.45649487466699
+        ],
+        "center": [
+          30.5235,
+          50.452
+        ],
+        "id": "city_1000",
+        "name": "Streaming probe city 1000 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 1000
+    },
+    {
+      "category": "city",
+      "config": {
+        "bbox": [
+          30.509419722284033,
+          50.443010240193296,
+          30.537580277715964,
+          50.46098974584322
+        ],
+        "center": [
+          30.5235,
+          50.452
+        ],
+        "id": "city_2000",
+        "name": "Streaming probe city 2000 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 2000
+    },
+    {
+      "category": "suburb",
+      "config": {
+        "bbox": [
+          30.34767015559038,
+          50.460193565411736,
+          30.35471184440962,
+          50.46468843371561
+        ],
+        "center": [
+          30.351191,
+          50.462441
+        ],
+        "id": "suburb_500",
+        "name": "Streaming probe suburb 500 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 500
+    },
+    {
+      "category": "suburb",
+      "config": {
+        "bbox": [
+          30.34414931119657,
+          50.457946129950805,
+          30.35823268880343,
+          50.46693586655857
+        ],
+        "center": [
+          30.351191,
+          50.462441
+        ],
+        "id": "suburb_1000",
+        "name": "Streaming probe suburb 1000 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 1000
+    },
+    {
+      "category": "suburb",
+      "config": {
+        "bbox": [
+          30.337107622519664,
+          50.45345125641089,
+          30.365274377480336,
+          50.47143072962664
+        ],
+        "center": [
+          30.351191,
+          50.462441
+        ],
+        "id": "suburb_2000",
+        "name": "Streaming probe suburb 2000 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 2000
+    },
+    {
+      "category": "rural",
+      "config": {
+        "bbox": [
+          30.13748563139571,
+          50.37275253144904,
+          30.144514368604288,
+          50.37724746767778
+        ],
+        "center": [
+          30.141,
+          50.375
+        ],
+        "id": "rural_500",
+        "name": "Streaming probe rural 500 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 500
+    },
+    {
+      "category": "rural",
+      "config": {
+        "bbox": [
+          30.13397126280711,
+          50.37050506202487,
+          30.148028737192888,
+          50.3794949344824
+        ],
+        "center": [
+          30.141,
+          50.375
+        ],
+        "id": "rural_1000",
+        "name": "Streaming probe rural 1000 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 1000
+    },
+    {
+      "category": "rural",
+      "config": {
+        "bbox": [
+          30.126942525739725,
+          50.36601012055691,
+          30.15505747426027,
+          50.38398986547218
+        ],
+        "center": [
+          30.141,
+          50.375
+        ],
+        "id": "rural_2000",
+        "name": "Streaming probe rural 2000 m",
+        "region_profile": "ukraine",
+        "road_geometry": {
+          "mode": "v2"
+        },
+        "seed": 311,
+        "source_kind": "osm",
+        "terrain_zoom": 12
+      },
+      "size_m": 2000
+    }
+  ],
+  "category_note": "Manually selected representative sites, not a global sample"
+}

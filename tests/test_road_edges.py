@@ -243,6 +243,9 @@ class GroundSeamTests(unittest.TestCase):
                             f'projected knot at x={wx} missing from the seam')
         for sx, sy in collinear:
             self.assertIn((sx, sy), ring)
+        # Shared mesh vertices arrive many times; duplicates change nothing.
+        repeated = scene.stitch_vertices([poly], [list(p) for p in (collinear+wobbly)*3])
+        self.assertEqual(list(repeated[0].exterior.coords), list(stitched[0].exterior.coords))
 
     # --- bridge pedestrians: the ground layer must ignore elevated sidewalks/decks ---
 

@@ -14,9 +14,27 @@ from .world_format import COORDINATES
 from . import __version__
 
 def validate_config(cfg):
+    dna = cfg.get('local_visual_dna')
+    if dna is not None:
+        if not isinstance(dna, dict) or not isinstance(dna.get('file'), str) or not dna['file']:
+            raise ValueError('local_visual_dna requires a profile file')
+        contained(Path.cwd(), dna['file'])
+        if cfg.get('visual_profile') == 'rural':
+            raise ValueError('local_visual_dna and visual_profile=rural cannot be combined')
+        limit = dna.get('landmark_limit', 5)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 0 <= limit <= 50:
+            raise ValueError('local_visual_dna.landmark_limit must be an integer 0..50')
+    from .core.roadgen import options
+    options(cfg)
     if 'corridor' in cfg:
         from .core.corridor import validate_includes
         validate_includes(cfg['corridor'])
+    if 'area' in cfg:
+        from .core.corridor import bounds, drawn_area
+        if 'corridor' in cfg or 'boundary' in cfg:
+            raise ValueError('area, corridor and boundary are mutually exclusive')
+        # The drawn outline decides the bbox; a stale or absent one is replaced.
+        cfg['bbox'] = bounds(drawn_area(cfg['area']))
     if not re.fullmatch('[a-z0-9_]+', str(cfg.get('id', ''))):
         raise ValueError('Map id must contain only lowercase ASCII letters, digits and underscores')
     if not str(cfg.get('name', '')).strip():
@@ -30,7 +48,7 @@ def validate_config(cfg):
             raise ValueError('Invalid bbox: require west < east, south < north, latitude within ±85°. Antimeridian crossing is unsupported')
         cfg.setdefault('center', [(w+e)/2, (s+n)/2])
     elif not ('corridor' in cfg or 'boundary' in cfg):
-        raise ValueError('Specify bbox, corridor, or boundary')
+        raise ValueError('Specify bbox, area, corridor, or boundary')
     cfg.setdefault('seed', 311)
     cfg.setdefault('terrain_zoom', 12)
     cfg.setdefault('overpass', 'https://overpass-api.de/api/interpreter')
@@ -122,6 +140,9 @@ def build_world(config, output, *, config_root=None, cache=None, inputs=None, of
     with atomic_directory(output) as stage:
         context = BuildContext(stage, raw, config_root, offline, resource_root, expected=expected,
                                emit=emit, diagnostics=output.parent/(output.name+'.logs'))
+        if cfg.get('local_visual_dna'):
+            from .core.local_dna import validate as validate_dna
+            validate_dna(read_json(context.config_file(cfg['local_visual_dna']['file'])))
         if inputs and (inputs/'corridor.geojson').exists():
             shutil.copy2(inputs/'corridor.geojson', stage/'corridor.geojson')
         elif (raw/(cfg['id']+'.corridor.geojson')).exists():

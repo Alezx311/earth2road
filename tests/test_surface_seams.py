@@ -21,6 +21,15 @@ def as_world(strips):
 
 
 class SurfaceAuditTests(unittest.TestCase):
+    def test_absolute_grade_and_full_width_are_audited(self):
+        r = road('a',[(0,0,0),(20,0,2)])
+        lane = {'id':'a','width':4.,'points':[audit.world(p) for p in r['points']]}
+        report = audit.audit({'lanes':[lane],'road_elevation':{'version':1}},[as_world([r])])
+        self.assertGreater(report['absolute_grade']['over_limit'],0)
+        self.assertEqual(report['profile_smooth']['over_2pct'],0)
+        self.assertGreater(report['cross_section']['samples'],0)
+        self.assertEqual(report['cross_section']['missing_surface'],0)
+
     def test_known_step_and_touching_edge_without_overlap(self):
         for y in (0, 4):
             strips = [road('a', [(0, 0, 0), (10, 0, 0)]), road('b', [(0, y, .7), (10, y, .7)])]
@@ -52,8 +61,69 @@ class SurfaceAuditTests(unittest.TestCase):
         # Missing pavement must not masquerade as measured surface smoothness.
         self.assertEqual(report['smooth']['over_5pct'], 0)
 
+    def test_triangle_index_hits_are_stable_and_vectorised(self):
+        tris = [[(0, 0, 0), (2, 0, 0), (0, 2, 2)], [(2, 0, 0), (2, 2, 2), (0, 2, 2)]]
+        mesh = audit.TriangleIndex([('a', tris, {})])
+        self.assertEqual(len(mesh.polys), 2)
+        self.assertEqual(sorted(h for h, _ in mesh.hits(1, 1)), [1.0, 1.0])     # on the shared edge
+        self.assertEqual(mesh.hits(.5, .5), [(.5, 'a')])
+        first = mesh.hits(.5, .5)
+        first.append('mutated')                                                # cached result is copied
+        self.assertEqual(mesh.hits(.5, .5), [(.5, 'a')])
+        self.assertEqual(mesh.hits(5, 5), [])
+        self.assertEqual(audit.TriangleIndex([]).polys, [])
+
+    def test_height_or_evaluates_the_fallback_only_when_it_decides(self):
+        mesh = audit.TriangleIndex([('a', [[(0, 0, 0), (2, 0, 0), (0, 2, 2)]], {})])
+        calls = []
+        field = lambda x, y: calls.append((x, y)) or 7.0
+        self.assertEqual(geometry.height_or(mesh, .5, .5, field), geometry.height_on(mesh, .5, .5, 7.0))
+        self.assertEqual(calls, [])
+        self.assertEqual(geometry.height_or(mesh, 5, 5, field), geometry.height_on(mesh, 5, 5, 7.0))
+        self.assertEqual(calls, [(5, 5)])
+
+    def test_robust_overlay_repairs_an_invalid_ring_as_last_resort(self):
+        bowtie = Polygon([(0, 0), (2, 2), (2, 0), (0, 2)])
+        def strict(geoms):
+            from shapely.errors import GEOSException
+            if not all(g.is_valid for g in geoms):
+                raise GEOSException('TopologyException: Ring edge missing')
+            return unary_union(geoms)
+        self.assertTrue(geometry._snapped(strict, [bowtie, box(3, 3, 4, 4)]).is_valid)
+        def broken(geoms):
+            from shapely.errors import GEOSException
+            raise GEOSException('first failure')
+        with self.assertRaisesRegex(Exception, 'first failure'):
+            geometry._snapped(broken, [box(0, 0, 1, 1)])
+
 
 class SeamTests(unittest.TestCase):
+    def test_absorbed_approach_keeps_junction_connected_to_its_street(self):
+        from types import SimpleNamespace
+        lane = SimpleNamespace(getID=lambda:'short_0')
+        edge = SimpleNamespace(getLanes=lambda:[lane])
+        node = SimpleNamespace(getIncoming=lambda:[], getOutgoing=lambda:[edge])
+        net = SimpleNamespace(getNode=lambda nid:node)
+        meta = {'short_0': {'ways':['street'], 'levels':[[0,False,False]]}}
+        topo = geometry.junction_metadata(net,['junction'],meta)
+        # The short strip has been absorbed: it is absent from adjoining meshes.
+        # A surviving next segment of the same street still constrains overlap.
+        next_road = road('street',[(0,0,2),(20,0,2)],nodes=('next','last'))
+        self.assertEqual(audit.relationship(topo,next_road['topology']),'connected')
+        _,tris,height = geometry.junction_surface(box(2,-1,8,1),[],lambda x,y:0.,
+                                                  free_boundary=True,anchors=[next_road])
+        self.assertFalse(tris)  # no second asphalt layer above the owning road
+        self.assertAlmostEqual(height(5,0),2.)
+        _,tris,height = geometry.junction_surface(box(2,-3,8,3),[],lambda x,y:0.,
+                                                  free_boundary=True,anchors=[next_road])
+        self.assertTrue(tris)
+        area = unary_union([Polygon([p[:2] for p in tri]) for tri in tris])
+        self.assertLess(area.intersection(box(2,-2,8,2)).area,1e-8)
+        self.assertAlmostEqual(height(5,0),2.)
+        meta['short_0']['levels'] = [[1,True,False]]
+        elevated = geometry.junction_metadata(net,['junction'],meta)
+        self.assertNotEqual(audit.relationship(elevated,next_road['topology']),'connected')
+
     def test_opposite_directions_share_one_correction(self):
         from akadem_maps.core.scene import offset_line
         # Only the forward lane touches the main road; the reverse one must follow it.
@@ -126,6 +196,20 @@ class SeamTests(unittest.TestCase):
                     self.assertAlmostEqual(z,.03*x,places=6)
         for x in (5, 13.5, 25):
             self.assertAlmostEqual(height(x,5),.03*x,places=5)
+
+    def test_free_junction_boundary_follows_the_roads(self):
+        # Two approaches at 0 m and 1 m; an independent kerb estimate (2.5 m)
+        # bulges the pinned outline, a natural boundary stays between the roads.
+        west = road('west', [(-20,0,0),(0,0,0)], width=6)
+        east = road('east', [(14,0,1),(34,0,1)], width=6)
+        _, pinned, _ = geometry.junction_surface(box(0,-3,14,3), [west,east], lambda x,y: 2.5)
+        _, free, height = geometry.junction_surface(box(0,-3,14,3), [west,east], lambda x,y: 2.5,
+                                                    free_boundary=True)
+        self.assertGreater(max(z for t in pinned for *_, z in t), 2.)
+        zs = [z for t in free for *_, z in t]
+        self.assertGreaterEqual(min(zs), -1e-6)
+        self.assertLessEqual(max(zs), 1+1e-6)
+        self.assertLess(abs(height(7,0)-.5), .1)
 
     def test_curve_has_fixed_endpoints_and_stays_in_corridor(self):
         from shapely.geometry import LineString

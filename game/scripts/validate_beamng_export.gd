@@ -66,6 +66,9 @@ func run() -> void:
 		await settle()
 		var exporter: Control = menu.picker
 		check(exporter.map_id == "tiny", "selected map forwarded")
+		check(tr("Export time: %s").get_slice("%", 0) in exporter.mode_note.text, "mode note shows the export time estimate")
+		check(exporter.install_box != null, "install into BeamNG offered")
+		exporter.install_box.button_pressed = false   # never touch the real BeamNG mods folder
 		check(exporter.start_button.has_focus(), "export starts with keyboard focus")
 		check(exporter.mode_menu.item_count == exporter.MODES.size(), "all optimization modes listed")
 		var notes := {}
@@ -123,6 +126,7 @@ func run() -> void:
 		await settle()
 		var exporter: Control = menu.picker
 		exporter.destination.text = ProjectSettings.globalize_path("res://../logs/qa-beamng-ui/Експорт карт")
+		exporter.install_box.button_pressed = false
 		exporter.mode_menu.select(0)
 		exporter.mode_menu.item_selected.emit(0)
 		exporter.start_export()
@@ -155,6 +159,7 @@ func run() -> void:
 		await settle()
 		exporter = menu.picker
 		exporter.destination.text = ProjectSettings.globalize_path("res://../logs/qa-beamng-ui/Експорт карт")
+		exporter.install_box.button_pressed = false
 		exporter.start_export()
 		var owned_pid: int = exporter.pid
 		menu.remove_child(exporter)

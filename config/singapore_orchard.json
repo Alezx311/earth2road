@@ -1,0 +1,76 @@
+{
+  "id": "singapore_orchard",
+  "name": "Singapore - Orchard Road",
+  "note": "2 km square along Orchard Road: malls from Tanglin to Dhoby Ghaut, Emerald Hill, Istana. Roadgen v2, Local Visual DNA, quick-travel points chosen manually from well-known places; not an administrative boundary. Singapore drives on the left; the generator lays lanes right-hand (no left-hand support). Terrain: cleaned DEM cache (logs/singapore/clean_dem.py) — the Terrarium tiles here contain tower roofs; heights are a derived assumption.",
+  "bbox": [
+    103.8275,
+    1.294,
+    103.8455,
+    1.312
+  ],
+  "center": [
+    103.8365,
+    1.303
+  ],
+  "overpass": "https://overpass-api.de/api/interpreter",
+  "overpass_maxsize": 268435456,
+  "overpass_mirrors": [
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ],
+  "region_profile": "experimental",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "traffic_count": 60,
+  "demand_pool": 100,
+  "local_visual_dna": {
+    "file": "config/visuals/singapore_orchard_dna.json",
+    "landmark_limit": 10
+  },
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "ION Orchard",
+        "lon": 103.8319,
+        "lat": 1.304
+      },
+      {
+        "name": "Ngee Ann City · Takashimaya",
+        "lon": 103.8357,
+        "lat": 1.3025
+      },
+      {
+        "name": "313@Somerset",
+        "lon": 103.8386,
+        "lat": 1.3008
+      },
+      {
+        "name": "Dhoby Ghaut",
+        "lon": 103.8436,
+        "lat": 1.3015
+      },
+      {
+        "name": "Istana",
+        "lon": 103.8425,
+        "lat": 1.307
+      },
+      {
+        "name": "Emerald Hill",
+        "lon": 103.838,
+        "lat": 1.303
+      },
+      {
+        "name": "Tanglin",
+        "lon": 103.8277,
+        "lat": 1.3073
+      }
+    ],
+    "note": "Dhoby Ghaut and Tanglin points moved ~180 m to the nearest road the spawn rules accept; Goodwood Park (Scotts Road) has none within 250 m and was dropped."
+  }
+}

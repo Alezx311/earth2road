@@ -1,0 +1,90 @@
+{
+  "id": "khreshchatyk_8km",
+  "name": "Khreshchatyk 8x8 km",
+  "note": "8x8 km square around the khreshchatyk_dna centre (Maidan), owner request 2026-10-09. Roadgen v2, the same Local Visual DNA profile (its anchors cover the central 2 km) and quick-travel points. Not an administrative boundary.",
+  "bbox": [
+    30.466888,
+    50.414279,
+    30.57975,
+    50.486143
+  ],
+  "center": [
+    30.523319,
+    50.450211
+  ],
+  "region_profile": "ukraine",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "traffic_count": 600,
+  "demand_pool": 100,
+  "local_visual_dna": {
+    "file": "config/visuals/khreshchatyk_dna.json",
+    "landmark_limit": 10
+  },
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Майдан Незалежності",
+        "lon": 30.5234,
+        "lat": 50.4501
+      },
+      {
+        "name": "Європейська площа",
+        "lon": 30.5286,
+        "lat": 50.4538
+      },
+      {
+        "name": "Бессарабська площа",
+        "lon": 30.5215,
+        "lat": 50.4418
+      },
+      {
+        "name": "Арка Свободи · Володимирська гірка",
+        "lon": 30.5307,
+        "lat": 50.4545
+      },
+      {
+        "name": "Михайлівська площа",
+        "lon": 30.5222,
+        "lat": 50.4555
+      },
+      {
+        "name": "Софійська площа",
+        "lon": 30.515,
+        "lat": 50.453
+      },
+      {
+        "name": "Золоті ворота",
+        "lon": 30.5133,
+        "lat": 50.4489
+      },
+      {
+        "name": "Пасаж · Хрещатик",
+        "lon": 30.5223,
+        "lat": 50.4466
+      },
+      {
+        "name": "Театр Франка",
+        "lon": 30.5303,
+        "lat": 50.4459
+      },
+      {
+        "name": "Верховна Рада · Маріїнський парк",
+        "lon": 30.5368,
+        "lat": 50.4472
+      }
+    ]
+  },
+  "chunk_size": 250,
+  "geofabrik": {
+    "url": "local/ukraine-260918-kyiv.osm.pbf",
+    "md5": "41a038084c3ba11ed0fe2a7bb0c17c71",
+    "note": "Local cut of the dated Geofabrik extract ukraine-260918 (OSM data 2026-09-18), bbox [30.1, 50.16, 31.06, 50.68]; place it in <cache>/geofabrik/."
+  }
+}

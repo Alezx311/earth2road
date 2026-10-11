@@ -27,8 +27,44 @@ ROOT = Path(__file__).resolve().parents[2]
 SIMPLIFY_M = 5.0      # polygon vertex tolerance; netconvert gets the boundary as a list
 
 
+DRAWN_MAX_VERTICES = 500
+DRAWN_MIN_KM2, DRAWN_MAX_KM2 = 0.05, 25.0   # same ceiling as the picker's 5 km square
+
+
 def shaped(cfg):
-    return 'corridor' in cfg or 'boundary' in cfg
+    return 'corridor' in cfg or 'boundary' in cfg or 'area' in cfg
+
+
+def drawn_area(spec):
+    """Polygon drawn in the picker: area = {polygon: [[lon, lat], ...]}.
+
+    The outline is the player's choice, not an OSM or administrative boundary. It must
+    be simple (no self-crossing), not cross the antimeridian and stay within the build
+    size limits; it is used exactly, without buffering."""
+    from pyproj import Geod
+    if not isinstance(spec, dict) or not isinstance(spec.get('polygon'), list):
+        raise ValueError('area requires a polygon: [[lon, lat], ...]')
+    points = spec['polygon']
+    if len(points) > 1 and list(points[0]) == list(points[-1]):
+        points = points[:-1]
+    if not 3 <= len(points) <= DRAWN_MAX_VERTICES:
+        raise ValueError(f'Area polygon needs 3..{DRAWN_MAX_VERTICES} points')
+    for p in points:
+        if (not isinstance(p, (list, tuple)) or len(p) != 2 or
+                any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in p)):
+            raise ValueError('Area polygon points must be [lon, lat] numbers')
+        if not (-180 <= p[0] <= 180 and -85 < p[1] < 85):
+            raise ValueError('Area polygon point outside longitude ±180 / latitude ±85')
+    lons = [p[0] for p in points]
+    if max(lons) - min(lons) >= 180:
+        raise ValueError('Area polygon crosses the antimeridian (unsupported)')
+    polygon = Polygon([(float(x), float(y)) for x, y in points])
+    if not polygon.is_valid:
+        raise ValueError('Area polygon crosses itself')
+    km2 = abs(Geod(ellps='WGS84').geometry_area_perimeter(polygon)[0]) / 1e6
+    if not DRAWN_MIN_KM2 <= km2 <= DRAWN_MAX_KM2:
+        raise ValueError(f'Area polygon is {km2:.2f} km²; allowed {DRAWN_MIN_KM2}–{DRAWN_MAX_KM2:g} km²')
+    return polygon
 
 
 def boundary_area(cfg, context=None):
@@ -63,6 +99,8 @@ def boundary_area(cfg, context=None):
 
 
 def area_digest(cfg, context=None):
+    if 'area' in cfg:
+        return hashlib.sha256(json.dumps(cfg['area'], sort_keys=True).encode()).hexdigest()
     if 'boundary' in cfg:
         source = (context.config_file(cfg['boundary']['geojson']) if context else ROOT / cfg['boundary']['geojson']).read_bytes()
         return hashlib.sha256(source + json.dumps(cfg['boundary'], sort_keys=True).encode()
@@ -228,6 +266,12 @@ def load(cfg, context=None):
 
 def area(cfg, pbf=None, context=None):
     """lon/lat Polygon of the map. Sets cfg['bbox'] from a corridor when it has none."""
+    if 'area' in cfg:
+        if 'corridor' in cfg or 'boundary' in cfg:
+            raise ValueError('area, corridor and boundary are mutually exclusive')
+        polygon = drawn_area(cfg['area'])
+        cfg['bbox'] = bounds(polygon)
+        return polygon
     if 'boundary' in cfg:
         if 'corridor' in cfg:
             raise ValueError('boundary and corridor are mutually exclusive')

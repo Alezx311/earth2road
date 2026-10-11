@@ -1,0 +1,921 @@
+{
+  "version": 1,
+  "profiles": {
+    "private": {
+      "architecture": {
+        "brick": 0.55,
+        "historic": 0.3,
+        "modern": 0.15
+      },
+      "materials": {
+        "plaster": 0.55,
+        "brick": 0.4,
+        "metal": 0.05
+      },
+      "colors": {
+        "cream": 0.25,
+        "yellow": 0.2,
+        "white": 0.2,
+        "beige": 0.15,
+        "brick": 0.1,
+        "pale_green": 0.1
+      },
+      "floors": {
+        "1": 0.45,
+        "2": 0.45,
+        "3": 0.1
+      },
+      "roofs": {
+        "gabled": 0.9,
+        "flat": 0.1
+      },
+      "vegetation_density": 1.8,
+      "provenance": "manual hypothesis for Bilychi/Akademmistechko; not extracted from photographs or verified per building"
+    },
+    "khrushchovka": {
+      "architecture": {
+        "brick": 0.5,
+        "panel": 0.5
+      },
+      "materials": {
+        "brick": 0.45,
+        "concrete": 0.4,
+        "plaster": 0.15
+      },
+      "colors": {
+        "white": 0.35,
+        "grey": 0.3,
+        "beige": 0.2,
+        "brick": 0.15
+      },
+      "floors": {
+        "4": 0.15,
+        "5": 0.7,
+        "9": 0.15
+      },
+      "roofs": {
+        "flat": 0.85,
+        "gabled": 0.15
+      },
+      "vegetation_density": 1.5,
+      "provenance": "manual hypothesis for Bilychi/Akademmistechko; not extracted from photographs or verified per building"
+    },
+    "panel_high": {
+      "architecture": {
+        "panel": 0.75,
+        "modern": 0.15,
+        "brick": 0.1
+      },
+      "materials": {
+        "concrete": 0.75,
+        "plaster": 0.15,
+        "brick": 0.1
+      },
+      "colors": {
+        "white": 0.35,
+        "grey": 0.35,
+        "beige": 0.2,
+        "cream": 0.1
+      },
+      "floors": {
+        "9": 0.35,
+        "12": 0.25,
+        "16": 0.35,
+        "22": 0.05
+      },
+      "roofs": {
+        "flat": 1.0
+      },
+      "vegetation_density": 1.3,
+      "provenance": "manual hypothesis for Bilychi/Akademmistechko; not extracted from photographs or verified per building"
+    },
+    "industrial": {
+      "architecture": {
+        "industrial": 0.7,
+        "modern": 0.2,
+        "panel": 0.1
+      },
+      "materials": {
+        "metal": 0.4,
+        "concrete": 0.45,
+        "brick": 0.15
+      },
+      "colors": {
+        "grey": 0.55,
+        "white": 0.2,
+        "beige": 0.15,
+        "brick": 0.1
+      },
+      "floors": {
+        "1": 0.35,
+        "2": 0.35,
+        "4": 0.3
+      },
+      "roofs": {
+        "flat": 0.9,
+        "gabled": 0.1
+      },
+      "vegetation_density": 0.6,
+      "provenance": "manual hypothesis for Bilychi/Akademmistechko; not extracted from photographs or verified per building"
+    },
+    "forest_edge": {
+      "architecture": {
+        "brick": 0.5,
+        "panel": 0.3,
+        "historic": 0.2
+      },
+      "materials": {
+        "plaster": 0.5,
+        "brick": 0.3,
+        "concrete": 0.2
+      },
+      "colors": {
+        "cream": 0.3,
+        "white": 0.3,
+        "pale_green": 0.2,
+        "grey": 0.2
+      },
+      "floors": {
+        "2": 0.4,
+        "5": 0.4,
+        "9": 0.2
+      },
+      "roofs": {
+        "gabled": 0.5,
+        "flat": 0.5
+      },
+      "vegetation_density": 2.6,
+      "provenance": "manual hypothesis for Bilychi/Akademmistechko; not extracted from photographs or verified per building"
+    }
+  },
+  "anchors": [
+    {
+      "id": "bilychy_visual_00_01",
+      "lon": 30.334954,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_02",
+      "lon": 30.340598,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_03",
+      "lon": 30.346243,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_04",
+      "lon": 30.351888,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "forest_edge",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_05",
+      "lon": 30.357532,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "forest_edge",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_06",
+      "lon": 30.363177,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_07",
+      "lon": 30.368821,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_08",
+      "lon": 30.374466,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_00_09",
+      "lon": 30.380111,
+      "lat": 50.446243,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_00",
+      "lon": 30.329309,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_01",
+      "lon": 30.334954,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_03",
+      "lon": 30.346243,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_04",
+      "lon": 30.351888,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "forest_edge",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_05",
+      "lon": 30.357532,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "forest_edge",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_06",
+      "lon": 30.363177,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_07",
+      "lon": 30.368821,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_08",
+      "lon": 30.374466,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_01_09",
+      "lon": 30.380111,
+      "lat": 50.449862,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_00",
+      "lon": 30.329309,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_01",
+      "lon": 30.334954,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_02",
+      "lon": 30.340598,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_03",
+      "lon": 30.346243,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_04",
+      "lon": 30.351888,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_05",
+      "lon": 30.357532,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_06",
+      "lon": 30.363177,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_07",
+      "lon": 30.368821,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_08",
+      "lon": 30.374466,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_02_09",
+      "lon": 30.380111,
+      "lat": 50.45348,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_01",
+      "lon": 30.334954,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_02",
+      "lon": 30.340598,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_03",
+      "lon": 30.346243,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_04",
+      "lon": 30.351888,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_05",
+      "lon": 30.357532,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_06",
+      "lon": 30.363177,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_07",
+      "lon": 30.368821,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_08",
+      "lon": 30.374466,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_03_09",
+      "lon": 30.380111,
+      "lat": 50.457099,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_00",
+      "lon": 30.329309,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_01",
+      "lon": 30.334954,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_02",
+      "lon": 30.340598,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_03",
+      "lon": 30.346243,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_04",
+      "lon": 30.351888,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_05",
+      "lon": 30.357532,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_06",
+      "lon": 30.363177,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_07",
+      "lon": 30.368821,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_08",
+      "lon": 30.374466,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_04_09",
+      "lon": 30.380111,
+      "lat": 50.460718,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_00",
+      "lon": 30.329309,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_01",
+      "lon": 30.334954,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_02",
+      "lon": 30.340598,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_03",
+      "lon": 30.346243,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_04",
+      "lon": 30.351888,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_05",
+      "lon": 30.357532,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_06",
+      "lon": 30.363177,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_07",
+      "lon": 30.368821,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_08",
+      "lon": 30.374466,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_05_09",
+      "lon": 30.380111,
+      "lat": 50.464336,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_00",
+      "lon": 30.329309,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_01",
+      "lon": 30.334954,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_02",
+      "lon": 30.340598,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_03",
+      "lon": 30.346243,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_04",
+      "lon": 30.351888,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_05",
+      "lon": 30.357532,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_06",
+      "lon": 30.363177,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_07",
+      "lon": 30.368821,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_08",
+      "lon": 30.374466,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_06_09",
+      "lon": 30.380111,
+      "lat": 50.467955,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_00",
+      "lon": 30.329309,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_01",
+      "lon": 30.334954,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_02",
+      "lon": 30.340598,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_03",
+      "lon": 30.346243,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_04",
+      "lon": 30.351888,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_05",
+      "lon": 30.357532,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_06",
+      "lon": 30.363177,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_07",
+      "lon": 30.368821,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_08",
+      "lon": 30.374466,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_07_09",
+      "lon": 30.380111,
+      "lat": 50.471573,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_00",
+      "lon": 30.329309,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_01",
+      "lon": 30.334954,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_02",
+      "lon": 30.340598,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_03",
+      "lon": 30.346243,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_04",
+      "lon": 30.351888,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_05",
+      "lon": 30.357532,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_06",
+      "lon": 30.363177,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_07",
+      "lon": 30.368821,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_08",
+      "lon": 30.374466,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_08_09",
+      "lon": 30.380111,
+      "lat": 50.475192,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_01",
+      "lon": 30.334954,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_02",
+      "lon": 30.340598,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "panel_high",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_03",
+      "lon": 30.346243,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_04",
+      "lon": 30.351888,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_05",
+      "lon": 30.357532,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "private",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_06",
+      "lon": 30.363177,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_07",
+      "lon": 30.368821,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "industrial",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_08",
+      "lon": 30.374466,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    },
+    {
+      "id": "bilychy_visual_09_09",
+      "lon": 30.380111,
+      "lat": 50.478811,
+      "radius_m": 650,
+      "profile": "khrushchovka",
+      "provenance": "400 m grid; profile picked by a fixed rule from OSM building types/levels and landuse within 300 m; profile contents are manual hypotheses"
+    }
+  ]
+}

@@ -52,7 +52,8 @@ if (-not (Test-Python @($venvPy))) {
 if (-not (Test-Path -LiteralPath $venvPy)) {
     throw "venv python missing at $venvPy"
 }
-& $venvPy -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
+# Editable: the CLI must run this checkout, not a copy frozen at setup time.
+& $venvPy -m pip install --cache-dir .cache/pip -c requirements.lock -e ".[generator,traffic]"
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 
 $godot = Join-Path $PSScriptRoot '.tools\Godot_v4.6-stable_win64.exe'

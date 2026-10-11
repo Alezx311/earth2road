@@ -4,6 +4,7 @@
   "seed": 311,
   "season": "summer",
   "detail_distance": 180,
+  "balcony_distance": 600,
   "prop_distance": 320,
   "tree_distance": 1600,
   "sign_distance": 260,

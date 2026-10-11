@@ -1,0 +1,49 @@
+{
+  "id": "ua_yaremche",
+  "name": "Яремче · Карпати",
+  "note": "3 km square over the Carpathian town on the H09 and the Prut valley. Manual choice for the Ukraine BeamNG pack (2026-10-11); not an administrative boundary.",
+  "bbox": [
+    24.535684,
+    48.438525,
+    24.576316,
+    48.465475
+  ],
+  "center": [
+    24.556,
+    48.452
+  ],
+  "region_profile": "ukraine",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "chunk_size": 250,
+  "traffic_count": 150,
+  "demand_pool": 300,
+  "start_time": "10:30",
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Центр Яремче",
+        "lon": 24.556,
+        "lat": 48.452
+      },
+      {
+        "name": "Водоспад Пробій",
+        "lon": 24.5594,
+        "lat": 48.4489
+      }
+    ]
+  },
+  "geofabrik": {
+    "url": "https://download.geofabrik.de/europe/ukraine-260918.osm.pbf",
+    "md5": "8357c720d91f72db3aa5feb6dea04bf3",
+    "note": "Dated Geofabrik extract (OSM data 2026-09-18), cut locally per map."
+  },
+  "level_id": "ua_yaremche",
+  "visual_profile": "rural"
+}

@@ -21,6 +21,67 @@ GROUND_CELL = 20.0
 DECK_MEDIAN_GAP = 6.0        # m; narrower slots between parallel bridge decks are closed (assumed single structure)
 
 
+class LocalCut:
+    """`geom` for many small differences against it (paths, green areas).
+
+    Each `x.difference(geom)` re-nodes the whole map-wide polygon; on a 45 km² district
+    that took hours. Above LOCAL_CUT_COORDS vertices the polygon is split once into
+    quadtree tiles (clip_by_rect) and each query subtracts only the tiles around its envelope.
+    Smaller maps keep the exact original operation."""
+
+    def __init__(self, geom, leaf=2000):
+        self.geom = geom
+        self.tree = None
+        if geom is None or geom.is_empty or shapely.get_num_coordinates(geom) <= LOCAL_CUT_COORDS:
+            return
+        self.leaves, self.rects = [], []
+        self._split(geom, geom.bounds, leaf, 0)
+        self.tree = shapely.STRtree(self.rects)
+
+    def _split(self, geom, rect, leaf, depth):
+        if geom.is_empty:
+            return
+        if shapely.get_num_coordinates(geom) <= leaf or depth >= 12:
+            if not geom.is_valid:
+                geom = shapely.make_valid(geom)
+            self.leaves.append(geom)
+            self.rects.append(box(*rect))
+            return
+        x0, y0, x1, y1 = rect
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        for r in ((x0, y0, mx, my), (mx, y0, x1, my), (x0, my, mx, y1), (mx, my, x1, y1)):
+            try:
+                part = shapely.clip_by_rect(geom, *r)
+            except shapely.errors.GEOSException:
+                # RectangleIntersection can emit a collapsed ring; the full overlay cannot.
+                part = geom.intersection(box(*r))
+            self._split(part, r, leaf, depth + 1)
+
+    def around(self, other):
+        if self.tree is None:
+            return self.geom
+        if other.is_empty:  # empty bounds are NaN; box(NaN...) raises (Detroit 4 km, 07.10.2026)
+            return Polygon()
+        hits = self.tree.query(box(*other.bounds).buffer(1.0))
+        return unary_union([self.leaves[i] for i in hits]) if len(hits) else Polygon()
+
+    def subtract_from(self, other):
+        if self.tree is None:
+            return other.difference(self.geom)
+        if other.is_empty:  # e.g. a green area already fully under the road cover cut
+            return other
+        # A - (B u C) = (A - B) - C: no union of the tiles per query.
+        for i in self.tree.query(box(*other.bounds).buffer(1.0)):
+            if other.is_empty:
+                break
+            other = other.difference(self.leaves[i])
+        return other
+
+
+LOCAL_CUT_COORDS = 100000
+DRAPE_SPLIT_WORK = 50_000_000   # polygon vertices x grid cells
+
+
 def polygons(geom):
     if geom is None or geom.is_empty:
         return []
@@ -44,29 +105,53 @@ def planar(ring):
     return poly if not poly.is_empty else Polygon()
 
 
-def triangles(poly):
-    """Constrained Delaunay triangulation: keeps concave outlines and holes intact."""
+def triangles(poly, min_area=0.01):
+    """Constrained Delaunay triangulation: keeps concave outlines and holes intact.
+    Parts below `min_area` are dropped; callers whose pieces must tile an exact
+    outline (generated junction pavement) pass a smaller value."""
     if not poly.is_valid:
         poly = poly.buffer(0)
     out = []
     for p in polygons(poly):
-        if p.area < 0.01:
+        if p.area < min_area:
             continue
         out += [list(t.exterior.coords)[:3] for t in shapely.constrained_delaunay_triangles(p).geoms]
     return out
 
 
-def draped_triangles(poly, cell=GROUND_CELL):
+def draped_triangles(poly, cell=GROUND_CELL, min_area=0.01):
     """Triangles of `poly` split on a grid so a height field evaluated at the vertices
     follows the terrain instead of spanning it with one flat plane."""
     out = []
     for p in polygons(poly):
         x0, y0, x1, y1 = p.bounds
-        for ix in range(math.floor(x0/cell), math.ceil(x1/cell)):
-            for iy in range(math.floor(y0/cell), math.ceil(y1/cell)):
+        ix0, ix1 = math.floor(x0/cell), math.ceil(x1/cell)
+        iy0, iy1 = math.floor(y0/cell), math.ceil(y1/cell)
+        if int(shapely.get_num_coordinates(p)) * (ix1 - ix0) * (iy1 - iy0) > DRAPE_SPLIT_WORK:
+            # District-wide ground: intersecting the whole polygon with every cell is
+            # O(cells x vertices). Halve it along the same cell grid first (same cells, same order).
+            _drape_split(p, ix0, ix1, iy0, iy1, cell, out, min_area)
+            continue
+        for ix in range(ix0, ix1):
+            for iy in range(iy0, iy1):
                 part = p.intersection(box(ix*cell, iy*cell, (ix+1)*cell, (iy+1)*cell))
-                out += triangles(part)
+                out += triangles(part, min_area)
     return out
+
+
+def _drape_split(p, ix0, ix1, iy0, iy1, cell, out, min_area=0.01):
+    if p.is_empty:
+        return
+    if ix1 - ix0 > 1:
+        m = (ix0 + ix1) // 2
+        for a, b in ((ix0, m), (m, ix1)):
+            _drape_split(p.intersection(box(a*cell, iy0*cell, b*cell, iy1*cell)), a, b, iy0, iy1, cell, out, min_area)
+    elif iy1 - iy0 > 1:
+        m = (iy0 + iy1) // 2
+        for a, b in ((iy0, m), (m, iy1)):
+            _drape_split(p.intersection(box(ix0*cell, a*cell, ix1*cell, b*cell)), ix0, ix1, a, b, cell, out, min_area)
+    else:
+        out += triangles(p.intersection(box(ix0*cell, iy0*cell, ix1*cell, iy1*cell)), min_area)
 
 
 def offset_line(pts, d):
@@ -113,7 +198,7 @@ def reverse_edge(net, edge):
     return None
 
 
-def markings(net, road_z, structure_of):
+def markings(net, road_z, structure_of, skip=()):
     """Painted lines as polylines {points, width, dash}. Derived from SUMO topology;
     patterns are assumed (Ukrainian urban style), not surveyed."""
     out = []
@@ -137,7 +222,7 @@ def markings(net, road_z, structure_of):
                 return
             out.append({'points': pts, 'width': width, 'dash': dash or [], 'kind': kind, 'provenance': 'generated'})
     for edge in net.getEdges():
-        if edge.getFunction() != '' or edge.getType() in UNMARKED:
+        if edge.getFunction() != '' or edge.getType() in UNMARKED or edge.getID() in skip:
             continue
         lanes = sorted([l for l in edge.getLanes() if l.allows('passenger')], key=lambda l: l.getIndex())
         if not lanes:
@@ -172,7 +257,7 @@ def markings(net, road_z, structure_of):
             minor = conns and all(c.getState() in ('m', 's', 'w') for c in conns)
             if (signalised or minor) and lane.getLength() > 8:
                 pts = lane_xyz(lane, road_z)
-                tip = offset_line(pts, 0)[-1]
+                tip = getattr(road_z, 'stop_points', {}).get(lane.getID(), offset_line(pts, 0)[-1])
                 a, b = pts[-2], pts[-1]
                 length = math.hypot(b[0]-a[0], b[1]-a[1]) or 1.0
                 back = (tip[0]-(b[0]-a[0])/length*0.5, tip[1]-(b[1]-a[1])/length*0.5, tip[2])
@@ -267,7 +352,14 @@ def footprint(strips, widths_pad=0.0):
     """2D union of strip footprints built from the actual offset borders (miter clamp 0.5,
     as world.gd draws), not from buffered centerlines: the ground cut boundary therefore
     coincides with the rendered ribbon edge corner-for-corner."""
-    polys = [strip_polygon(s['points'], s['width'], widths_pad) for s in strips if len(s['points']) >= 2]
+    polys = []
+    for s in strips:
+        if s.get('geometry') == 'v2':
+            from .roadgen import footprint as generated_footprint
+            p = generated_footprint(s)
+            polys.append(p.buffer(widths_pad) if widths_pad else p)
+        elif len(s['points']) >= 2:
+            polys.append(strip_polygon(s['points'], s['width'], widths_pad))
     polys = [p for p in polys if not p.is_empty]
     if not polys:
         return Polygon()
@@ -519,7 +611,8 @@ def stitch_vertices(polys, points, cell=20.0, tol=0.25):
     if not points:
         return list(polys)
     grid = {}
-    for px, py in points:
+    # Exact duplicates (shared mesh vertices) would only be skipped after sorting.
+    for px, py in dict.fromkeys((p[0], p[1]) for p in points):
         grid.setdefault((int(px//cell), int(py//cell)), []).append((px, py))
     out = []
     for poly in polys:
@@ -585,6 +678,7 @@ def paths(ways, nodes, tags, to_xy, cut, ground, lift=0.05, step=3.0):
     """Decorative footways/cycleways from OSM (not simulated), draped on the ground and
     removed where they would overlap the carriageway or SUMO sidewalks."""
     out = []
+    local = LocalCut(cut) if cut is not None else None
     for w in ways.values():
         t = tags(w)
         kind = t.get('highway')
@@ -594,8 +688,8 @@ def paths(ways, nodes, tags, to_xy, cut, ground, lift=0.05, step=3.0):
         if len(refs) < 2:
             continue
         line = LineString([to_xy(*nodes[r]) for r in refs])
-        if cut is not None:
-            line = line.difference(cut)
+        if local is not None:
+            line = local.subtract_from(line)
         parts = [line] if line.geom_type == 'LineString' else [g for g in getattr(line, 'geoms', []) if g.geom_type == 'LineString']
         for part in parts:
             if part.length < 2:

@@ -12,6 +12,7 @@ dist/
 out/
 logs/
 graphify-out/
+/posts/
 # Generated worlds, downloaded inputs and engine exports
 data/
 game/data/
@@ -20,6 +21,8 @@ game/assets/cars/*
 game/assets/textures/*
 !game/assets/textures/.gdignore
 game/assets/visuals/
+# Texture packs downloaded by hand (tools/import_panelka.py reads them)
+texture_packs/
 *.zip
 *.pbf
 *.exe

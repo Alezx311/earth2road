@@ -45,3 +45,31 @@ def profile_z(points, i, t):
         return (w0+w1)/(w0/d0+w1/d1)
     m0,m1=tangent(i),tangent(i+1)
     return (2*t**3-3*t*t+1)*a[2]+(t**3-2*t*t+t)*h*m0+(-2*t**3+3*t*t)*b[2]+(t**3-t*t)*h*m1
+
+
+def lane_suspects(root, nodes):
+    """Two-way streets whose OSM ``lanes`` look too low (playtest 2026-10-06, note 2).
+
+    Reported only: the network keeps the OSM value. Signals: a trolleybus line or a
+    main-road class with two lanes or fewer in total.
+    """
+    out = []
+    for w in root.findall('way'):
+        t = {x.get('k'): x.get('v') for x in w.findall('tag')}
+        if t.get('oneway') in ('yes', '1', 'true', '-1') or t.get('junction') in ('roundabout', 'circular'):
+            continue
+        try:
+            lanes = int(str(t.get('lanes', '')).split(';')[0])
+        except ValueError:
+            continue
+        reasons = []
+        if lanes <= 2 and t.get('trolley_wire') == 'yes':
+            reasons.append('trolleybus line')
+        if lanes <= 2 and t.get('highway') in ('trunk', 'primary'):
+            reasons.append(f"{t['highway']} with lanes={lanes}")
+        refs = [n.get('ref') for n in w.findall('nd') if n.get('ref') in nodes]
+        if reasons and refs:
+            lon, lat = nodes[refs[len(refs)//2]]
+            out.append({'way': w.get('id'), 'name': t.get('name', ''), 'lanes': lanes,
+                        'reasons': reasons, 'lonlat': [lon, lat]})
+    return out

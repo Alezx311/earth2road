@@ -1,0 +1,13 @@
+{
+  "_note": "Live tuning of the 8-bit NES post effect (game/shaders/nes_post.gdshader). The game re-reads this file twice a second while the nes style is on; keys are shader uniforms.",
+  "block": 4.0,
+  "brightness": 0.82,
+  "contrast": 1.15,
+  "saturation": 1.35,
+  "dither": 0.0,
+  "palette_mix": 1.0,
+  "outline": 1.0,
+  "outline_depth": 0.06,
+  "outline_normal": 0.45,
+  "outline_far": 900.0
+}

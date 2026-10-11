@@ -1,0 +1,45 @@
+{
+  "id": "nes_lab",
+  "name": "NES lab 500 m",
+  "note": "500 x 500 m test cut between Maidan and St Michael for live style work (owner request 2026-10-10). Not an administrative boundary.",
+  "bbox": [
+    30.519973,
+    50.449754,
+    30.527027,
+    50.454246
+  ],
+  "center": [
+    30.5235,
+    50.452
+  ],
+  "region_profile": "ukraine",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "traffic_count": 40,
+  "demand_pool": 60,
+  "local_visual_dna": {
+    "file": "config/visuals/khreshchatyk_dna.json",
+    "landmark_limit": 10
+  },
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Майдан Незалежності",
+        "lon": 30.5234,
+        "lat": 50.4501
+      }
+    ]
+  },
+  "chunk_size": 250,
+  "geofabrik": {
+    "url": "local/ukraine-260918-kyiv.osm.pbf",
+    "md5": "41a038084c3ba11ed0fe2a7bb0c17c71",
+    "note": "Local cut of the dated Geofabrik extract ukraine-260918 (OSM data 2026-09-18), bbox [30.1, 50.16, 31.06, 50.68]; place it in <cache>/geofabrik/."
+  }
+}

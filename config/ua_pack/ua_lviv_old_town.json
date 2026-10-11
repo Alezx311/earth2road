@@ -1,0 +1,53 @@
+{
+  "id": "ua_lviv_old_town",
+  "name": "Львів · Старе місто",
+  "note": "2.5 km square around Rynok Square: old town, Prospekt Svobody, the High Castle hill. Manual choice for the Ukraine BeamNG pack (2026-10-11); not an administrative boundary.",
+  "bbox": [
+    24.014188,
+    49.830671,
+    24.049012,
+    49.853129
+  ],
+  "center": [
+    24.0316,
+    49.8419
+  ],
+  "region_profile": "ukraine",
+  "road_geometry": {
+    "mode": "v2"
+  },
+  "seed": 311,
+  "source_kind": "osm",
+  "terrain_zoom": 12,
+  "chunk_size": 250,
+  "traffic_count": 150,
+  "demand_pool": 300,
+  "start_time": "10:30",
+  "pois": {
+    "enabled": true,
+    "limit": 6,
+    "anchors": [
+      {
+        "name": "Площа Ринок",
+        "lon": 24.0316,
+        "lat": 49.8419
+      },
+      {
+        "name": "Проспект Свободи",
+        "lon": 24.0262,
+        "lat": 49.8429
+      },
+      {
+        "name": "Високий Замок",
+        "lon": 24.0396,
+        "lat": 49.8483
+      }
+    ]
+  },
+  "geofabrik": {
+    "url": "https://download.geofabrik.de/europe/ukraine-260918.osm.pbf",
+    "md5": "8357c720d91f72db3aa5feb6dea04bf3",
+    "note": "Dated Geofabrik extract (OSM data 2026-09-18), cut locally per map."
+  },
+  "level_id": "ua_lviv_old_town"
+}

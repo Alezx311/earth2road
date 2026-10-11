@@ -1,5 +1,1147 @@
 # Earth2Road handoff
 
+## 2026-10-11 (night) — Bilychi F9 notes fixed; Ukraine BeamNG pack (Claude)
+
+- Owner's five F9 notes on `bilychy_dna`: findings and changes per note in
+  [PLAYTEST_2026-10-11.md](PLAYTEST_2026-10-11.md). One commit per fix: facade `textureGrad`
+  from uniform control flow (sparkling loggias, reproduced and checked with `--shots-file`),
+  DNA storey cap by footprint, 4.5 m storeys for tagged shop halls, coping at `wall_height`,
+  churches and their parts keep `historic`, loggias on 5–16-storey panel blocks only (Godot and
+  BeamNG `_lg` facade materials), lawn recipes, yard-lawn shrub clumps (`yards.py` step 6),
+  and the Poly Haven `shrub_03` "shrub" (four tiny weed stalks — every yard shrub was a speck)
+  dropped from `downloads.json`. `bilychy_dna` rebuilt offline from its recorded inputs and
+  installed with `--replace` (backup `.cache/replaced/bilychy_dna-20261011T023638Z`); the five
+  F9 poses re-shot with `--shots-file`, all changed as intended. Full suite: 555 OK, 1 skipped
+  (`logs/ua_pack/unittest-final.log`).
+- Not changed (note 3): the 10-storey `49225378` next to the 19-storey block is a DNA `brick`
+  pick and still draws photo brick with procedural windows; deciding brick vs panel for tall
+  untagged blocks is a profile question for the owner.
+- Ukraine pack (`config/ua_pack/*.json`, v2 roads, full Geofabrik PBF 2026-09-18 from
+  `out/districts/.inputs`, panelka, compact). Runner `out/ua_pack/run.py` (ignored), logs
+  `logs/ua_pack/`. Builds ran three in parallel (lowest free RAM 5.5 GB); later rebuilds were
+  `--inputs <world>/inputs --offline` with the final code.
+
+  | map | size | build | BeamNG export | ZIP | load (cold, to ready) | FPS (6 views) |
+  |---|---|---:|---:|---:|---:|---|
+  | ua_lviv_old_town | 2.5 km | 42 min | 8 min | 96 MB | 66 s | 67–98 |
+  | ua_odesa_center | 2.5 km | 34 min | 8 min | 108 MB | 85 s | 60–103 |
+  | ua_kharkiv_center | 2.5 km | 44 min | 10 min | 384 MB | 100 s | 28–75 |
+  | ua_kamianets_old_town | 2.5 km | 19 min | 5 min | 80 MB | 60 s | 80–90 |
+  | ua_yaremche (rural) | 3 km | 13 min | 6 min | 69 MB | 45 s | 82–89 |
+
+  Load/FPS: `out/ua_pack/bench.py` (= `tools/beamng_bench.py` with camera points from a world
+  folder), cold run only, isolated profiles, other builds running at the same time — noisy.
+  Combined `out/ua_pack/release/earth2road_ukraine_pack.zip` (737 MB, all five levels, loads)
+  copied into the BeamNG mods folder; single ZIPs and `pack.json` (SHA-256) next to it.
+  Not driven by hand; traffic, signals and weather not checked in game.
+- Generator fixes found by the pack (own commits): Geofabrik extract relations with members
+  outside the country file are left out (Odesa failed on relation 7160849); the sea from
+  `natural=coastline` (land left, water right); river/canal lines without a water area become
+  water strips of tagged or assumed width in 150 m pieces (Smotrych canyon in Kamianets); BeamNG
+  loggia sheets snap to the 10 DNA palette colours (Kharkiv 945 → 384 MB; the rest is ~1000
+  small tiles for 533 observed OSM colours).
+- Seen, not fixed: BeamNG compact TerrainBlock outside the map and under open ground keeps its
+  flat beige base maps (Odesa's sea starts beyond the 2.5 km square, so the horizon is beige);
+  Kharkiv FPS is the lowest (dense S3DB centre, ~1000 facade materials).
+- My mistake this session: a shots helper ran `rm -rf logs/shots` and deleted the earlier QA
+  shot folders kept there (`ground-synth*`, `ground-procedural`, `ground-panelka3`, `synth4`,
+  …). They were ignored files, not in Git; they can be retaken with `--shots`.
+
+## 2026-10-11 — honest waiting time and drawn areas in the picker (Claude)
+
+- Owner direction: instead of 30 s streaming, show before the build how long it will
+  take, count it down during the build, and let the player draw any area (e.g. a ring
+  road with one avenue), not only the square. Streaming stays deferred.
+- `akadem_maps/area_probe.py`: roads, road_km (full length of roads touching the area),
+  road nodes, buildings, DEM tiles missing, OSM ready. Source: covering local snapshot,
+  else ONE Overpass request (`make stat ... sum(length())` + two `out count`; HTTP 400
+  falls back to plain counts; 429/504 are not retried and give `area_only`), cached in
+  `<cache>/estimates/`. Live Overpass was 504/500 during this session: the stat query
+  syntax is NOT verified against a real server; the fallback path is unit-tested.
+- `estimates.build_estimate`: five stage groups (download, roads, buildings, scenery,
+  export), NNLS fit (`tools/estimate.py --calibrate`). 13 runs, `out/calibration`
+  (ignored), BeamNG running alongside. Leave-one-out actual/predicted 0.40–1.91, so the
+  shown range is predicted ×0.55–×1.9 (12/13 inside). Download coefficients set by hand
+  (only 2 runs downloaded). Each finished picker build now records features + group
+  seconds in `logs/timings.jsonl`; per-group median ratio rescales this machine, its own
+  spread replaces the base one after 5 runs. Old records still work.
+- Check: `generate_map.py --action estimate` Vynohradar 1.5 km (cached): legacy 103 s
+  [57–196], measured 172 s; v2 332 s [183–630], measured ~435 s (450 incl. download).
+  Centre values are low; ranges hold. Not yet checked: a real picker run's countdown.
+- Picker: background `estimate` replaces the auto `status` check and never locks the
+  area (`busy()` vs `checking()`; a real action kills a running check). Card "Waiting
+  time ≈ X (lo – hi)" with counts/download notes; countdown re-paced by finished groups,
+  "Taking longer than expected" instead of a negative timer. EN/UK strings.
+- Drawn area: config `area: {polygon, provenance}` (`corridor.drawn_area`: simple,
+  0.05–25 km², ≤500 points, no antimeridian), bbox from the outline, `sources.coverage`
+  = polygon, netconvert geo-boundary as for corridors. `generate_map.py --polygon FILE`.
+  Picker "Draw my own area": click corners, drag, right-click removes, close on first
+  corner/Enter, refuses self-crossing/size. E2E (legacy, cached OSM, L-shape 0.82 km²):
+  built 50 s, index `area` 7 points, Godot spawn supported; 91 % of lane points within
+  5 m of the outline, 0.8 % deep in the L's notch (edges partly inside are kept whole,
+  same as corridor maps).
+- Bug found by calibration, pre-existing on HEAD: Singapore 1.5 km legacy failed with
+  GEOS "Ring edge missing" in `junction_surface`. `road_geometry._snapped` now tries
+  make_valid + 1 mm grid as a last resort (only after every grid failed); the same
+  build then completed (197.7 s). Unit-tested with an invalid ring.
+- Checks: full suite 547 OK, 1 skipped (`out/calibration/unittest-01.log`);
+  `validate_ui.gd --offline` (tiny, headless) passed incl. estimate card, countdown,
+  overrun text, drawn outline accept/refuse (`out/calibration/validate_ui-estimate-02.log`).
+- Not done: main menu on the world map (phase 3), real Overpass check of the stat query,
+  manual picker run to compare the shown time with the result.
+
+## 2026-10-10 — streaming: profile, speed-ups, real-window seams (Claude)
+
+- Continued Codex's probes. `city-complete-02` (city 500 m, source) completed:
+  95.3 s wall, road_geometry 40.9 s; traffic and spawn OK. Over budget 3x.
+- Generator speed-ups, outputs byte-identical to the pre-change build
+  (`out/streaming/profile-city500-01` vs `opt-cpu-01`, 0 differing files):
+  `surface_audit.TriangleIndex` vectorised + memoised `hits`; `LocalArea.within`
+  caches each cell-combination union; `stitch_vertices` dedupes knots;
+  `road_geometry.height_or` evaluates chained patch fallbacks only when 0 or >1
+  triangles cover the point. CPU 108.8 -> 88.7 s; buildings 12.5 -> 3.1 s.
+- `config/streaming_start.json` (250 m). `start-city-01`: 30.48 s total incl.
+  Godot spawn/collision 5.4 s and SUMO (91 vehicles, 0 collisions/teleports);
+  `pipeline_within_30s` false. `start-suburb-01`: no 120 m start road.
+- Real-OSM seams FAIL: 250 m window vs 500 m world, central 170 m: 437/2,668
+  samples > 5 cm, max 1.27 m, 67 missing. 400 m vs 500 m: up to 22.7 cm within
+  50 m of the centre. Centre junction 11257426502 flips v2/fallback with window
+  size. Independent window generation is not a viable streaming basis; see
+  STREAMING.md "Results and findings" for the frozen-state design consequence.
+- Machine had BeamNG running: wall times are noisy; CPU time used for A/B.
+- `python -m unittest discover -s tests`: 522 tests OK (1 skipped), 527.7 s.
+- Not done: background audit, spawn search inside a small window, frozen-state
+  incremental generation, Free Drive menu, moving SUMO window, any driven test.
+
+## 2026-10-10 — streaming feasibility probes (Codex)
+
+- Implemented separate generation/cache benchmark, direct-export headless Godot
+  spawn-collision probe and conservative two-process TraCI handoff. No installed
+  maps, active map or production traffic bridge are replaced. See STREAMING.md.
+- First completed synthetic v2 run (`out/streaming/tiny-01`, ignored): source replay
+  49.426 s including worker startup; road_geometry 30.567 s, roads 3.150 s,
+  audit 3.910 s, Godot process/spawn 4.636 s. Ready geometry 4.835 s. Both had 100
+  SUMO vehicles, zero collisions/teleports and supported spawn. This is NOT measured
+  start-to-control; actual player control and streaming drive remain untested.
+- Initial SUMO lab passed red queue, internal-junction lane and ego braking with
+  zero immediate position/speed error and zero 10 s divergence on deterministic
+  drivers. Revised lab also checks the red queue's next phase switch/restart;
+  `python -m unittest tests.test_streaming_probe -v`: 8 passed (4.299 s).
+- Cold real matrix at a 40 s cap: city 500/1000/2000 and suburb 1000/2000 timed out
+  in road_geometry. Suburb 500 failed the existing 120 m spawn-road requirement.
+  Rural 500 returned NoRoads; rural 1000/2000 received Overpass HTTP 429. These are
+  failed/censored attempts, not completed build timings. No retry of rate-limited
+  downloads. Source replay with the partial cold caches repeated the five geometry
+  timeouts and the spawn failure; three rural source runs were unavailable. The
+  nine ready-geometry cases were explicitly `not_run`, not recorded as warm loads.
+- Surface lab `out/streaming/seams-01`: five v2 builds (whole, west/east, reverse
+  order), analytic sloping DEM and a bridge crossing a ground road. Both order
+  checks matched all 12 index/network/tile files. Whole-vs-west/east: 957 probes
+  each; overlap: 963 probes. No missing surfaces or topology mismatches; maximum
+  height differences 0.000882 / 0.000829 / 0.000802 m. Geometric only; no driven
+  acceptance, arbitrary independently acquired OSM windows still unverified.
+- Longer real city-500 replay `city-complete-01` failed at 72.430 s: lazy terrain
+  use during trees needed `terrain/12/2395/1380.png`, absent after the early cold
+  timeout. Retained as a failed experiment. Existing `earth2road data prepare`
+  completed the cache (6 DEM tiles, no second Overpass request), logged to
+  `logs/streaming/city-source-preparation.jsonl`; repeated complete profile pending.
+- Godot fixture exits 0 after successful collision result, but reports existing
+  Dummy renderer RID/ObjectDB cleanup warnings; not a clean rendering/FPS certificate.
+- Execution environment: sandbox process setup failed (`helper_unknown_error`);
+  shell checks required approved unrestricted execution. No repository writes
+  outside the worktree were needed.
+
+## 2026-10-10 — BeamNG weather and time of day work on exported maps (Claude)
+
+- Owner: weather changes did nothing in exported maps (open since 06.10). Cause: levels had no
+  `TimeOfDay`, `Precipitation`, `ForestWindEmitter` (and no `CloudLayer` in synthwave/nes), the
+  objects `core_environment` and `core_weather` presets (`art/weather/defaults.json`) drive.
+  `export_beamng.weather_objects` adds all four to every style; `TimeOfDay` gets the map's
+  lat/lon from `index['bbox']` and `version: 2` — without it the engine moved 0.94 to 0.69 on
+  load (sun at −2.4°), which is why TimeOfDay had been removed. Start times: day 0.94 (sun
+  50.8°, the tuned look), synthwave 0.34 (low western sun), nes 0.0. Stock sky gradient files
+  were tried and left out: no visible difference.
+- Checked in BeamNG 0.39.4, isolated profiles, 1 km Bilychi (`logs/weather/`, ignored; probe
+  `logs/weather/tools/weatherprobe2.lua` + `run_probe2.py`): time slider moves the sun (dusk,
+  night with stars), cloud cover and fog change, preset `rainy` sets `numDrops` 200 and wets the
+  road. White frames seen at night were the probe's screenshot catching the switch frame, not
+  the game. Open: the menu rain slider writes `numOfDrops`, the engine reads `numDrops` — not
+  compared on a stock level (the small_island probe hung); rain streaks not seen in shots.
+- Re-export of the 4×4 km `bilychy_dna` panelka (`out/weather/bilychy_dna-beamng-panelka`) started
+  from `out/night-1009/bilychy_dna/world`; not copied into the BeamNG mods folder.
+- Tests: `test_texture_styles` (weather objects per style); full suite 513 OK, 1 skipped
+  (`logs/weather/unittest-01.log`).
+
+## 2026-10-10 — 8-bit NES texture style; rebuilt maps copied to BeamNG (Claude)
+
+- BeamNG mods: the night-1009 exports copied in — `earth2road_{khreshchatyk_dna,bilychy_dna,
+  ring_beresteiskyi}.zip` (panelka; Khreshchatyk from `beamng-panelka-02`) and
+  `..._synthwave.zip` (own level ids). Older ZIPs with the same level ids stay in `mods/_hide`.
+- `nes` (facade_style 3, `requires: []`). Godot: NES branches in `facade.gdshader` (12 px per
+  3.3 × 3 m cell: SMB brick, grey panels, cream plaster, cyan glass; framed windows with a glint,
+  ~20 % lit gold; sprite outline at corners/wall top via UV2; flat roofs with 2 m seams),
+  `surface.gdshader` (0.5 m pixels by `synth_kind`), `paint`, `field`, `prop` (outline),
+  `foliage`; `nes_sky.gdshader`; `nes_post.gdshader` (full-screen quad after the 3D scene, under
+  the HUD: block = height/270 with 4 taps, sRGB tuning, palette snap to a 40-colour 2C02 subset,
+  black outlines one console pixel wide from depth jumps and normal creases, no outlines beyond
+  900 m); uniforms live from `config/visuals/nes_tune.json` (`main.gd nes_tune`, re-read on
+  change every 0.5 s); `main.gd apply_atmosphere` (neutral ambient colour — sky ambient tinted
+  greys blue —, linear tonemap, no SSAO/glow, white sun). Iterations: a canvas filter without
+  outlines read "too bright, no clear contours" (owner); mip-averaged blocks blurred into blobs,
+  point sampling sparkled; 4 taps kept hard edges; outlines made it read as NES (owner: "much
+  better"). Test map `config/nes_lab.json` (500 m between Maidan and St Michael's, build 2.9 min,
+  installed as `nes_lab`).
+- BeamNG: `texture_styles.nes_kind/nes_tile/nes_end_tile/nes_ground` (palette names in `NES`,
+  nearest-neighbour upscale), `export_beamng.nes_materials` (one tile file per sprite kind,
+  tinted roads/water/roofs via `baseColorFactor`, white paint), `sky_objects(nes=True)`.
+  1 km export `out/typical-models/1km-05-beamng-nes-01` (61 s, 8.4 MB, 46 materials on NES
+  tiles), not installed, not seen in BeamNG.
+- Shots `out/media-1010/shots/<map>/nes/`; NES flythroughs `out/media-1010/final/*-nes.mp4`.
+- Known: unused procedural facade PNGs still go into NES/synth ZIPs; plaster walls streak at
+  grazing angles; Godot segfaults on quit after `--shots` in `nes` (shots saved; not investigated).
+  Full suite before the post-effect rework: 512 OK, 1 skipped (`logs/typical-models/unittest-08.log`).
+
+## 2026-10-10 — media of the rebuilt maps in three styles (Claude)
+
+- 8×8 km Khreshchatyk build stopped with the previous session (in `roads`, ~22.5 GB commit);
+  postponed by the owner. Config `config/khreshchatyk_8km.json` kept.
+- `out/media-1010/` (ignored): `shots/<map>/<style>/` Godot QA shots for khreshchatyk_dna (10
+  poses), bilychy_dna and ring_beresteiskyi (8 each) in procedural/panelka/synthwave, plus
+  "before" in procedural: the replaced installs (Khreshchatyk 06.10, ring 25.09, copied
+  temporarily into `game/data/before_*` and removed after) and `bilychy_roadgen_v2` (05.10).
+  Poses lon/lat in `poses/*.json` → `tools/shots_file.py` (old ring has another offset).
+  `compare/` 2×2 collages and before|after pairs (`compare.py`), `highlights/`.
+- Video: `capture_video.py` = traffic bridge + `--timelapse --timelapse-overlay=false
+  --texture-style=ID` (same camera path per map, 630 frames, 66–90 s per take); `montage.py`
+  cuts one flight per map with the style changing every 4 s (xfade wipe) and title cards.
+  `final/earth2road-styles.mp4` 2:19 (299 MB; share copies 80 MB 1080p, 34 MB 720p),
+  `before-after(-share).mp4` slideshow, raw takes per map/style.
+- Honest note: Khreshchatyk and ring "before" differ little from "now/procedural" (yards, typical
+  models, pitches); the visible change is the texture styles. Bilychi before/after shows yards.
+- Seen, not fixed: Godot sometimes hangs on quit after `--shots` in `panelka` (2 of 7 runs),
+  spamming `material_set_shader: Parameter "material" is null`; shots are already saved. The
+  media scripts kill Godot when that line appears.
+
+## 2026-10-09 — night rebuild of the main maps with the new styles (Claude)
+
+- After a power cut: synthwave work was complete, only the last test log was cut. Full suite
+  510 OK, 1 skipped (`logs/typical-models/unittest-07.log`); Godot synthwave shots re-taken with
+  the final `facade.gdshader` (`logs/shots/synth4/`).
+- Runner `out/night-1009/run.py` (ignored): build → Godot export + install → BeamNG compact
+  `synthwave` (level id + `_synthwave`) → BeamNG compact `panelka`; per-step time and lowest
+  free system RAM in `out/night-1009/status.jsonl`, logs `logs/night-1009/`. Three maps in
+  parallel (16 threads, 32 GB; lowest free 6.5 GB). BeamNG ZIPs stay in `out/` — the owner keeps
+  most mods in `mods/_hide`. Godot: `khreshchatyk_dna`, `ring_beresteiskyi` replaced (backups
+  by `install --replace`), `bilychy_dna` installed new (`bilychy_roadgen_v2` untouched).
+
+  | map | build | Godot | BeamNG synth | BeamNG panelka | total | ZIP synth / panelka |
+  |---|---:|---:|---:|---:|---:|---:|
+  | khreshchatyk_dna | 20.0 min (was ~45) | 0.2 | 5.7 | 6.5* | 32.7 | 31.5 / 362 MB* |
+  | bilychy_dna | 72.2 (was ~70) | 0.4 | 14.8 | 15.3 | 102.8 | 68.8 / 326 MB |
+  | ring_beresteiskyi (legacy roads) | 67.1 (was 72) | 1.1 | 22.2 | 22.7 | 113.2 | 99.8 / 385 MB |
+
+  \* `beamng-panelka-02` after the fix below; the first `beamng-panelka` (846 MB) is obsolete.
+  Height audit unchanged from earlier builds (Khreshchatyk max 7.33 m, Bilychi 6.51 m, ring 7.17 m).
+- Fixed: DNA loggia sheets (2048 px, ~9.7 MB PNG, colour-only) were written once per DNA facade
+  — Khreshchatyk 80 files, 30 distinct. Now one file per colour (`kyiv_dna_loggia` stem);
+  Khreshchatyk 846 → 362 MB. Still open: panelka ZIPs are 4–12× synthwave because every
+  distinct colour bakes its own sheet; tinting via `baseColorFactor` (one sheet) or a smaller
+  sheet would fix it but changes the look — owner's decision.
+- Godot shots of the new Khreshchatyk in both styles: `logs/night-1009/shots-khr-{synthwave,panelka}`.
+- 8×8 km around Khreshchatyk: `config/khreshchatyk_8km.json` (v2, Khreshchatyk DNA profile, Kyiv
+  PBF cut), started 03:17 with the same runner (`logs/night-1009/khreshchatyk_8km.*`).
+  Progress at 05:05: extract 20 s, netconvert ~1 min, `roadgen_input.json` 916 MB (18 min),
+  roadgen 80 min (Bilychi ~15.5) for 11,566 junctions (7,910 v2 / 3,656 fallback; Bilychi
+  2,301); one core busy, ~15 GB RAM. At Bilychi's scale the build would take ~6 h.
+  `network` ended 05:22 (2 h); at 06:03 in `roads` with 22.5 GB commit of a 33.9 GB limit
+  (pagefile ~2 GB), 3.2 GB free. 64 km² is above the 55 km² split rule of the district batch
+  (same RAM/commit reason) — if it runs out of memory, split into halves with 200 m overlap.
+- Not verified: BeamNG runtime of any new ZIP, driving, FPS.
+
+## 2026-10-08 — synthwave texture style (Claude)
+
+- Owner asked for a retrowave / 1980s VR pack. Searched: no CC0 texture pack (KDE CC0 wallpaper,
+  paid itch.io backgrounds, sprite kits only), so `synthwave` (facade_style 2, `requires: []`)
+  is procedural. Godot: `facade.gdshader` synth branch (one neon hue per building, ~55 % lit
+  windows, corner/roof/every-3rd-storey lines from new UV2 = wall length/top), `surface.gdshader`
+  `synth_kind` per material (`materials.gd`), `paint`/`field` glow, `visuals/prop.gdshader` for
+  palette props (balconies were brick-red), `synth_sky.gdshader` + `main.gd apply_atmosphere`
+  (sky, fog, sun, glow follow K). Shots `logs/shots/ground-synth{1,2,3}`. Trees and cars keep
+  their day materials (dark silhouettes at dusk).
+- BeamNG: `texture_styles.family/synth_tile/synth_end_tile/synth_ground`,
+  `export_beamng.synth_materials` (every facade incl. stock sets → synth tile + end, UV 1/6;
+  emissive via `emissiveMap`/`emissiveFactor`, not checked in game), dark roads/pavements/roofs,
+  emissive paint, `sky_objects(synth=True)`. Export `out/typical-models/1km-05-beamng-synth-01`
+  validated (`ee694f9cf87f…`, 23 synth facades), not installed.
+
+## 2026-10-08 — photo ground for the realistic (panelka) style (Claude)
+
+- Owner asked for better ground and grass in the realistic pack. Five ambientCG CC0 2K sets
+  (`config/textures.json` `photo_*`, `tools/fetch_textures.py` now takes a per-set resolution):
+  Grass007 lawn, Grass001 meadow, Ground037 verge, Ground003 worn turf, Ground030 trodden soil.
+  They join `panelka`'s `requires`.
+- Godot: `surface.gdshader` photo branch (global `facade_style == 1`, so K switches ground too):
+  base + patch (≈47 m noise with 7 m lobes) + wear layers, each sampled straight and turned 37°
+  against the repeat, patch colour pulled 60 % (wear 30 %) to the base average (last mip),
+  saturation 0.8, roughness ≥ 0.65. Recipes in `materials.gd` (green, ground, wood, orchard,
+  yard, dirt; pitch/track unchanged). Normal/roughness maps loaded at 1K. First pass read as
+  camouflage from above (hard edges, mismatched hues); fixed by the harmonising and softer
+  edges. Shots: `logs/shots/ground-{procedural,panelka3}` (`--texture-style=ID` QA arg).
+- BeamNG: `texture_styles.ground_sheet` bakes 2048 px / 24 m colour+normal sheets for
+  `kyiv_grass`, `kyiv_ground` (periodic masks, turned base, GL→DX normal flip — convention not
+  confirmed); `export_beamng.photo_ground_materials`, UV 1/24. Export
+  `out/typical-models/1km-05-beamng-panelka-05` validated (`98f2336020f0…`), not installed,
+  not seen in game yet. TerrainBlock (`terrain` optimization) still flat base maps.
+
+## 2026-10-08 — courtyards, Panelka photo facades, switchable texture styles (Claude)
+
+- Playtest note #3 (empty yards). `core/yards.py` → world `visual_props` (tiled, Godot only):
+  parked cars in double rows on surface parking and kerbside on yard service roads near
+  apartment blocks (off the carriageway/sidewalks), a bench (+ bin) beside each `entrance=*`,
+  shrubs along apartment walls, playground kit on `leisure=playground`. All `synthetic:yard`
+  with `rule`/`source`. Cars: baked traffic models (MultiMesh) + one box collider each
+  (`world.gd`); BeamNG ignores `visual_props` (decision: no parked cars there). 1 km Bilychi
+  (`out/typical-models/1km-05`): 824 cars, 1420 shrubs, 89 benches, 32 bins, 89 playground items.
+- Facades (#5, "too uniform"): owner downloaded Kureca's Panelka pack (CC0, itch.io) into
+  ignored `texture_packs/Panelka`. `tools/import_panelka.py` → `game/assets/textures/panelka_*`
+  (6-panel atlas with cropped edges and equalised wall tone, red/white brick + normals,
+  plaster), SHA-256 per source file in the manifest. `facade.gdshader`: photo panel per
+  3.3 × 3 m cell (one window style per building, ~10 % swapped, ~3 % blank), photo brick, photo
+  plaster tinted by family/OSM colour under procedural windows; observed `building:colour`
+  tints panels.
+- Owner: walls "flicker", "only windows", procedural walls among photo ones look wrong, wants
+  packs switchable in Godot and selectable for BeamNG export. Fixed: antialiased seams faded
+  with distance (hard `step()` lines crawled); coplanar S3DB part walls (38 same-facing
+  overlaps on the 1 km map) z-fought → each record's walls inset 0–2 cm by its height range;
+  balconies were limited to buildings without `local_style` and `base == 0` (all tower parts)
+  and vanished beyond 180 m → also on panel/brick `local_style` and on parts above their base,
+  stacks on every other bay of panel blocks, `balcony_distance` 600 m; tile.gd now uses the same
+  winding as world.gd so balconies sit on the window grid.
+- Styles: `config/visuals/texture_styles.json` (procedural, panelka); `game/scripts/styles.gd`
+  sets global shader uniform `facade_style` (project.godot `[shader_globals]`), K / pause menu,
+  remembered in settings.cfg. BeamNG: `texture_styles.py`, `--texture-style` in `earth2road
+  export` and `tools/export_beamng_gui.py`, choice in the export dialog (defaults to the style
+  in the game); recorded in report/artifact. A style whose pack is missing is an error.
+- Checks: tests `test_yards` (5), `test_texture_styles` (4); Godot scripts parse-checked; QA
+  shots `logs/shots` (shots-file runs `logs/typical-models/godot-shots-facade-0{1..5}.log`);
+  BeamNG compact export of 1km-05 with `panelka` validated (ZIP `478698bdb407…`), facade tiles
+  inspected as images. Not verified: BeamNG runtime/look in game, flicker in motion (owner),
+  FPS with yard props, style switch by hand.
+- Known: plaster crack pattern repeats visibly; saturated OSM colours (#e5c100) tint strongly;
+  facade family still random per building where OSM gives no material/levels hint.
+- After the owner's BeamNG look ("only window textures", pack has balconies, no playgrounds):
+  II-68 (whole-facade photo) cut on its measured grid into 55 loggia modules
+  (`panelka_loggias`, 6.6 m bay x 3 m storey, tone equalised); ~70 % of panel blocks >= 15 m use
+  them above the ground floor (`VisualTile.loggias`, passed to the shader in COLOR.a) and get no
+  geometric balconies; the grille panel only on ground floors. BeamNG: `balcony` facades and ~70 %
+  of DNA panel styles bake loggia tiles. `beamng_yards.py` exports yard props except parked cars
+  (benches, bins, playground kits as box meshes per 250 m cell, shrubs as forest bushes) — the
+  earlier export had dropped the whole layer, not only cars. 1km-05 compact panelka export
+  `a885e969fc6b…`: 904 objects, 5,187 forest items, validate OK, installed into the BeamNG mods
+  folder (the 06.10 ZIP of the same name backed up in `.cache/replaced/beamng-mods/`).
+- Full suite before the loggia/yard-export changes: 506 OK, 1 skipped (`unittest-03.log`).
+- Owner: one loggia module per bay looked bad; use the whole photo, end walls plain. Now the
+  II-68 sheet (5 bays x 11 storeys = 33 x 33 m) is mapped continuously (Godot shifted by whole
+  bays per building; BeamNG 2048 px sheet, UV 1/33). End walls = short walls (<= 16 m) across
+  the long axis of blocks >= 1.6:1 (`VisualTile.end_walls` = `texture_styles.end_walls`, tested):
+  blank panels / windowless brick, no balconies, BeamNG `<facade>_end` materials.
+- Owner then saw huge blurred loggias on some BeamNG blocks: UV was right (33 m measured in the
+  DAE), BeamNG showed the previous export's texture from its cache (same `.color.png` path).
+  Generated facade textures now carry a content digest in the file name (`fresh_png`), as
+  shapes already did. Installed `204f8b1188b7…`.
+
+## 2026-10-08 — playtest of the 1 km typical-models map: school, S3DB min_level, editable setup (Claude)
+
+- Owner drove `bilychy_1km_v2` (install of `out/typical-models/1km-02-godot`, not activated) and
+  left 5 F9 notes in ignored `logs/defects/bilychy_1km_v2/`.
+- #1 School No. 288 (relation `4192125`, courtyard) missing again: `osm_buildings.hole_free`
+  dropped pieces with area ≤ 0.05, but `prepare.py` passes lon/lat (school ≈ 5e-7 deg²), so
+  every building relation with a courtyard vanished. The 06.10 test used a 10×10 degree
+  building. Threshold now 1e-4 of the outline; test in real lon/lat.
+- #2 textures overlapping on a tower (ways `476481258…477063215`): S3DB parts tagged only
+  `building:min_level` started at the ground and z-fought with the brick podium. `min_level`
+  × 3 m now becomes `base` when `min_height` is absent.
+- `test_building_types` world test also builds a courtyard school relation and a podium part.
+- Found: `.venv` held a non-editable copy of `akadem_maps` from 13:46 (no `building_types.py`),
+  so `earth2road` built with stale code; a first rebuild (`1km-03`) was discarded. Package
+  reinstalled editable; `setup.ps1`/`setup.sh` now install with `-e`; note in VALIDATION.
+  Maps built today through the `earth2road` command may lack the day's changes.
+- Rebuilt `out/typical-models/1km-04` (+ `-godot`) from the checkout: school 2 pieces 9 m,
+  tower parts base 12/48/60 m, 7 typical records; installed over `bilychy_1km_v2` (backup
+  `.cache/replaced/bilychy_1km_v2-20261008T145958Z`). Not yet seen in the engine.
+- Open notes, owner to prioritise: #3 empty yards (parked cars + props for Godot only, not
+  exported to BeamNG), #4 roundabout still wrong (wants parametric roundabout templates by
+  lanes/exits, like v2 junction families), #5 facades too uniform (look for open facade texture
+  sets for typical series).
+- Tests: `test_osm_buildings` 11 OK, `test_building_types` 13 OK; full suite not run.
+
+## 2026-10-08 — typical models by building type: churches, mosques, fuel canopies, shop halls (Claude)
+
+- Owner picked "Будівлі/наповнення → типові моделі за типом" (open since PLAYTEST note 10).
+  New `core/building_types.py`: OSM `building`/`amenity`/`religion`/`denomination`/`shop`
+  → `church_orthodox | church_western | mosque | fuel_canopy | mall | retail`. Context:
+  `building=roof` inside/near an `amenity=fuel` area/node is a canopy; a
+  `place_of_worship` node inside a `building=yes` footprint types it. Untagged Christian
+  church = Orthodox for `region_profile: ukraine`, Western elsewhere (assumption).
+- Form = extra building records shaped like S3DB parts (same `id`/`style_key`, `base`,
+  `roof_triangles`, `local_style`, `roof_color`), so Godot/BeamNG draw them unchanged:
+  hipped nave + octagonal drum with onion (Orthodox, gold), west bell tower (onion or tall
+  spire; only naves ≥150 m² and ≥7 m wide, side ≤ half the nave), dome + minaret (mosque),
+  raised deck (base 4.5 m, top 5.3 m) on 0.4 m posts (canopy), 4.5 m storeys and 1/3 levels
+  for retail/mall without OSM levels. Church height from nave width when assumed.
+  Every record: `typical = {kind, role?, provenance: derived:typical_model, version, fallback?}`.
+  OSM wins: parts, `roof:shape`, tagged height/levels/colours. `audit.json` →
+  `typical_models` lists typed/kept buildings; counts `typical_*`.
+- BeamNG: the synthetic POI canopy is skipped within 60 m of a mapped canopy
+  (`fuel_canopies_mapped`). Rural `dress` no longer re-roofs typical records.
+- Fixed in passing (regression from the 07.10 LocalArea change): `rural.dress` crashed on a
+  `tree_row` entirely outside the map area (empty LineString → `getX called on empty
+  Point`); the 1 km Bilychi build hit it. Test `test_tree_row_outside_the_map_area_is_skipped`.
+- Reality check: in the Bilychi 4 km snapshot only 1 `building=roof` canopy is reachable
+  (fuel stations are nodes / `building=yes|retail`), so the BeamNG synthetic canopy stays
+  the main fuel visual. Retail/mall halls there have OSM levels → height unchanged.
+- 1 km Bilychi (`out/typical-models/1km-02`, inputs of `road-fairing/after-04`): 1 Orthodox
+  chapel (dome), 1 church kept (OSM `roof:shape`), 3 retail, 2 mall, 0 fallbacks; world and
+  BeamNG compact `validate` OK (ZIP `b05322906e9a…`, 884 objects). Godot shots
+  `logs/typical-models/shots-0{1,2}` (01: nave-wide tower read as flats → proportions fixed;
+  02: chapel with green hipped roof and gold onion). Shots used a temporary
+  `game/data/typical_qa_1km` via `AKADEM_MAP`, removed after; `active_map` untouched.
+- Tests: `tests/test_building_types.py` (13, incl. world + both exports on tiny), canopy
+  skip in `test_beamng_export`. Full suite before the rural fix: 493 OK, 1 skipped
+  (`logs/typical-models/unittest-01.log`); final code: 496 OK, 1 skipped (`unittest-02.log`).
+- Not done: no big church/mosque/canopy seen in an engine (none in the 1 km cut); BeamNG
+  runtime not loaded; facades of towers use the generic DNA plaster texture (windows
+  read as storeys); no apse, cross or multi-dome layouts.
+
+## 2026-10-08 — Singapore: three 2 km maps with the current pipeline, no code changes (Claude)
+
+- Owner: "no fixes or improvements, just try to make a few good maps of Singapore" with all
+  recent features. Generator code untouched; only configs, DNA profiles and input data.
+- Configs `config/singapore_{marina_bay,orchard,kampong_glam}.json` (2×2 km, roadgen v2,
+  Local Visual DNA, landmark_limit 10, manual quick-travel anchors, `experimental` profile).
+  DNA `config/visuals/singapore_*_dna.json` from `logs/singapore/make_profile.py` (6 manual
+  profiles: cbd_towers, shophouse, colonial_civic, orchard_retail, condo_green,
+  tropical_garden; 42 anchors per map on a 400 m grid; profile by a fixed OSM rule).
+- Sources: Overpass via `earth2road data prepare` (selection v3) into
+  `out/singapore/inputs-{marina,orchard,kampong}`. Terrarium z12 DEM over central Singapore is a
+  surface model: −616…+847 m per tile, −58…+115 m inside Marina Bay (real ≈0–15 m) → ground hills
+  and spikes, max ground smoothing shift 19–22 m (world-01). Workaround in data only:
+  `logs/singapore/clean_dem.py` writes `inputs-*-dem` (clamp 0..170 m, 9 px grey opening,
+  5 px median + box blur; derived assumption, recorded in each cache). Result: shift 1.7–2.6 m,
+  connected-surface max 0.3–0.5 m (was 1.9–19.5 m).
+- My mistake, fixed in world-03: profile floors (cbd 20–50, condo up to 30) apply to every
+  building without OSM height/levels; in Singapore those are shophouses and sheds → 292–304
+  fake towers ≥40 m per map. All profiles now 1–12 floors; synthetic ≥40 m: 0.
+- Quick-travel: spawns need a ground-level ordinary edge ≥120 m within 150 m. Marina Bay has
+  40 such edges of 1,032 (bridges, short CBD blocks): Merlion, Esplanade, Fullerton, Helix,
+  Lau Pa Sat cannot get a spawn; three anchors moved 190–220 m to accepted roads (noted in
+  the configs). `logs/singapore/snap_anchors.py` reproduces the rule read-only.
+- Final worlds `out/singapore/*-world-03` (build 10.5 / 20.7 / 28.1 min, three in parallel):
+  Marina Bay 4,711 lanes, 941 buildings, 614 parts, 11 spawns; Orchard 9,622 lanes, 1,719
+  buildings, 16 spawns; Kampong Glam 10,256 lanes, 3,753 buildings, 10 spawns.
+  BeamNG compact `*-beamng-03`: ZIPs 21.8 / 30.3 / 34.4 MB, SHA-256 0aca7d59… / 6e706b16… /
+  5b3b8028…; `validate` OK; `tools/capture_beamng.py` in isolated profiles: load ~14 s,
+  360/360 frames, exit 0 for all three (`logs/singapore/beamng-take-*-03`). Godot exports
+  installed as new maps `singapore_*` (not activated); shots `logs/singapore/shots-*-03`.
+  ZIPs copied into `%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\mods` (hashes match).
+- Seen, not fixed (generator): heights capped at 180 m (`prepare.py` `min(h,180)`) and
+  `min_height` dropped when above the cap → MBS SkyPark (193–207 m) is a slab from the ground,
+  CBD crowns above 180 m become columns; lanes are right-hand (Singapore drives left, no
+  `--lefthand`); POI kind labels are Ukrainian ("ТРЦ", "АЗС"); landmark ranking favours MRT
+  stations; a roof part with height < min_height (Masjid Sultan) renders from the ground.
+- Not done: driving by hand, full test suite (no code changed).
+
+## 2026-10-08 — director guide, Detroit photo-match pilot, 4 km build fixes (Codex → Claude)
+
+- Owner: social clips need a portable "director" any agent can read (scale and
+  recognizable places over fine detail, clean footage, explanation only on request), and
+  a photo → in-game match test on a new place: Detroit, US audience. Started by Codex,
+  continued by two Claude sessions (the second after a power cut).
+- `docs/DIRECTOR.md` (canonical), `docs/DIRECTOR_SCENARIO.md`, `skills/earth2road-director/`
+  (thin wrapper), AGENTS.md pointer. `tools/director_camera.py` (lon/lat/alt → BeamNG XYZ
+  with the world's projection and export offset), `tools/director_edit.py` (photo crop →
+  cross-fade → capture, no captions/audio, credit in MP4 metadata). `beamng_assembly`:
+  `kind: city` replays an export's TSStatic batches, `camera_path` keys {time,pos,look,fov}
+  (vertical FOV), `resolution` + `supersampling`; BeamNG 0.39.4 window limits measured and
+  documented in BEAMNG_ASSEMBLY (1248×1920 capture, centre crop to 1080 without scaling).
+- 4 km Detroit exposed generator costs/failures 1 km maps did not:
+  `clear_sidewalks` buffered the whole city carriageway per sidewalk (roads >85 min → 20);
+  `rural.dress` unioned city-wide geometry per house (buildings >60 min → 2–3).
+  `osm_buildings.LocalArea` cuts a large area into 200 m cells and answers `within`/
+  `nearest` locally; results compared identical on the test maps. `robust()` now retries
+  make_valid → 1 mm → 1 cm grids → buffer(0) and dumps WKB to `$AKADEM_MAPS_GEOS_DUMP`.
+  `LocalCut` handles empty geometry (trees stage crashed on greens fully under a road).
+  Rivers: `tunnels_under_water` hides tunnel edges (layer < 0) running >50 % under mapped
+  water — the Detroit–Windsor Tunnel surfaced as a strip across the river. Lanes stay for
+  traffic; `tunnel_edges_hidden_under_water` in the elevation report.
+- Assembly `city`: generated ground (`__kyiv_ground_`) was staged as a prop and hidden until
+  12–15 s, exposing bare terrain and the water plane during the matched hold (take-09).
+  `city_stage` now keeps it in place; misdiagnosed first as cached shadows (probes 07–15).
+- Result: world-09 (33.9 min, 100 tiles, 46,368 lanes), beamng-09 (16.2 min, ZIP
+  `24547eb4dd0b…`), take-10 690/690 frames → `posts/2026-10-07-detroit/video/detroit-10.mp4`,
+  24.6 s, 1080×1920, 738 frames fully decoded, no audio, no black intervals. Camera fit
+  RMS 4.29 px (approximate composition, not measured registration). Details and known
+  limitations in that folder's `qa.md`. Not published; nothing uploaded.
+- Checks: full suite 481 OK, 1 skipped (`logs/director/unittest-03.log`), after all changes.
+- Failed/aborted: world-01 killed at roads, world-02 built by a stale 02.10 wheel (river as
+  ground), 03–07 stopped/crashed during the fixes, world-09 first run killed by a power cut.
+  Two Godot tests failed only inside the Codex sandbox; outside it they pass.
+- Not verified: driving/runtime of the Detroit map, real-time playback of the video,
+  `LocalArea` speedups on maps other than Detroit and the 1–2 km scale maps.
+
+## 2026-10-07 — road builder switch, time estimates, BeamNG mods folder in the map menu (Claude)
+
+- Owner: 4×4 km with export takes about an hour; wants a switch with options and expected
+  time at generation and export, and the BeamNG mods folder in the game's map manager.
+  Owner chose: picker offers only Fast (legacy) and Roadgen v2 (Local Visual DNA stays in
+  config); "Remove from BeamNG" separate from "Delete map"; deletion is permanent.
+- Measured (existing logs): Bilychi 4×4 km legacy 14.6 min vs v2 68 min (network 24 min,
+  roads 25 min, roadgen alone 15.5 min); Khreshchatyk 2 km legacy 5.6 min vs v2 44 min;
+  BeamNG compact export 64 tiles 2.6 min, 111 tiles 7 min, 112 tiles with DNA 18 min.
+- `tools/generate_map.py --road-geometry legacy|v2` (default legacy) → `cfg.road_geometry`.
+  Picker: "Road builder" menu with note, remembered in `settings.cfg [generator]`; build
+  time estimate replaces the old fixed "10–30 minutes" text; elapsed/expected while running.
+- `akadem_maps/estimates.py`: minutes = overhead + rate × (km² | tiles) as a range; base
+  rates from the runs above; after ≥2 runs of a mode, `logs/timings.jsonl` (written by
+  generate_map and export_beamng_gui) replaces them. `tools/estimate.py` prints the table
+  for Godot (`game/scripts/estimates.gd`, with the same fallback constants).
+- Export dialog: export time per optimization mode, "Install into the BeamNG mods folder"
+  (copies `earth2road_<id>.zip` flat into mods via `.part` + rename; a ZIP locked by a
+  running BeamNG reports "Close BeamNG and retry" and offers Retry install).
+- Map menu: mods folder line (auto: `%LOCALAPPDATA%/BeamNG/BeamNG.drive/current/mods`, or
+  `userFolder` from BeamNG.drive.ini; Change…/Open folder), "· in BeamNG" mark, Add to
+  BeamNG (newest validated export, else export dialog preset to install), Remove from
+  BeamNG, Delete… (confirmation; disabled for the loaded map) → `tools/maps.py delete`:
+  game/data, data/build, out/generated/<id>[-stamp][_godot][.logs], legacy `<id>.osm`,
+  exports whose artifact.json names the id, both ZIP names in mods; junctions unlinked,
+  OSM snapshots kept. Continues past locked files and lists them.
+- Checks: full suite 467 OK, 1 skipped (`logs/modes-ui/unittest-01.log`);
+  `validate_ui.gd --offline` (tiny) passed with new checks (`validate_ui-07`);
+  `validate_beamng_export.gd --runtime` PASS (`validate_export-01`), install box forced
+  off so the real mods folder was not touched (verified: no tiny ZIP there). The QA tiny
+  timing line was removed from `logs/timings.jsonl`.
+- Failed experiments: Godot launched from Git Bash segfaults before any output (also on
+  `--quit`); from PowerShell it works. Relative `--log-file` crashed too (use absolute).
+  `Estimates.reload()` collided with the built-in `GDScript.reload`; renamed `load_table`.
+- Not verified: Add/Remove/Delete clicked by hand; estimate accuracy for v2 outside Kyiv.
+
+## 2026-10-07 — local Reddit devlog and BeamNG assembly captures (Codex)
+
+- Added ignored `/posts/` for drafts, style notes, archived copies and media. The
+  Ukrainian devlog covers the agreed 2026-09-27–10-06 interval (first recorded work
+  is 09-28). Existing drafts remain in place; copies and source provenance are local.
+- Added `tools/beamng_assembly.py` / `.lua` and `docs/BEAMNG_ASSEMBLY.md`: fresh
+  isolated BeamNG profiles, COLLADA partition without changing source exports,
+  staged placement of road pieces, camera capture and captioned silent MP4 encoding.
+  Generated surface corners retain their original position/normal/UV/material;
+  presentation chunks have no collision and are not playable release artifacts.
+  Normal exporter and existing uncommitted generator/game work were preserved.
+- Source: `out/road-fairing/after-04` + its compact BeamNG export, ZIP SHA-256
+  `31b6a7558c1c697ea949b613d8888b467a6a95a71b852749effcd5dc18b4e3c8`.
+  Junction `cluster_3229797051_436619362` (v2 X, Efremova/Osinnia).
+  Two full BeamNG 0.39.4 captures completed, exit 0: junction 624 animated objects,
+  street 1,565; each 750 frames, 25 s, 1920×1080/30 fps. Ukrainian captions explicitly
+  identify assembly visualization, not generation time. Files under
+  `posts/2026-10-06-devlog/video/`; raw evidence under `captures/`.
+- Geometry verification: all 58,187 triangles in the 14 partitioned junction
+  objects compared as expanded multisets: exact position/normal/UV/material and
+  multiplicity, recorded in `captures/junction-01/geometry-verification.json`.
+  New tests also verify compact/balanced files and rejection of incompatible indices.
+- Tests: full discovery 456 run, 2 failures, 1 skip, 427.846 s
+  (`captures/unittest.log`). Both failures were Godot subprocess 0xC0000005 under
+  the sandbox (asset props and vehicle availability); isolated unrestricted rerun
+  passed both, 0.932 s (`captures/godot-retest.log`). Effective result: 455 passed,
+  1 skipped. New partition tests: 2 passed again after final Python edits.
+- First probe completed six shots but rising from below terrain hid the motion;
+  final takes descend visibly from above. Probe retained as `captures/probe-01`.
+  An initial ad-hoc mesh comparison script failed on a blank JSONL line; corrected
+  and rerun successfully. No source geometry changed in either experiment.
+- No Reddit publication, Git commit, map installation or release acceptance implied.
+  Static control capture completed (2 frames, exit 0); restored scene visually
+  matches the original export at the same camera pose. Street mesh verification:
+  87,679 triangles in 19 source objects match exactly. Both MP4 files fully decode
+  to 750 frames with no black intervals; inspected one frame per second and full-size titles.
+- Optional Khreshchatyk capture stalled after texture import. Owner explicitly
+  stopped further capture/debug work to prioritize writing; owned PID 25784 was
+  terminated. No new Kyiv shots are claimed or linked. Final bundle has four
+  verified images, two videos, polished Ukrainian text, source evidence and local
+  `REVIEW.html`. The original draft is retained in `drafts/01-initial.uk.md`.
+- Empty manual-group JSONL initially acquired a newline and logged an empty-document
+  error; preparation now preserves empty files. Existing completed media is unaffected.
+  Other concurrent UI/estimate work appeared during this task and was untouched;
+  the full-suite result above applies to the 456 tests discovered at its start.
+
+## 2026-10-06 — playtest fixes (10 notes) + Khreshchatyk DNA test map (Claude)
+
+- New F9 defect marker in Godot (`game/scripts/defect_marker.gd`): frame, camera, car and the
+  point under the screen centre → ignored `logs/defects/<map>/`; `tools/defects.py` resolves
+  lon/lat, nearest SUMO edge/junction. Owner marked 10 notes on `bilychy_roadgen_v2`; summary,
+  findings and generator changes per note: [PLAYTEST_2026-10-06.md](PLAYTEST_2026-10-06.md).
+- Generator: `core/osm_buildings.py` (building multipolygons → hole-free pieces; S3DB outlines
+  hidden when parts cover ≥50 %, parts share style key/colours; OSM `building:colour`/`roof:colour`
+  in every mode; pyramidal/hipped/dome/onion roof solids, `roof:height`, `min_height`; one-storey
+  kiosks; footprints over the at-grade carriageway clipped, or dropped when >60 % (small <60 m²: >30 %) on it, → `audit.json`
+  `buildings_on_carriageway`). `core/landcover.py` (relation lakes/forests in every mode, `pitch`,
+  `track`, priority overlap resolution). `core/roundabouts.py` (one lane count per ring before
+  netconvert → `roundabout_lanes`). `road_profiles.lane_suspects` (report only →
+  `lane_count_suspects`). `road_elevation`: carriageway pairing by name/ref/main class, median
+  polylines for motorway/trunk pairs (derived barrier fences, open where carriageway reaches the
+  line), junction-mouth plateau for minor roads (half major width + 4 m, ≤4 % added grade).
+  `roadgen.clear_sidewalks`: sidewalks never over same-level carriageway, runs <4 m and walking
+  slivers dropped. `rural.dress` also runs for the urban private sector (no roof changes) and
+  reads jersey barriers/guard rails.
+- Godot: roof colour materials, raised parts closed underneath, water/pitch/track materials with
+  collision (water had none: the car fell through lakes), `--shots-file=` QA poses
+  (`tools/shots_file.py`). BeamNG: water/pitch/track surfaces (water was grass with trees on it),
+  no vegetation on non-green covers, fences exported, shared roof-colour materials, raised parts
+  closed underneath.
+- Corrections: first roundabout reading ("netconvert adds a lane") was wrong — the extra lane was
+  the guessed sidewalk. First full Khreshchatyk build (`world-01`) failed after 40 min with
+  `KeyError: '_tags'` (a visible outline lost its markers before its parts read them); fixed and
+  checked first on a 0.8×0.7 km cut (`smoke-02`, 1.5 min, both exports OK, Godot shots).
+- Not done: typical models for churches/fuel stations/shops; lane counts are not raised from
+  suspicion; BeamNG water is a surface, not a water volume.
+- Tests: new `test_osm_buildings`, `test_landcover`, `test_roundabouts`, `test_playtest_roads`.
+  Full suite before the Khreshchatyk build: 453 OK, 1 skipped (`logs/khreshchatyk-dna/unittest-01.log`);
+  final code: 454 OK, 1 skipped (`logs/khreshchatyk-dna/unittest-02.log`).
+- Khreshchatyk: `config/khreshchatyk_dna.json` (bbox of the old `khreshatyk` map, v2, DNA,
+  10 quick-travel anchors), profile `config/visuals/khreshchatyk_dna.json` (5 manual profiles,
+  42 anchors by a fixed rule, `logs/khreshchatyk-dna/make_profile.py`). Sources prepared offline
+  from the registered Ukraine PBF into `out/khreshchatyk-dna/inputs`.
+- Khreshchatyk builds: `world-01` failed (`KeyError: '_tags'`, above); `world-02` failed after
+  40 min with a GEOS `TopologyException` (no traceback captured; not reproduced on two cuts).
+  New geometry operations now retry on repaired, 1 mm-snapped geometry
+  (`osm_buildings.robust`); builds run with `AKADEM_MAPS_TRACEBACK=1`. `world-03` completed
+  (~45 min); review showed whole 5-storey buildings dropped next to over-wide yard roads and the
+  Dnipro draped up the slope → drop only when >60 % on the carriageway (small <60 m²: >30 %), and
+  flat water at the 10th DEM percentile inside each water polygon with the shore anchoring the
+  ground (`landcover.water_level/shore`). Trial BeamNG export of `world-03` was copied to the
+  normal BeamNG mods folder on owner request.
+- Final `out/khreshchatyk-dna/world-04` (34 tiles, 7,809 lanes): 2,351 buildings, 38 building
+  relations, 33 S3DB outlines hidden / 659 parts, shaped roofs 25 dome, 11 onion, 55 pyramidal,
+  72 hipped, 89 fallbacks; 670 footprints clipped and 92 dropped (all <60 m²) at the
+  carriageway; 23 landcover relations, 20 flat water levels (Dnipro 22.5 ha one level; shore
+  ground within 0.25 m of water level); 149 sidewalk runs cut, 227 walking slivers dropped;
+  470 urban fences; 69 paired carriageway ways, 0 medians (no motorway/trunk); lane suspects:
+  Bohdana Khmelnytskoho (trolleybus, lanes=2). DNA: 2,690 styled, 10 landmarks, 14 spawns.
+  Godot export installed as new map `khreshchatyk_dna` (not activated; replaced only the
+  `world-03` install of the same new ID, backup in `.cache/replaced/`). Shots with
+  `--shots-file` (`logs/khreshchatyk-dna/shots-04/`): St Michael's, St Sophia (white walls,
+  green roofs, gold domes), Maidan column and fountains, Dynamo track and pitches recognisable.
+  `tools/shots_file.py` takes the camera height from the nearest lane: two river poses ended
+  inside the hill (camera below terrain); not fixed.
+- Final BeamNG compact export `out/khreshchatyk-dna/beamng-02`: level `kyiv_khreshchatyk_dna`,
+  ZIP 30.4 MB, SHA-256 51692375…, 3,679 objects, 342 signals, 19,961 forest instances; height
+  audit nodes over 2 m: 19, max 7.33 m (not investigated). Copied over the trial ZIP in the
+  BeamNG mods folder (`earth2road_khreshchatyk_dna.zip`; no other mod touched). Runtime not verified.
+- Seen, not fixed: neighbouring footprints with different styles overlap on a facade
+  (Bessarabka block); surface audit acceptance remains `pending`; not driven yet.
+
+## 2026-10-06 — Local Visual DNA for Bilychi, 21 quick-travel points (Claude)
+
+- Owner drove Podil DNA: "much better", quick-travel by points is convenient; some places
+  have no textures (location not given). Static check of the Podil ZIP: all 227 materials
+  defined, every level texture present, 157 DNA facade PNGs decode (RGB 256²). Cause not found.
+- `config/bilychy_dna.json`: same 4 km square as `bilychy_roadgen_v2`, new level
+  `kyiv_bilychy_dna`. Source re-extracted (selection v3) from the full Ukraine PBF (396 s,
+  11,351 ways); terrain copied from Bilychi-11 inputs. Cache `out/bilychy-dna/inputs`.
+- Profile `config/visuals/bilychy_dna.json`: 5 manual profiles (private, khrushchovka,
+  panel_high, industrial, forest_edge); 96 anchors on a 400 m grid (650 m radius), profile
+  per anchor by a fixed rule from OSM building type/levels and landuse within 300 m
+  (`logs/bilychy-dna/make_profile.py`, grid stats `grid.json`; ignored).
+- Points: `local_visual_dna.landmark_limit` (default 5, validated 0..50) set to 10;
+  `pois` enabled (limit 6) with 16 manual anchors from OSM names (metro stations, malls,
+  NAS institutes, parks, interchanges). `landmarks.merge_spawns` drops a landmark spawn
+  within 150 m of an existing point. Result: 21 spawns (15 anchors, 4 landmarks, 5 fuel
+  minus overlaps); unsnapped >150 m from a usable lane: Proliskok camp, Dacha Diakova,
+  St Nicholas church, Agromat, 2 landmark nodes. 4 landmark spawns skipped as duplicates.
+- World `out/bilychy-dna/world-01` (17,082 lanes, 112 tiles; build ~70 min): 4,414 styled
+  buildings, 1,765 gabled, 172 roof fallbacks, 4,023 synthetic trees, 0 OSM trees.
+  Export compact `out/bilychy-dna/beamng-01`: ZIP 65.8 MB, SHA-256 b902493a…, 9,748
+  objects, 65,984 forest instances; height audit over 2 m: 20, max 6.51 m.
+  Installed as `mods/earth2road_bilychy_dna.zip` (BeamNG was running; needs restart).
+  `kyiv_bilychy_roadgen_v2.zip` untouched. Full suite 435 OK, 1 skipped
+  (`logs/bilychy-dna/unittest-01.log`). Not driven yet.
+
+## 2026-10-06 — Local Visual DNA, Podil pilot (Codex)
+
+- User selected a 2×2 km Podil pilot, manually authored profiles, buildings + greenery,
+  and OSM landmark spawns. Opt-in world v2 extension, shared by BeamNG and Godot;
+  detailed configuration and reproduction: [LOCAL_VISUAL_DNA.md](LOCAL_VISUAL_DNA.md).
+  Existing uncommitted road-generator work was preserved.
+- Added 25 visual anchors / 4 profile distributions; deterministic per-property
+  selection, coverage-edge fade, observed OSM priority, original procedural facade
+  textures, exact-footprint gables with total height preserved and explicit fallbacks.
+  Tree provenance separates OSM nodes from generated fill. Landmark ranking is a
+  heuristic; profiles are manual hypotheses, not photo analysis.
+- PBF/Overpass landmark selection v3 includes standalone landmarks and landmark
+  relations. Pilot re-extracted from the original full dated Ukraine PBF (877,501,127
+  bytes), not the older Kyiv cut. New snapshot: 5,357 ways, 106 relations, 35,668 nodes;
+  extraction 404 s. Both A/B worlds use this one snapshot and cached z12 DEM.
+- Completed unit/integration checks so far: `logs/local-dna/targeted-01.log` 37 OK;
+  `integration-02.log` 16 OK, including a synthetic building through world + both
+  exporters and a named landmark spawn. Empty tiny smoke alone had zero buildings;
+  it was insufficient, so a building-bearing fixture was added.
+- Failed experiments: first pilot config used the wrong config-root-relative path
+  (fixed before extraction); first density test assumed no edge fade (fixture corrected
+  to full overlapping coverage); first building export failed namespace validation
+  (`dna_fac_*` renamed through the existing `kyiv_*` resource namespace contract).
+  Sandboxed Godot editor settings failed and the headless rendering smoke crashed;
+  unrestricted editor import and smoke reruns completed with exit 0.
+- A/B worlds built: `out/local-dna/baseline-01`, `styled-01` (same spawn, 5,739 lanes;
+  styled: 1,784 styled buildings, 788 gabled, 266 roof fallbacks, 1 OSM + 863 synthetic
+  trees, 5 landmarks selected, 3 snapped spawns, 2 unsnapped). Codex's export script
+  (`logs/local-dna/export_pilot.py`) and its full-suite run were killed with the session
+  at 17:31 before finishing (no ZIP, no test summary).
+- Finished by Claude: styled BeamNG compact export `out/local-dna/styled-beamng-02`
+  (`logs/local-dna/export-styled-02.log`): level `kyiv_podil_dna`, ZIP 23.2 MB, SHA-256
+  0f8c5fdd…, 4,421 objects, 152 signals, 5,515 forest instances; height audit nodes
+  over 2 m: 33, max 11.28 m (not investigated). Full suite 433 OK, 1 skipped
+  (`logs/local-dna/unittest-claude-01.log`). Installed on owner request as
+  `mods/earth2road_podil_dna.zip` (new level; `earth2road_kyiv_podilskyi.zip` untouched).
+  Baseline BeamNG export, `tools/local_dna_compare.py` A/B capture and Godot exports
+  not run. Not driven yet; acceptance remains `pending`.
+
+## 2026-10-06 — road profile fairing on the 1 km Bilychi cut (Codex)
+
+- Owner feedback: junction appearance accepted, but longitudinal roads still wavy.
+  Scope is the general generator, not map-specific edits. Existing uncommitted work
+  was preserved; baseline copies of the two inspected modules are in ignored
+  `logs/road-fairing/`. No source OSM, configuration, template-family algorithm or
+  normal installed map was changed by this work.
+- Reproduction: fresh offline `out/road-fairing/before`, using
+  `config/bilychy_1km_v2.json` and `out/roadgen-v2/1km/elev-17/inputs`. Same network
+  and inputs throughout the experiment. `tools/elevation_bench.py` replays elevation
+  without a full world build, clips source profiles to the bbox and measures at 2 m
+  spacing. Source way lengths are not lane-km; mesh audit is reported separately.
+- Causes: the robust filter removed spikes but kept longer DEM undulations; an OSM
+  way can change independently filtered strokes at an internal node, producing a
+  jump within one sample interval; averaging a short driveway into a through road
+  repeatedly perturbed it; restoring old node anchors undid reconciled profiles.
+- Fix: a linear-time pentadiagonal curvature-penalty solve after robust filtering,
+  using a 30 m characteristic length or 0.8 times the class radius, whichever is
+  greater. Preserve linear grades, fair broad terrain, wrap closed strokes. Shared
+  heights prefer higher class/longer strokes; reconcile whole strokes before way
+  assembly, include source knots, and synchronize all resulting node heights.
+  No new dependency; v2 only, legacy heights remain unchanged.
+- Additional integration defect exposed by smoothing: when a neighbouring template
+  absorbed a short approach, a fallback junction lost its source-way identity and
+  failed to recognize overlapping pieces of the same street. Topology now comes
+  from network approaches, independent of surviving meshes. Such same-level road
+  overlaps are subtracted from fallback pavement, with their boundary heights used;
+  pinning only vertices had left triangles spanning different-height surfaces.
+- Profile comparison (`logs/road-fairing/comparison.json`, same 22,654 m sampled
+  ground ways): total grade variation/km 1.0959 -> 0.5327 (-51.4%), ascent+descent
+  635.36 -> 520.37 m (-18.1%), grade changes >2 percentage points 70 -> 56.
+  Ways >200 m: variation/km 1.0763 -> 0.5749 (-46.6%), ascent+descent
+  184.31 -> 154.25 m (-16.3%). Major roads: variation/km 0.7916 -> 0.5369.
+  Broad elevation trends intentionally remain. Plot: `logs/road-fairing/profiles-before-after.png`.
+- Failed/intermediate experiments retained locally: `fair-01` added fairing without
+  stroke reconciliation and increased final grade variation (1.15 -> 1.78/km);
+  `fair-02` reconciled strokes but old node anchors undid it (1.53/km);
+  `fair-03` synchronized anchors; `fair-04` added through-road priority. These early
+  metrics used original station spacing, so use `before-final`/`after-final` and
+  `comparison.json` for the final uniform-spacing comparison. World `after-02`
+  exposed a 1.439 m ambiguous fallback overlap at `254389925`; `after-03` restored
+  identity but vertex pinning still left 0.580 m. Neither is the final candidate.
+- Tests added: independent dense solve comparison, repeated waves, constant steep
+  grades, broad hills, sampling-density invariance, invalid samples, small closed
+  rings, stroke switching beside a 5 m source interval, driveway/through-road
+  hierarchy, and absorbed-approach overlap without a duplicate pavement layer.
+  Latest targeted run: 58 tests passed (`logs/road-fairing/targeted-04.log`). Earlier
+  full-suite attempts hit two Godot sandbox crashes/timeouts; isolated unrestricted
+  rerun passed both (`godot-retest.log`). Final full-suite and map checks below.
+- Final world `out/road-fairing/after-04`: same network SHA-256 as `before`, same
+  211 v2 / 86 fallback junctions and 1,949 lanes. Actual surface grade changes >5 pp
+  105 -> 74; >2 pp 996 -> 739; absolute-grade warning samples 1,508 -> 883;
+  crossfall >6% 198 -> 127. Connected steps >10 cm 1 -> 0, max 0.1651 -> 0.0895 m.
+  Ambiguous overlap max 0.5523 -> 0.3367 m, >30 cm contacts 12 -> 2 (none >60 cm).
+  Existing cross-section misses stay 263/29,930 and lane-centre errors stay 3;
+  two remaining >30 cm ambiguous contacts need separate topology investigation.
+  These are structural results, not an assertion that every road worldwide is fixed.
+  Full evidence: `logs/road-fairing/world-comparison.json`.
+
+## 2026-10-05 — roadgen-v2: smoother main roads, paired carriageways, bridge clearance (Claude)
+
+- Owner's drive of Bilychi-10: Zhytomyr highway / Beresteiskyi avenue wavy, the two directions
+  at different heights, the Beresteiskyi overpass over Kiltseva too low for a car. Measured:
+  clearance 2.1 m (legacy 3.3 m: decks only satisfied clearance at OSM nodes, straight between
+  nodes 150 m apart; the road beneath also humped up from DEM samples of the embankment).
+- Test map `config/bilychy_beresteiskyi_v2.json` (1.5×1 km along Beresteiskyi with both
+  overpasses, same offline inputs); builds `out/roadgen-v2/ber/` (`base` = start of this work).
+- `road_elevation`: filter radius by road class (`CLASS_RADIUS`: trunk 90 m … others 24);
+  samples within 14 m of a bridge deck untrusted for roads beneath (`smooth(trusted=)`);
+  `pair_carriageways` averages the dense profiles of antiparallel one-way ways of one name within
+  45 m (dominant partner per way, so a same-named slip road can't take over; Gaussian-spread
+  difference); `deck_clearance` lifts decks densely as a 60 m crest curve at 6 % to
+  BRIDGE_CLEARANCE above the final beneath profile. `prepare.road_node_heights(crest=True,
+  dense_pairs=True)` in v2: node decks use the same crest, the node-level pair closing (partner
+  read as a chord between sparse nodes, pushed junction nodes 1.3 m off) is skipped. Legacy unchanged.
+- Beresteiskyi map (base → e05): carriageway gap median 0.36 → 0.02 m, p90 1.15 → 0.38, max
+  4.75 → 1.44; overpass clearance 2.1 → 6.3–6.6 m (deck surface above road surface); major-road
+  grade breaks >2 pts 108 → 89. 1 km (elev-16 → 17): major breaks >2 pts 17 → 0, gap p90
+  1.53 → 0.21 m, crossfall >6 % 263 → 198, grade changes >5 pts 110 → 105.
+- Bilychi-11 (10 → 11): gap median 0.26 → 0.01 m, p90 0.92 → 0.28, max 4.82 → 1.83; all four
+  overpasses 6.3–6.6 m; connected steps >30 cm 8 → 2, >10 cm 11 → 10; crossfall >6 % 1100 →
+  1040; absolute grade over limit 10630 → 9589; major breaks >2 pts 277 → 255 but >5 pts 45 → 63
+  (new sites: west end of bridge `500943216` where node heights leave a 0.25 m deck shortfall that
+  is faded over the last 10 m; v2 split `26131518`). ZIP 65.8 MB, build 66 min.
+- Failed/changed during the work: a tent-shaped deck lift (sharp crest, 34 breaks on bridge
+  lanes) → crest curve; crest curve without matching node decks left 1.9 m end shortfalls →
+  shared `crest_drop`; per-station nearest partner jumped to a same-named slip road (0.3 m step).
+- Installed (owner request): `mods/kyiv_bilychy_roadgen_v2.zip` = Bilychi-11, `mods/kyiv_bilychy_1km_v2.zip`
+  = 1 km elev-17 (previous ZIPs remain in `out/`). Full suite 409 OK, 1 skipped
+  (`logs/ber/unittest-full.log`); new tests: untrusted samples, class radius, carriageway pairing,
+  deck clearance. Not driven yet.
+
+## 2026-10-05 — project knowledge reconciliation
+
+- Reconciled the repository documentation, current working-tree implementation/configs,
+  existing JSON reports and historical notes into an external linked knowledge base:
+  16 Markdown files (11 new, 5 updated). Personal notes and backups remain outside Git.
+- Distinguished implementation, completed builds, structural audits, installed versions
+  and runtime evidence. Preserved historical observations and explicitly marked stale
+  plan items, mixed map versions and results that lack a corresponding primary report.
+- Checks: pre-write hashes and regular-file/link checks; post-write content verification
+  for all 16 files; 79 new wiki links and 75 local source links resolved successfully.
+  Existing notes were backed up before replacement. No generator tests, map builds,
+  exports or engine checks were started for this documentation-only work unit.
+
+## 2026-10-05 — roadgen-v2: endcap/cluster templates, profiled cores, 1 km test map (Claude)
+
+- Fast iteration map: `config/bilychy_1km_v2.json`, a 1×1 km cut of Bilychi (world x −750…250,
+  z −500…500 of Bilychi-08) from the same verified OSM snapshot and z12 DEM; build offline with
+  `--cache out/elevation-v2/bilychy-08/inputs/raw` (~4.5 min, replay `tools/roadgen_lab.py
+  --prepared` ~1.5 min). Builds: `out/roadgen-v2/1km/` (`base` = code at session start).
+- Owner decision (DECISIONS): keep longitudinal DEM grades, smooth crossfall and local humps.
+- Templates (`roadgen`): **endcap** (dead end: last section + half circle, profile levels out
+  over the cap radius so turnarounds don't flip grade), **cluster** (junctions joined by lanes
+  < 9 m become one template: absorbed lanes and SUMO junction areas are core; up to 4 members,
+  6 arms, `complex` shapes allowed), **shared lanes** (two templates overlapping on one lane are
+  rebuilt to their half of it; shorter sockets: margin ≥1.5 m, transition ≥4 m), slit closing
+  between opposite lanes (≤30 cm), sections/stubs keep only the piece at the socket when a road
+  curves back. Families now 8 (T, X, Y, merge, split, transition, endcap, cluster) — still
+  parametric, not a prefab library.
+- Core heights: was one lstsq plane through all sockets (one road's grade = the other's
+  crossfall). Now the flattest pair of opposite arms (≤45°) keeps its profile across the core
+  (mean across lanes, cubic across the junction), other arms ramp to their own profile; the
+  transition then blends only the residual. Clusters/pairless cores: harmonic surface through
+  the outer sockets. Overlapping lanes at different heights: the band takes the lane whose
+  centreline is nearest. Fallback junctions (`junction_surface(free_boundary=True)`, v2 only):
+  only road mouths fixed (CG solve), plus connected lanes overlapping the junction as anchors.
+- Elevation: shared-node corrections fade over |Δ|/3% (12–60 m, `correction_field`), exact only
+  at shared/corrected nodes (they stopped at the next OSM node: 2 m tents).
+- Sidewalk collars only where an arm has a SUMO sidewalk (service dead ends had collars;
+  sidewalks 118 k → 55 k tris on 1 km). BeamNG navigation looks junction surfaces up by every
+  member of a cluster (unmatched nodes 774 → 95).
+- 1 km (base → elev-16): v2/fallback 47/250 → 211/86; connected steps >10 cm 1 → 1 (same legacy
+  overlap at fallback `8814372535`, 0.165 m); grade changes >5 points 119 → 110; crossfall >6%
+  624 → 263; lane-centre errors 4 → 3; cross-section misses 312 → 263; ZIP 7.83 → 7.95 MB;
+  build 3:17 → 4:22 (+~30 % roadgen). BeamNG nav: chord max 0.71 → 0.40 m, chords >5 cm
+  141 → 191 (engine node spacing; more transitions).
+- Bilychi 4×4 (08 → `out/elevation-v2/bilychy-10`): v2/fallback 532/1769 → 1669/632 (endcap 595,
+  T 588, X 144, cluster 111); connected steps >10 cm 25 → 11, >30 cm 8 → 8 (all old fallback/legacy
+  sites: roundabout `1200327578`, lane overlap `1224968999`/`556798997`, fallback Y/X pair
+  `12997711925`/`13075480239`), max 0.424 → 0.368 m; crossfall >6% 3023 → 1100; grade changes
+  >5 points 467 → 632; lane-centre errors 29 → 34 (2 new without surface, rest 5–11 cm);
+  cross-section misses 2412 → 1902. Build 62 min (was ~32): `stitch_mesh` scales with patches.
+- Trade-off seen only on 4×4: existing v2 X/T got +38/+29 internal grade breaks. A core levelled
+  along the flatter road makes the steeper road catch up within its transition (grade overshoot
+  ~(1+e/L)). Longer side transitions would help; not done.
+- Failed experiments: profiles from lane centreline points (binned, then per-lane averaged) —
+  worse than averaged rays (smooth >5: 176 vs 110 on 1 km), reverted; the useful part kept is
+  the lateral weight by arm area. Lab `close_junctions` control now resolves as v2 (expected
+  updated). A `git stash` of roadgen.py was run by mistake and popped back immediately.
+- Pre-existing, not fixed: service roads crossing without a shared node get a 0.55 m lane spike
+  from `align_strips` (`60252301#7_0`); a T at `1724206503` sits in a 1.5 m dip because an
+  approach comes from a way joined by netconvert without a shared OSM node (heights unconstrained).
+- Checks: lab `out/roadgen-v2/lab-claude-1` 24/24 expected (116 v2 / 16 fallback, was 52/80;
+  steps max 25 mm, lane errors 0); full suite 405 OK, 1 skipped (`logs/1km/unittest-full-2.log`),
+  new tests for endcap, through-road core, flattest pair, shared lane, clusters, correction field,
+  free junction boundary. BeamNG compact export of Bilychi-10 (`out/elevation-v2/bilychy-10-beamng`,
+  level `kyiv_bilychy_elevation_v2`): ZIP 66.3 MB (Bilychi-08 65.6 MB); nav chords max 3.39 → 1.02 m,
+  >5 cm 750 → 987, unmatched 539 → 458. Installed (owner request): `mods/kyiv_bilychy_roadgen_v2.zip`
+  = Bilychi-10 (replaced Bilychi-08, a copy stays in `out/elevation-v2/bilychy-08-beamng`) and
+  `mods/kyiv_bilychy_1km_v2.zip` (1 km elev-15, level `kyiv_bilychy_1km_v2`). Not driven yet.
+
+## 2026-10-05 — v2 template coverage regression, junction timelapses, Reddit draft (Claude)
+
+- Bilychi-07 had only 264 v2 / 2037 fallback junctions (first v2 build: 522/1779): 536
+  rejected as "transition is not a single ribbon". The dense elevation ribbons union with
+  zero-area pinholes between triangles and between lanes. `roadgen._solid` fills holes
+  < 1e-6 m² (`SPECK`) per lane and per arm union; real islands stay (12 remain, 0.2–1.4 m²).
+  The lab had the same regression hidden: Codex's 50/82 "two supporting junctions differ"
+  is back to 52/80 (lab-07). Test `test_lane_areas_fill_pinholes_but_keep_real_islands`.
+- Bilychi-08 (`out/elevation-v2/bilychy-08`): 532 v2 / 1769 fallback (T 366, X 101,
+  transition 25, Y 15, split 13, merge 12); connected steps >10 cm 25, max 0.424 m, none
+  >60 cm; grade changes >5 points 467; crossfall >6% 3023 (Bilychi-07 1667) — more v2
+  cores on slopes, where one road's grade is the other's crossfall; not investigated further.
+  Full suite 398 OK, 1 skipped (`logs/elevation-unittest-claude-3.log`).
+- Installed: Godot `game/data/bilychy_roadgen_v2` = Bilychi-08 (backups in
+  `.cache/replaced/`); BeamNG `mods/kyiv_bilychy_roadgen_v2.zip` (level
+  `kyiv_bilychy_elevation_v2`, SHA-256 b1e73bc8…). The owner had renamed the Bilychi-07 ZIP to
+  that name and removed the older Bilychi ZIPs; the Bilychi-07 ZIP was moved to
+  `out/elevation-v2/replaced-mods/` so only one ZIP holds the level.
+- Timelapse: `--timelapse-close=D` (game/scripts/timelapse.gd) orbits `--timelapse-near` at
+  about D m, shrinks the reveal wave and the street flight to that scale. First take
+  (close 110, Bilychi-07) crashed Godot (0xC0000005) at frame 506 during the street
+  flight; the eight later takes (close 75/80) completed 630 frames each.
+  Takes: `logs/timelapse/junctions-2026-10-05-c/` (Bilychi-08, both X junctions are v2).
+- Reddit draft `docs/REDDIT_POST.uk.md` (roads/junctions); media in
+  `out/reddit-ua/roadgen-v2/`: 72 s montage, four 42 s takes, eight before/after pairs
+  (pairs are from the 2026-10-03 shots, i.e. pre-elevation v2). Not published.
+
+## 2026-10-05 — roadgen-v2 elevation: real-map regressions (Claude)
+
+- Codex's Bilychi-03 ran pre-final code (started 22:10, last edits 22:18) and died with its
+  session. Rebuilt as `out/elevation-v2/bilychy-04` (final Codex code, same verified inputs):
+  against the earlier v2 world, re-audited with the same current audit, it regressed —
+  connected steps >60 cm 0 → 5 (max 0.69 m, acceptance `blocked`), grade changes >5 points
+  293 → 544, crossfall >6% 893 → 2868, absolute grade over limit 3023 → 10778. Lab-05
+  (final Codex code) was clean, as lab-04: the lab has no rings, wide bends or real DEM.
+- Elevation-only bench (OSM + z12 DEM, ~17 s, no netconvert) reproduced it: v2 tracked the
+  DEM to 2 cm median, i.e. barely filtered. A larger radius made it worse (1498 breaks at
+  R=96): 85/107 breaks sat within 3 m of branch nodes, where every chain ended and was
+  filtered alone. Not kept: local quadratic / R=48–96 sweeps.
+- Fixes in `road_elevation`: (1) chains continue through a junction on the straightest
+  unused edge within 35° (`STROKE_TURN`), so a straight street is one filtered stroke and
+  side roads join it; bench breaks >5 points 107 → 64 (legacy 13, mostly service/DEM
+  cliff), >2 points 718 → 253 (legacy 303). (2) `BendField` no longer fits a plane: the
+  plane carried terrain slope across wide roads as crossfall (3-lane roundabout
+  `1200327578`, lanes 8 m apart, 0.64 m apart in height → the 0.69 m junction step).
+  Near bends it now averages dense profile stations with a Gaussian whose width grows
+  with centreline distance; bend weights are summed (closed rings included), never
+  switched by nearest centre (the old switch stepped 0.25 m on a synthetic ring).
+  Bilychi-05 (only the nearest-switch fix, still planes) did not move the step: 0.68 m.
+- Bilychi-07 (all fixes): steps >60 cm 0 (max 0.424, acceptance `pending`), >10 cm 26
+  (old v2 31), crossfall >6% 1667, lane-centre errors 29 (old v2 26 with the v2 audit),
+  grade changes >5 points 517 / >2 points 4402. By lane: ordinary lanes are at parity
+  (99/776 vs old 128/743), v2 template connectors 8/159 (old 4/125); fallback-junction
+  connectors carry the rest, 410/2950 vs 161/1096 — IDW junction surfaces between the now
+  steeper (DEM-preserving) approaches. Absolute grade over limit stays ~3.5× legacy by
+  the DECISIONS choice not to flatten terrain; way `60545126` keeps a 9 m DEM drop over
+  ~40 m (flagged in `road_elevation.json` spikes, max correction 3.54 m).
+- Lab-06: 24/24 expected status, 50 v2 / 82 fallback, 0 lane errors, 0 changes >5 points
+  (12 → 16 >2 points); max connected step 1 mm → 25 mm between opposite lanes of one curved
+  edge (`10066`): the Gaussian field is not linear, so differently placed ribbon vertices
+  interpolate it differently. Below the 10 cm threshold; noted, not fixed.
+- Pre-existing, not elevation: service way `993483437` ends ~2 m above the road it joins at
+  `11363616237` in the old world too; lab cross-section misses (107) are lane edges inside
+  the 4→2 taper of `width_transition` (SUMO S-curves) plus ≤3 cm boundary samples.
+- Checks: full suite 397 OK, 1 skipped (`logs/elevation-unittest-claude-2.log`); new tests
+  for ring blending and through-junction strokes. BeamNG compact export of Bilychi-07
+  (`out/elevation-v2/bilychy-07-beamng`, level `kyiv_bilychy_elevation_v2`) completed:
+  ZIP 62.8 MB (old v2 51.2 MB), DecalRoad height audit over_2m 16 (old 20), max 3.59 m
+  (old 16.46 m); navigation chords 146,607 samples, 793 >5 cm, max 3.39 m, 543 without an
+  owning surface. Installed as `mods/earth2road_bilychy_elevation_v2.zip` (renamed so the
+  old `earth2road_bilychy_roadgen_v2.zip` stays for comparison; SHA-256 f8a53f14…);
+  not loaded in game yet.
+- Open: (a) owner decision — keep DEM-preserving grades (3.5× more >6% samples) or filter
+  harder; (b) fallback junction surfaces (IDW) are now the main roughness source;
+  (c) Bilychi-07 installed but not driven in BeamNG/Godot yet.
+
+## 2026-10-04 — roadgen-v2 elevation (implementation and acceptance in progress)
+
+- V2 uses DEM stations <=2 m apart, robust local linear filtering over a 24 m radius,
+  and degree-two graph chains across OSM way boundaries. Shared source nodes, paired
+  carriageways, structure heights and ramp assumptions remain constrained by the existing
+  elevation rules. Legacy keeps its original height path. Heights remain derived/synthetic.
+- Dense road profiles feed the whole ribbon width, junction transitions, ground boundaries,
+  lane positions and paint. Local planes around sharp ground-road bends avoid jumps between
+  nearest source segments; bridges/tunnels are excluded from that additional fit.
+- Added absolute surface grade (6% / service 12% warning thresholds), profile grade and
+  cross-section diagnostics. BeamNG v2 navigation samples its own road/junction triangles,
+  retains height stations subject to the existing navigation-radius spacing, and reports
+  residual chord errors rather than violating the engine's node-spacing constraint.
+- Completed intermediate lab `out/elevation-v2/lab-04`: all 24 primary cases retain their
+  expected v2/fallback status; 50 v2 / 82 fallback effective junctions (two supporting
+  junctions differ from the old 52/80). Zero contacts exceeding the audit's 1 cm reporting
+  floor, zero lane-centre errors >5 cm, zero grade changes >5 percentage points / 2 m;
+  12 changes >2 points remain. Cross-width audit: 15,375 sections, 107 sections missing at
+  least one same-topology surface sample; this is not a claim of full-width acceptance.
+  Both exporters completed. Latest small diagnostic/structure-protection fixes postdate
+  this lab snapshot. Real-map and engine acceptance are still pending.
+- Failed experiments: lab-01 densified walking-area outlines too and hit a GEOS overlay
+  error; densification is now limited to passenger lanes. Lab-02 hit NumPy int64 JSON
+  serialization in the smoothness counters; profile queries now return native floats.
+  Lab-03 exposed nearest-segment height jumps inside sharp source bends; the shared bend
+  field removed changes >5 points in lab-04. Bilychi attempts 01/02 were stopped while
+  still preparing roads to restart with these fixes; neither is a completed map result.
+- Initial full suite: 393 discovered, 2 errors (Godot subprocess timeouts in sandbox),
+  1 skipped; no assertion failures (`logs/elevation-unittest-01.log`). An unsandboxed
+  final discovery, Bilychi-03 build and isolated lab BeamNG drive check are running.
+
+## 2026-10-03 — roadgen-v2 lab fixes (Claude)
+
+- Found 3/10 roadgen tests failing: the "curved approach crosses template boundary" guard
+  rejected straight X/width-transition cases, because the approach before its socket stuck out
+  of the curb-return curve. The core now absorbs that stub (`candidate`); the guard stays.
+- Lane-centre stations without pavement (`lane_surface_errors`, `10046_1` at `y_acute`):
+  `scene.triangles` silently drops pieces < 0.01 m², so sockets cutting a strip near its own
+  station lost slivers (and patch draping lost cell corners). `triangles`/`draped_triangles`
+  take `min_area`; roadgen uses `MIN_PIECE = 1e-4` (= `prepare.MIN_TRIANGLE_AREA`). Default
+  0.01 unchanged, so legacy output is unaffected.
+  First (wrong) guess was the stitching of far knots; restricting knots to patch boundaries
+  doubled sub-mm cracks (1324 vs 614 holes > 1e-4 m²; legacy 670) and was reverted.
+- Fixture: merge/split connectors ran through the junction centre without a shared node
+  (60 m² overlaps in v2 and legacy); now routed around. The roundabout ring had only one node
+  per arm, so it rendered as a diamond in BeamNG (owner screenshot); now a node every 15°.
+  The generator draws what OSM gives; coarse real rings would still be polygonal.
+- Size: `roadgen.sidewalks` turned whole sidewalk strips near a collar into 2 m-draped walking
+  areas and re-draped every area (walk triangles 520 → 65 601). Now strips are trimmed
+  (`_runs_clear_of`), only the near remainder becomes an area, untouched areas are kept, and
+  the collar's outer edge (never asphalt-facing) is `buffer(3, quad_segs=4).simplify(.05)`.
+  Patch cores are triangulated whole (planar), transitions in ≤2 m cross-sections
+  (`BAND_STEP`) instead of a 2 m world grid. `beamng_pavement.road_mesh` uses v2 strip
+  triangles (the main surface export already did).
+- Lab (all 24 cases, BeamNG compact, `out/roadgen-v2/all-claude-ring`): 24/24 expected status
+  (18 primary v2, 6 fallback controls); 52 v2 / 80 fallback effective junctions; connected
+  steps max 12.5 mm (same site 12.9 mm in legacy), 0 uncovered lane stations, 0 patch/road
+  overlaps > 1e-3 m²; DecalRoad height audit max 0.291 m (legacy 0.297). Export: surfaces
+  35 252 tris (legacy 36 223), sidewalks 31 529 (18 480), ZIP 1.95 MB (1.62 MB); geometry
+  ~15 s. The extra sidewalk triangles are kerbs along curved curb returns — not reduced further.
+- Owner's second BeamNG test still showed the 4-node diamond after installing the fixed ZIP:
+  `temp/levels/kyiv_roadgen_lab` held .cdae compiled at 15:00 under the same mesh names, and
+  the ZIP entries carry the fixed `ZIP_STAMP` (2026-09-24), so the game kept the old meshes.
+  `static_mesh` now appends a 10-hex SHA-256 of the .dae to its file name; a changed mesh is a
+  new path and cannot hit a stale cache (signs/signal head keep fixed names). Export tests
+  85 OK. Re-exported ZIP (`all-claude-ring/beamng2`) copied to the game's mods folder;
+  not yet confirmed in game.
+- First real v2 map: Bilychi 4×4 km (`out/roadgen-v2/real/bilychy_v2.json`, the verified
+  offline inputs of `bilychy_offline_verified`), build 32 min, compact export 8.5 min.
+  522 v2 / 1779 fallback (T 360, X 98, transition 23, Y 15, merge 13, split 13). Fallback
+  reasons: endcap 722, approach too short 586, socket cross-section 141, approach tangent 112,
+  overlapping group 112, single-ribbon 25, structure 24, roundabout 21, internal lane 18.
+- The first Bilychi build had 32 lane stations > 5 cm off the pavement (legacy 8), all on v2
+  patches: lanes got patch heights only at sparse SUMO vertices while transitions bend
+  (smoothstep). `roadgen.lane_heights` adds a station every 1 m (`LANE_STEP`) inside a patch,
+  incl. internal lanes. Rebuild: 8 (the same legacy sites; 7 uncovered, pre-existing).
+  Shot snapping in `prepare` now indexes `road_z.shape` instead of the SUMO shape.
+- The first export failed with MemoryError (109 MiB) with ~8.6 GB free commit and no other
+  Python running (probably the game open); the second run, after rebuild, passed.
+- Bilychi v2 vs the 2026-10-02 legacy export: connected steps > 10 cm 31 vs 32, max 0.372 m
+  both; ZIP 51.2 vs 45.5 MB; surfaces 925 k vs 955 k tris; sidewalks 527 k vs 271 k;
+  DecalRoad height audit over_5cm 4846 vs 3165, over_20cm 1674 vs 1458, over_2m 20 vs 20
+  (max 16.46 m at the same pre-existing node). DecalRoad nodes come from SUMO edge shapes,
+  so they still chord through transitions — follow-up. Installed as
+  `earth2road_bilychy_roadgen_v2.zip` (level `kyiv_bilychy_roadgen_v2`); not loaded in game yet.
+- Godot comparison (`out/roadgen-v2/compare/bilychy_compare_{1,2}.jpg`): 8 v2 junctions
+  (2 X, 2 T, Y, transition, merge, split) shot with identical poses in the installed legacy
+  `bilychy_offline_verified` and the new `bilychy_roadgen_v2` (poses injected into each
+  `index.json`, originals restored). `main.gd --shots` produced the chase-camera view for every
+  pose (the player camera re-took the viewport); the shot camera is now made current every
+  wait frame and before capture, and the log prints `camera=true`.
+  Seen in v2: curved curb returns and continuous sidewalks instead of jagged wedges; the
+  transition case lost its asphalt step. Defects to check: at T `436619329` and the Y the
+  sidewalk collar wraps across an adjacent paved strip (not in the carriageway cut?); at the
+  merge the crosswalk on the left arm is gone (legacy had one).
+- Checks: `test_roadgen` 13 OK (3 new); full suite 382 OK, 1 skipped
+  (`logs/unittest-roadgen-claude-final.log`). Bilychi legacy/v2 real-map builds were started
+  and cancelled at the owner's request; no real map has been built with v2 yet.
+
+## 2026-10-03 — roadgen-v2 prototype (implementation in progress)
+
+- Added opt-in `road_geometry.mode: v2` (default remains legacy), OSM source graph,
+  SUMO binding, T/X/Y/merge/split/transition templates and generated shared pavement,
+  sidewalk collars and paint clipping. `tools/roadgen_lab.py` builds synthetic offline
+  fixtures or replays prepared geometry, producing PNG/SVG and JSON diagnostics.
+- First complete 24-case lab: 18 primary cases use v2; short/close/divided/roundabout/
+  five-arm/structure controls use explicit fallback. Supporting streets are counted
+  separately from primary cases. No engine acceptance yet.
+- Checks so far: `python -m unittest discover -s tests -p test_roadgen.py -v`
+  10 passed, including offline reproducibility. Existing surface seam suite: 12 passed.
+- Failed fixture attempts: wrong example-resource path; then interleaved OSM nodes/ways
+  made netconvert read only the first way, so spawn selection failed. Fixed ordering.
+  Initial grade tests exposed a snapped-boundary tolerance error; corrected 1e-7 to 2e-6 m.
+- Initial lab audit found up to 0.127 m steps and one sub-millimetre uncovered station.
+  A shared-boundary station pass and height tolerance correction are being revalidated.
+  Results under ignored `out/roadgen-v2/`; old attempts retained for comparison.
+
+## 2026-10-03 — roadgen-v2 planning backlog
+
+- Created and switched to `roadgen-v2` from `generator-local-cut`, preserving the existing
+  uncommitted district configs/tool, Reddit draft and handoff additions.
+- [PLAN.md](PLAN.md) now holds the user's 12-part backlog: road graph/junction families,
+  elevation, BeamNG export v2, Building Grammar, hybrid geometry/textures, city props,
+  generation/nightly pipelines, Ukrainian showcase maps, city packs, monetization and devlog.
+- First priority is roads + shared junction/elevation transitions, then measured BeamNG export.
+  The 4×4 km/~20 MB baseline and 22–35/30–50 MB estimates are planning references to verify,
+  not new benchmark results. Existing functionality must be audited before implementation.
+- Next work unit: choose a reproducible baseline, inspect existing road/elevation/export code
+  and tests, then define the road graph and junction prototype. No implementation started here.
+- Initial branch creation failed because the sandbox could not write `.git/refs/heads`;
+  retry with approved elevated permissions succeeded. No generation/runtime experiments run.
+- Checks passed: `git diff --check -- docs/PLAN.md docs/HANDOFF.md`; a `python -c` check
+  calling `tools.check_publication.inspect_file` on those two files (UTF-8, local Markdown
+  links and source hygiene), plus section-number assertions (1–12; 115 unchecked tasks).
+  `git branch --show-current` reports `roadgen-v2`. Full unittest/runtime checks were not run
+  for this documentation-only change; no previous map acceptance status was changed.
+
+## 2026-10-03 — Kyiv district and suburb maps for BeamNG (overnight batch)
+
+- `tools/configure_districts.py <admin.geojson>` writes `config/districts/<id>.json` and
+  `config/districts/areas/<id>.geojson` from OSM administrative relations (Kyiv raions,
+  admin_level 10; towns, admin_level 9), listed with relation IDs in `AREAS`. The outline is
+  buffered 150 m (coarse arcs) and simplified 10 m in the tool; configs use `buffer_m: 0`.
+  The admin GeoJSON came from a one-off pyosmium area scan of ukraine-260918 (not kept in Git).
+- Failed: the first configs used `buffer_m: 150` from `boundary_area` (64 segments per quarter
+  arc). The netconvert `--keep-edges.in-geo-boundary` argument reached 45–72 k characters;
+  Windows CreateProcess failed with an empty netconvert.log ("SUMO netconvert failed",
+  Podilskyi). Pecherskyi (12.6 k) passed; Solomianskyi, started with the long outline, also
+  passed netconvert — not investigated why.
+  Not fixed in core: `corridor.geo_boundary` has no length guard.
+- Districts above 55 km² are split into equal-area parts along the longer axis (200 m overlap,
+  ids `_w/_c/_e`, `_s/_cs/_cn/_n`); union of parts covers 100 % of each relation. Reasons:
+  build memory (a 45 km² build peaks at ~13 GB private; the machine has 32 GB RAM + 8 GB
+  pagefile, and three parallel builds dropped free commit to 1.1 GB) and the earlier
+  8 × 8 km Shuliavka level that BeamNG could not load.
+- Per-map extraction from the full 877 MB PBF took ~400 s. A Kyiv-area cut
+  `ukraine-260918-kyiv.osm.pbf` (36 MB, md5 41a03808…, bbox 30.10 50.16 31.06 50.68) was
+  made with the same selection as `core/osm_extract.py` (PBF output instead of XML) and is
+  referenced from the district configs as `local/ukraine-260918-kyiv.osm.pbf` (cache-only;
+  nothing is downloaded from that "url"). `ring_beresteiskyi` still uses the full PBF.
+- Batch runner (ignored, `out/districts/`): `run.py` = build → `export --optimization compact`
+  → copy ZIP to `%LOCALAPPDATA%/BeamNG/BeamNG.drive/current/mods`; `worker.sh` takes items
+  from `todo.txt` when ≥14 GB commit is free and 15 min after the previous start. Results:
+  `out/districts/status.jsonl`; logs `logs/districts/`. The runner's `peak_gb` is always 0
+  (it reads the venv launcher process, not the real interpreter) — ignore it.
+- Ring + Beresteiskyi regenerated from `config/ring_beresteiskyi.json` with the same level ID
+  `kyiv_ring_teremky_berkovets`, compact: ZIP 92 MB (old legacy ZIP 258 MB). The old
+  `akadem_drive_ring_beresteiskyi.zip` and the game's 1.9 GB `temp/levels/` cache for that
+  level were moved to `out/districts/replaced-mods/` (not deleted) to avoid two ZIPs with one level.
+- Timings (one map, two in parallel): Pecherskyi 22 km² build 38 min (incl. full-PBF extract)
+  + export 18 min, ZIP 65 MB; Shevchenkivskyi 31 km² 75 + 25 min, 95 MB; Solomianskyi 45 km²
+  109 + 37 min, 116 MB; Podilskyi 41 km² 56 + 26 min, 84 MB; ring 72 + 27 min, 92 MB.
+- Fixed (core, `scene.py`/`prepare.py`): large maps stalled in the "trees" stage for hours
+  (py-spy: Dniprovskyi west 3.5 h, CPU-bound, flat memory). Three map-wide polygon operations
+  repeated per small feature: `paths` (`line.difference(covered)` per footway), green areas
+  (`difference(cover_cut)` per area) and `draped_triangles` (whole ground polygon ∩ every
+  20 m cell). `LocalCut` splits a polygon above `LOCAL_CUT_COORDS` (100 k vertices) into
+  quadtree tiles once and subtracts only the tiles near each feature; `draped_triangles`
+  halves along the same cell grid when vertices × cells > `DRAPE_SPLIT_WORK` (50 M). Below
+  the thresholds the original operations run unchanged. Synthetic benchmark: 300 path
+  differences 2.7 s → 0.1 s. After the fix Dniprovskyi west reached "signs" in 24 min.
+  Tests `tests/test_local_cut.py` (equivalence vs direct difference/drape); full suite
+  369 OK, 1 skipped (`logs/districts/unittest-drape.log`). Maps built before this change
+  used the old code; geometry differs only by floating-point noding at tile seams.
+- Follow-ups found during the batch: `get_num_coordinates` returns int32 and the
+  vertices × cells product overflowed (RuntimeWarning in every large build; a wrapped value
+  only selects the slower, equivalent path) — now cast to int. Holosiivskyi north failed with
+  GEOS "Invalid number of points in LinearRing found 3" in the trees stage (no traceback; the
+  CLI prints one only with `AKADEM_MAPS_TRACEBACK=1`, now set by the batch runner). Most likely
+  `clip_by_rect` in `LocalCut`; it now falls back to `intersection(box)` on GEOSException,
+  and the retry passed. Not proven to be the source. Final full suite after these: 369 OK,
+  1 skipped (`logs/districts/unittest-final.log`).
+- Result (2026-10-03 11:5x): 31 ZIPs in BeamNG mods, 1.61 GB — 22 Kyiv district maps
+  (Pecherskyi, Shevchenkivskyi, Podilskyi, Solomianskyi whole; Dniprovskyi 2, Sviatoshynskyi 3,
+  Obolonskyi 3, Darnytskyi 3, Desnianskyi 3, Holosiivskyi 4 parts), ring, and 8 towns (Irpin,
+  Bucha, Brovary, Vyshneve + Kriukivshchyna, Boryspil, Vyshhorod, Boiarka, Sofiivska +
+  Petropavlivska Borshchahivka). ZIPs 17–116 MB; forest/floodplain parts are the small ones
+  (Darnytskyi east: 197 motor-road ways, 420 lanes). Hostomel was not included (no
+  settlement-level boundary in this extract; the hromada is 67 km² with the airfield).
+- Not done: no map from this batch was loaded in BeamNG (runtime_verified false; acceptance
+  pending). Whether 45–55 km² compact levels load is untested.
+
 ## 2026-10-02 — local sources and offline preparation
 
 - SUMO resolves native eclipse-sumo binaries before pip wrappers; `doctor` exercises

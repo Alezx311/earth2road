@@ -23,12 +23,13 @@ import zlib
 from shapely.geometry import Point, Polygon
 
 from akadem_maps.adapters.beamng.beamng_assets import (DRAWN_FACADES, FOREST_ITEMS, LANDMARKS, PANEL_FACADES, PANEL_TILE, PARK_BUSHES,
-                           PROP_SHAPES, STREET_TREES, WOOD_TREES, building_style,
+                           PROP_SHAPES, ROOFS, STREET_TREES, WOOD_TREES, building_style,
                            forest_files, forest_item_data, surface_materials, tree_materials,
                            uv_scales)
 from akadem_maps.adapters.beamng.beamng_geometry import Mesh, beam_point, features, optimization_mode, cross, dashed, normal, sub, triangulate
 from akadem_maps.adapters.beamng.beamng_network import road_height_audit, road_network, signals, stable_id
 from akadem_maps.adapters.beamng.beamng_terrain import GroundTerrain, write_substrate
+from akadem_maps.adapters.beamng.beamng_yards import materials as yard_materials, yard_props
 
 ROOT = Path(__file__).resolve().parents[3]
 VERSION = 2
@@ -248,22 +249,40 @@ def fixture_materials(level, level_id):
 
 # --- geometry ---------------------------------------------------------------
 
-def building_mesh(building, facade, roof):
+def building_mesh(building, facade, roof, end=None):
+    """`end`: material for the end walls of an elongated block (texture_styles.end_walls)."""
     mesh = Mesh()
     pts = [beam_point(p) for p in building['points']]
     floor = min(p[2] for p in pts)
-    top = floor + float(building['height'])
+    if building.get('local_style'):
+        floor = float(building.get('floor_height', floor))
+    top = floor + float(building.get('wall_height', building['height']) if building.get('local_style') else building['height'])
     base = float(building.get('base', 0))
     bottom = floor + base if base > 0 else floor - 1
+    roof_faces = building.get('roof_triangles') if building.get('local_style') else None
+    for tri in roof_faces or []:
+        mesh.tri(roof, *(beam_point(p) for p in tri), up=True)
+    for tri in building.get('roof_gables', []) if roof_faces else []:
+        vertices = [beam_point(p) for p in tri]
+        mesh.tri(facade, *vertices)
+        mesh.tri(facade, *reversed(vertices))
     for a, b, c in triangulate([(p[0], p[1], top) for p in pts]):
-        mesh.tri(roof, a, b, c, True)
+        if not roof_faces:
+            mesh.tri(roof, a, b, c, True)
         if base > 0:
+            # Raised part (passage, S3DB min_height): close its underside.
             mesh.tri(facade, (a[0], a[1], bottom), (c[0], c[1], bottom), (b[0], b[1], bottom))
     if sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(pts, pts[1:] + pts[:1])) < 0:
         pts.reverse()
-    for a, b in zip(pts, pts[1:] + pts[:1]):
-        mesh.wall((a[0], a[1], floor), (b[0], b[1], floor), bottom - floor, top - floor, facade)
+    from .texture_styles import end_walls
+    ends = end_walls(pts) if end else [False]*len(pts)
+    for (a, b), is_end in zip(zip(pts, pts[1:] + pts[:1]), ends):
+        mesh.wall((a[0], a[1], floor), (b[0], b[1], floor), bottom - floor, top - floor, end if is_end else facade)
     return mesh
+
+
+# Landcover kinds with their own surface (playtest 2026-10-06, notes 5 and 9); others are grass.
+COVER_MATERIALS = {'water': 'kyiv_water', 'pitch': 'kyiv_pitch', 'track': 'kyiv_track'}
 
 
 def tile_meshes(tile, sidewalks=True, ground=True):
@@ -273,8 +292,9 @@ def tile_meshes(tile, sidewalks=True, ground=True):
     for tri in tile.get('parking', []):
         surface.tri('kyiv_asphalt_worn', *(beam_point(p) for p in tri), up=True)
     for green in tile.get('greens', []):
+        material = COVER_MATERIALS.get(green.get('kind'), 'kyiv_grass')
         for tri in green['triangles']:
-            surface.tri('kyiv_grass', *(beam_point(p) for p in tri), up=True)
+            surface.tri(material, *(beam_point(p) for p in tri), up=True)
     for road in tile.get('road_strips', []):
         if 'triangles' in road:
             for tri in road['triangles']:
@@ -301,6 +321,12 @@ def tile_meshes(tile, sidewalks=True, ground=True):
             points = [beam_point(p) for p in ring]
             for a, b in zip(points, points[1:] + points[:1]):
                 surface.wall(a, b, 0, .035, 'kyiv_curb')
+    for fence in tile.get('fences', []):
+        # Setback/OSM fences, both faces (the Godot game draws them the same way).
+        points = [beam_point(p) for p in fence['points']]
+        for a, b in zip(points, points[1:]):
+            surface.wall(a, b, -0.1, float(fence.get('height', 1.2)), 'kyiv_fac_block')
+            surface.wall(b, a, -0.1, float(fence.get('height', 1.2)), 'kyiv_fac_block')
     for path in tile.get('paths', []):
         paint.strip([beam_point(p) for p in path['points']], path['width'], 'kyiv_gravel', .02)
     for mark in tile.get('markings', []):
@@ -429,8 +455,14 @@ def spawn_sphere(name, record):
 
 
 def static_mesh(level, level_id, name, mesh, origin, collision=True, parent='KyivGenerated', *, optimization='balanced', collision_mesh=None, metrics=None, category='props'):
-    relative = f'art/shapes/{name}.dae'
-    stats = mesh.write(level / relative, origin, uv_scales=UV, optimization=optimization, collision=collision_mesh)
+    draft = level / f'art/shapes/{name}.dae'
+    stats = mesh.write(draft, origin, uv_scales=UV, optimization=optimization, collision=collision_mesh)
+    # The game reuses its compiled .cdae while the .dae path is unchanged and the
+    # cache is newer than the (fixed) ZIP stamp, so a re-exported level would show
+    # stale geometry. A content digest in the file name makes changed meshes new paths.
+    digest = hashlib.sha256(draft.read_bytes()).hexdigest()[:10]
+    relative = f'art/shapes/{name}_{digest}.dae'
+    draft.replace(level / relative)
     if metrics is not None:
         metrics.add(category, stats, collision)
     return scene_object(name, 'TSStatic', parent, shapeName=f'/levels/{level_id}/{relative}', position=list(origin),
@@ -566,11 +598,25 @@ def canopy_mesh(centre, angle):
     return mesh
 
 
-def fuel_canopies(level, level_id, pois, occupied, counts, corridors=None, *, optimization='balanced', metrics=None):
-    """One canopy per fuel quick-travel point that has a clear forecourt."""
+# A mapped canopy (typical model of building=roof at a fuel station) within this
+# distance of the quick-travel point replaces the synthetic one.
+MAPPED_CANOPY_RADIUS = 60.0
+
+
+def fuel_canopies(level, level_id, pois, occupied, counts, corridors=None, *, optimization='balanced', metrics=None,
+                  mapped=()):
+    """One canopy per fuel quick-travel point that has a clear forecourt.
+
+    ``mapped`` are (x, z) centres of OSM canopies drawn as buildings; a point near one
+    gets no synthetic canopy.
+    """
     objects = []
     for poi in pois:
         if poi.get('kind') != 'fuel':
+            continue
+        x, z = poi['position'][0], poi['position'][2]
+        if any(math.hypot(x-cx, z-cz) < MAPPED_CANOPY_RADIUS for cx, cz in mapped):
+            counts['fuel_canopies_mapped'] += 1
             continue
         def envelope(centre, angle):
             a=math.radians(angle)
@@ -680,7 +726,7 @@ def _triangle_points(triangles, count, rng):
         yield tuple(a[k] + (b[k] - a[k]) * u + (c[k] - a[k]) * v for k in range(3))
 
 
-def vegetation(tiles):
+def vegetation(tiles, dna=None):
     """Forest instances: mapped trees where OSM has them, filler inside green areas."""
     instances, counts = [], Counter()
     for tileid, tile in tiles:
@@ -690,18 +736,28 @@ def vegetation(tiles):
             instances.append((rng.choice(STREET_TREES), x, y, z,
                               rng.uniform(0, math.tau), rng.uniform(0.8, 1.25)))
             counts['trees_mapped'] += 1
+        if dna:
+            counts['trees_osm'] += sum(t['provenance'] == 'osm' for t in tile.get('tree_records', []))
+            counts['trees_synthetic_world'] += sum(t['provenance'] != 'osm' for t in tile.get('tree_records', []))
         for green in tile.get('greens', []):
+            # Water, pitches and tracks carry no vegetation in any mode.
+            if green['kind'] not in ('wood', 'green', 'orchard'):
+                continue
             area = sum(abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
                        for a, b, c in ([beam_point(p) for p in tri] for tri in green['triangles']))
             wood = green.get('kind') == 'wood'
             fill = seeded('green', green['id'])
             trees = int(area / (70 if wood else 900))
             bushes = int(area / (45 if wood else 160))
-            for point in _triangle_points(green['triangles'], min(trees, 400), fill):
+            for point in _triangle_points(green['triangles'], min(trees, 400)*(3 if dna else 1), fill):
+                if dna and fill.random() >= dna.density(point[0], -point[1])/3:
+                    continue
                 instances.append((fill.choice(WOOD_TREES if wood else STREET_TREES), *point,
                                   fill.uniform(0, math.tau), fill.uniform(0.75, 1.3)))
                 counts['trees_filled'] += 1
-            for point in _triangle_points(green['triangles'], min(bushes, 600), fill):
+            for point in _triangle_points(green['triangles'], min(bushes, 600)*(3 if dna else 1), fill):
+                if dna and fill.random() >= dna.density(point[0], -point[1])/3:
+                    continue
                 instances.append((fill.choice(PARK_BUSHES), *point,
                                   fill.uniform(0, math.tau), fill.uniform(0.6, 1.2)))
                 counts['bushes'] += 1
@@ -714,15 +770,79 @@ def visible_distance(bounds):
     return int(max(4000, min(8000, span * 0.55)))
 
 
-def sky_objects(distance=4000):
-    """Overcast-bright Kyiv daylight: high visibility, soft fog, drifting cloud deck."""
+# BeamNG clock (0 noon, 0.25 dusk, 0.5 midnight) each style opens at; see weather_objects.
+DAY_TIME, SYNTH_TIME, NES_TIME = 0.94, 0.34, 0.0
+
+
+def weather_objects(time_of_day, lonlat=None, coverage=0.0, cloud_color=(0.93, 0.94, 0.96, 1)):
+    """The objects BeamNG's environment menu and weather presets drive (core_environment,
+    core_weather, art/weather/defaults.json): without a TimeOfDay the time slider does
+    nothing, without Precipitation there is no rain, without a CloudLayer no cloud cover,
+    without a ForestWindEmitter no wind in the trees. Every stock level carries all four.
+    `time_of_day` is BeamNG's clock: 0 noon, 0.25 dusk, 0.5 midnight. `version: 2` keeps it as
+    written; without it the engine shifted 0.94 to 0.69 on load and set the sun on the horizon
+    (measured in 0.39.4, logs/weather/probe-01 vs -02)."""
+    lon, lat = lonlat or (30.52, 50.45)
+    return [
+        scene_object('tod', 'TimeOfDay', 'KyivSky', position=[0, 0, 0], animate='0', play=False, version=2,
+                     axisTilt=23.44, latitude=round(lat, 4), longitude=round(lon, 4),
+                     time=time_of_day, startTime=time_of_day, dayLength=1800),
+        scene_object('rain', 'Precipitation', 'KyivSky', position=[0, 0, 300], dataBlock='rain_drop',
+                     numDrops=0, numOfDrops='0', boxWidth=50, boxHeight=50, dropSize=0.2,
+                     minSpeed=0.35, maxSpeed=0.4, splashSize=0.2, hitVehicles=True,
+                     useTurbulence=True, useWind=True),
+        scene_object('wind', 'ForestWindEmitter', 'KyivSky', position=[0, 0, 0], strength=0.2),
+        scene_object('clouds', 'CloudLayer', 'KyivSky', position=[0, 0, 400], height=4.5,
+                     coverage=coverage, exposure=0.5, windSpeed=1.2, baseColor=list(cloud_color),
+                     texture='art/skies/clouds/clouds_normal_displacement.png',
+                     Textures=[{'texScale': 0.55, 'texSpeed': 0.0035, 'texDirection': [0.3, 0.1]},
+                               {'texScale': 0.75, 'texSpeed': 0.005, 'texDirection': [0.2, 0.9]},
+                               {'texScale': 0.95, 'texSpeed': 0.0065, 'texDirection': [0.1, 0.4]}]),
+    ]
+
+
+def sky_objects(distance=4000, synth=False, nes=False, lonlat=None):
+    """Overcast-bright Kyiv daylight: high visibility, soft fog, drifting cloud deck. The
+    synthwave texture style gets a violet dusk instead: low pink sun, purple fog, clear sky;
+    8-bit NES a flat console blue: blue fog and clear colour, white sun high up, clear sky.
+    All three start from that look and stay adjustable in the game's environment menu."""
+    if nes:
+        return [
+            scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
+                         fogDensity=4e-05, fogAtmosphereHeight=900, fogColor=[0.36, 0.58, 0.99, 1],
+                         canvasClearColor=[92, 148, 252, 255], globalEnviromentMap='BNG_Sky_02_cubemap'),
+            scene_object('sunsky', 'ScatterSky', 'KyivSky', azimuth=150, elevation=60,
+                         skyBrightness=30, shadowDistance=min(1400, int(distance * 0.35)), shadowSoftness=0.0, texSize=2048,
+                         castShadows=True, brightness=0.9, exposure=1.0, flareType='BNG_Sunflare_2',
+                         flareScale=2, mieScattering=0.001, rayleighScattering=0.0032,
+                         sunScale=[1, 1, 1, 1], ambientScale=[0.55, 0.55, 0.55, 1],
+                         colorize=[0.36, 0.58, 0.99, 1], colorizeAmount=0.85,
+                         fogScale=[0.36, 0.58, 0.99, 1], nightFogColor=[0.09, 0.11, 0.16, 1],
+                         nightColor=[0.07, 0.08, 0.12, 1], nightCubemap='BNG_Sky_02_cubemap',
+                         moonEnabled=False, occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
+        ] + weather_objects(NES_TIME, lonlat)
+    if synth:
+        return [
+            scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
+                         fogDensity=0.00035, fogAtmosphereHeight=500, fogColor=[0.24, 0.07, 0.3, 1],
+                         canvasClearColor=[0.12, 0.02, 0.2, 255], globalEnviromentMap='BNG_Sky_02_cubemap'),
+            scene_object('sunsky', 'ScatterSky', 'KyivSky', azimuth=180, elevation=7,
+                         skyBrightness=8, shadowDistance=min(1400, int(distance * 0.35)), shadowSoftness=0.3, texSize=2048,
+                         castShadows=True, brightness=0.45, exposure=0.8, flareType='BNG_Sunflare_2',
+                         flareScale=4, mieScattering=0.004, rayleighScattering=0.0032,
+                         sunScale=[1.0, 0.35, 0.7, 1], ambientScale=[0.3, 0.12, 0.42, 1],
+                         colorize=[0.75, 0.15, 0.6, 1], colorizeAmount=0.75,
+                         fogScale=[0.5, 0.15, 0.55, 1], nightFogColor=[0.1, 0.02, 0.16, 1],
+                         nightColor=[0.08, 0.02, 0.14, 1], nightCubemap='BNG_Sky_02_cubemap',
+                         moonEnabled=False, occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
+        ] + weather_objects(SYNTH_TIME, lonlat, cloud_color=(0.55, 0.2, 0.6, 1))
     return [
         scene_object('theLevelInfo', 'LevelInfo', 'KyivSky', gravity=-9.81, visibleDistance=int(distance),
                      fogDensity=9e-05, fogAtmosphereHeight=700, fogColor=[0.62, 0.68, 0.76, 1],
                      canvasClearColor=[0.58, 0.66, 0.76, 255],
                      globalEnviromentMap='BNG_Sky_02_cubemap'),
-        # Fixed mid-morning sun. A TimeOfDay object overrides elevation/azimuth and put the
-        # sun on the horizon, which blew the whole district out to white.
+        # The TimeOfDay in weather_objects places the sun; DAY_TIME is the mid-morning
+        # these azimuth/elevation values were tuned at.
         scene_object('sunsky', 'ScatterSky', 'KyivSky', azimuth=142, elevation=52,
                      skyBrightness=26, shadowDistance=min(1400, int(distance * 0.35)), shadowSoftness=0.2, texSize=2048,
                      castShadows=True, brightness=0.85, exposure=1.0, flareType='BNG_Sunflare_2',
@@ -733,13 +853,7 @@ def sky_objects(distance=4000):
                      nightColor=[0.07, 0.08, 0.12, 1], nightCubemap='BNG_Sky_02_cubemap',
                      moonEnabled=True, moonMat='Moon_Glow_Mat', moonScale=0.06,
                      occlusionScale=0.025, shadowDarkenColor=[0, 0, 0, 0]),
-        scene_object('clouds', 'CloudLayer', 'KyivSky', position=[0, 0, 400], height=4.5,
-                     coverage=0.42, exposure=0.5, windSpeed=1.2,
-                     baseColor=[0.93, 0.94, 0.96, 1], texture='art/skies/clouds/clouds_normal_displacement.png',
-                     Textures=[{'texScale': 0.55, 'texSpeed': 0.0035, 'texDirection': [0.3, 0.1]},
-                               {'texScale': 0.75, 'texSpeed': 0.005, 'texDirection': [0.2, 0.9]},
-                               {'texScale': 0.95, 'texSpeed': 0.0065, 'texDirection': [0.1, 0.4]}]),
-    ]
+    ] + weather_objects(DAY_TIME, lonlat, coverage=0.42)
 
 
 # --- panel facades ----------------------------------------------------------
@@ -839,15 +953,44 @@ def _drawn_facade_pixels(name):
     raise KeyError(name)
 
 
-def panel_facade_materials(level, level_id):
-    """Author the windowed wall textures the shared BeamNG sets do not provide."""
+def fresh_png(level, level_id, stem, suffix, size, pixels):
+    """Write a square generated texture under a content-digest name; return its game path.
+    BeamNG caches converted textures by path, so a re-export with a changed facade under the
+    same name kept showing the old image (seen 2026-10-08 with the loggia sheets)."""
+    digest = hashlib.sha256(bytes(pixels)).hexdigest()[:10]
+    png(level / f'art/kyiv/{stem}_{digest}{suffix}', size, size, pixels)
+    return f'/levels/{level_id}/art/kyiv/{stem}_{digest}{suffix}'
+
+
+def panel_facade_kind(name):
+    """Photo-style tile kind of an exporter facade (texture_styles.py)."""
+    return 'brick' if name.endswith('_brick') else ('loggia' if PANEL_FACADES[name][2] == 'balcony' else 'panel')
+
+
+def facade_material(name, colour_map):
+    return {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+            'Stages': [{'baseColorMap': colour_map, 'roughnessFactor': 0.78, 'metallicFactor': 0.0}, {}, {}, {}],
+            'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+
+
+def panel_facade_materials(level, level_id, texture_style='procedural'):
+    """Author the windowed wall textures the shared BeamNG sets do not provide. A photo texture
+    style (texture_styles.py) builds them from its pack instead of drawing them."""
+    from . import texture_styles
     materials = {}
+    photo = texture_styles.family(texture_style) == 'photo'
     for name, (base, glass, style) in PANEL_FACADES.items():
-        png(level / f'art/kyiv/{name}.png', FACADE_PX, FACADE_PX,
-            _facade_pixels(base, glass, style, name))
+        if not photo:
+            path = fresh_png(level, level_id, name, '.png', FACADE_PX, _facade_pixels(base, glass, style, name))
+        else:
+            kind = panel_facade_kind(name)
+            px, _metres = texture_styles.tile_size(kind)
+            path = fresh_png(level, level_id, name, '.png', px, texture_styles.tile_for(kind, base, name))
+            materials[name+'_end'] = facade_material(name+'_end', fresh_png(
+                level, level_id, name+'_end', '.png', texture_styles.TILE_PX, texture_styles.end_pixels(kind, base, name)))
         materials[name] = {
             'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
-            'Stages': [{'baseColorMap': f'/levels/{level_id}/art/kyiv/{name}.png',
+            'Stages': [{'baseColorMap': path,
                         'roughnessFactor': 0.78, 'metallicFactor': 0.0}, {}, {}, {}],
             'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
     for name in DRAWN_FACADES:
@@ -859,6 +1002,108 @@ def panel_facade_materials(level, level_id):
                         'roughnessFactor': 0.72, 'metallicFactor': 0.0}, {}, {}, {}],
             'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
     return materials
+
+
+def photo_ground_materials(level, level_id, texture_style='procedural'):
+    """A photo texture style replaces the stock grass of kyiv_grass/kyiv_ground with baked
+    sheets of its ground photos (texture_styles.ground_sheet); procedural keeps the stock art."""
+    from . import texture_styles
+    from .beamng_assets import SURFACES
+    if texture_styles.family(texture_style) != 'photo':
+        return {}
+    materials = {}
+    size = texture_styles.GROUND_PX
+    for name in texture_styles.GROUND_RECIPES:
+        colour, normal = texture_styles.ground_sheet(name)
+        stage = {'baseColorMap': fresh_png(level, level_id, name, '.color.png', size, colour),
+                 'normalMap': fresh_png(level, level_id, name, '.normal.png', size, normal),
+                 'roughnessFactor': 0.95, 'metallicFactor': 0.0}
+        materials[name] = {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                           'Stages': [stage, {}, {}, {}], **SURFACES[name][2]}
+    return materials
+
+
+def synth_materials(level, level_id, materials, facade_kinds):
+    """Synthwave overrides on the assembled material set: neon-window facades and grid end
+    walls (the colour map doubles as the emissive map), grid ground, dark roads, pavements and
+    roofs, glowing lane paint. Emissive fields follow BeamNG's v1.5 material stage (emissiveMap,
+    emissiveFactor); not yet checked in the game."""
+    from . import texture_styles
+    from .beamng_assets import SURFACES
+    out = {}
+
+    def glowing(name, path, extra):
+        stage = {'baseColorMap': path, 'emissiveMap': path, 'emissiveFactor': [1, 1, 1],
+                 'roughnessFactor': 0.35, 'metallicFactor': 0.2}
+        return {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                'Stages': [stage, {}, {}, {}], **extra}
+    building = {'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+    for name, kind in facade_kinds.items():
+        if kind != 'synth':
+            continue
+        out[name] = glowing(name, fresh_png(level, level_id, name, '.color.png', texture_styles.TILE_PX,
+                                            texture_styles.tile_for('synth', None, name)), building)
+        out[name+'_end'] = glowing(name+'_end', fresh_png(level, level_id, name+'_end', '.color.png', texture_styles.TILE_PX,
+                                                          texture_styles.end_pixels('synth', None, name)), building)
+    for name in texture_styles.GROUND_RECIPES:
+        path = fresh_png(level, level_id, name+'_synth', '.color.png', texture_styles.GROUND_PX,
+                         texture_styles.synth_ground(name))
+        out[name] = glowing(name, path, SURFACES[name][2])
+        out[name]['Stages'][0].update(roughnessFactor=0.6, metallicFactor=0.0)
+    dark = {'kyiv_asphalt': ([0.06, 0.05, 0.08], 0.25), 'kyiv_asphalt_worn': ([0.07, 0.06, 0.09], 0.3),
+            'kyiv_concrete': ([0.12, 0.09, 0.16], 0.4), 'kyiv_curb': ([0.14, 0.1, 0.18], 0.4),
+            'kyiv_gravel': ([0.1, 0.08, 0.12], 0.6), 'kyiv_pitch': ([0.04, 0.12, 0.14], 0.6),
+            'kyiv_track': ([0.2, 0.04, 0.12], 0.5), 'kyiv_water': ([0.02, 0.04, 0.1], 0.04)}
+    for name, material in materials.items():
+        roof = 'roof' in name and material.get('annotation') == 'BUILDINGS'
+        if name not in dark and not roof:
+            continue
+        factor, rough = dark.get(name, ([0.07, 0.05, 0.1], 0.5))
+        out[name] = {**material, 'Stages': [{**material['Stages'][0], 'baseColorFactor': factor + [1],
+                                             'roughnessFactor': rough}, {}, {}, {}]}
+    paint = materials.get('kyiv_paint')
+    if paint:
+        out['kyiv_paint'] = {**paint, 'Stages': [{**paint['Stages'][0], 'baseColorFactor': [0.2, 0.08, 0.2, 1],
+                                                  'emissiveFactor': [1.0, 0.45, 0.95]}, {}, {}, {}]}
+    return out
+
+
+def nes_materials(level, level_id, materials, facade_kinds, nes_kinds):
+    """8-bit NES overrides on the assembled material set: pixel-sprite facades and end walls
+    (texture_styles.nes_tile), pixel grass and lawn, roads, pavements, water and roofs tinted to
+    palette colours (the maps stay, the factor sets the hue), white lane paint."""
+    from . import texture_styles
+    from .beamng_assets import SURFACES
+    out = {}
+
+    def flat(name, path, extra):
+        return {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                'Stages': [{'baseColorMap': path, 'roughnessFactor': 0.95, 'metallicFactor': 0.0}, {}, {}, {}], **extra}
+    building = {'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+    for name, sprite in nes_kinds.items():
+        if facade_kinds.get(name) != 'nes':
+            continue
+        out[name] = flat(name, fresh_png(level, level_id, 'kyiv_nes_'+sprite, '.color.png', texture_styles.TILE_PX,
+                                         list(texture_styles.nes_tile(sprite, name).tobytes())), building)
+        out[name+'_end'] = flat(name+'_end', fresh_png(level, level_id, 'kyiv_nes_'+sprite+'_end', '.color.png',
+                                                       texture_styles.TILE_PX,
+                                                       list(texture_styles.nes_end_tile(sprite, name).tobytes())), building)
+    for name in texture_styles.GROUND_RECIPES:
+        out[name] = flat(name, fresh_png(level, level_id, name+'_nes', '.color.png', texture_styles.GROUND_PX,
+                                         texture_styles.nes_ground(name)), SURFACES[name][2])
+    tint = {'kyiv_asphalt': [0.45, 0.45, 0.45], 'kyiv_asphalt_worn': [0.5, 0.5, 0.5],
+            'kyiv_concrete': [1.0, 1.0, 1.0], 'kyiv_curb': [0.7, 0.7, 0.7], 'kyiv_gravel': [0.9, 0.65, 0.1],
+            'kyiv_pitch': [0.0, 0.8, 0.0], 'kyiv_track': [1.0, 0.35, 0.05], 'kyiv_water': [0.0, 0.35, 0.97]}
+    for name, material in materials.items():
+        roof = 'roof' in name and material.get('annotation') == 'BUILDINGS'
+        if name not in tint and not roof:
+            continue
+        out[name] = {**material, 'Stages': [{**material['Stages'][0], 'baseColorFactor': tint.get(name, [0.49, 0.49, 0.49]) + [1],
+                                             'roughnessFactor': 0.95, 'metallicFactor': 0.0}, {}, {}, {}]}
+    paint = materials.get('kyiv_paint')
+    if paint:
+        out['kyiv_paint'] = {**paint, 'Stages': [{**paint['Stages'][0], 'baseColorFactor': [1, 1, 1, 1]}, {}, {}, {}]}
+    return out
 
 
 # Ukrainian plates: white ground, blue EU-style band, AA #### XX for Kyiv city. The
@@ -943,7 +1188,8 @@ def preview_image(tiles, lane_points, bounds):
 
     for _tileid, tile in tiles:
         for green in tile.get('greens', []):
-            color = (44, 78, 40) if green.get('kind') == 'wood' else (56, 86, 48)
+            color = {'wood': (44, 78, 40), 'water': (62, 98, 118), 'pitch': (70, 120, 56),
+                     'track': (150, 76, 60)}.get(green.get('kind'), (56, 86, 48))
             for triangle in green['triangles']:
                 fill(triangle, color)
     for _tileid, tile in tiles:
@@ -1043,9 +1289,11 @@ def deterministic_zip(root, path):
 GROUPS = ('KyivGenerated', 'KyivNavigation', 'KyivProps', 'KyivSignals', 'KyivSky', 'KyivManual')
 
 
-def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True, emit=None, optimization='balanced'):
+def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lift=None, *, world_dir=None, namespace=False, package_zip=True, emit=None, optimization='balanced', texture_style='procedural'):
     from .optimization import ExportMetrics, simplify_ground
+    from . import texture_styles
     optimization = optimization_mode(optimization)
+    texture_styles.resolve(texture_style)     # fail before any work when the pack is missing
     feature = features(optimization)
     metrics = ExportMetrics(optimization)
     def stage_event(stage):
@@ -1085,6 +1333,9 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         level.mkdir(parents=True)
         UV.clear()
         UV.update(uv_scales())
+        style_family = texture_styles.family(texture_style)
+        if style_family != 'procedural':
+            UV.update({name: 1/texture_styles.GROUND_SHEET_M for name in texture_styles.GROUND_RECIPES})
         objects = [scene_object('MissionGroup', 'SimGroup', parent='')]
         objects[0].pop('__parent')
         objects += [scene_object(name, 'SimGroup', 'MissionGroup') for name in GROUPS]
@@ -1099,7 +1350,8 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                                  'translationId': poi['title']})
 
         stage_event('geometry')
-        roads, lanes, location, roadstats, _elevation = road_network(index, net)
+        nav_tiles = ((tid, read_json(source/'tiles'/f'{tid}.json')) for tid in sorted(index['tiles'])) if index.get('road_elevation') else None
+        roads, lanes, location, roadstats, _elevation = road_network(index, net, tiles=nav_tiles)
         objects += roads
         sig, sigaudit = signals(index, lanes)
         write_json(level / 'map.json', {'segments': {}})
@@ -1113,7 +1365,10 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         bounds = [min(p[0] for p in points) - 150, min(p[1] for p in points) - 150,
                   max(p[0] for p in points) + 150, max(p[1] for p in points) + 150]
         size = index['tile_size']
-        objects += sky_objects(visible_distance(bounds))
+        bbox = index.get('bbox')
+        objects += sky_objects(visible_distance(bounds), synth=texture_styles.family(texture_style) == 'synth',
+                               nes=texture_styles.family(texture_style) == 'nes',
+                               lonlat=((bbox[0]+bbox[2])/2, (bbox[1]+bbox[3])/2) if bbox else None)
         # 'terrain': the ground heightmap replaces both the ground meshes and the low substrate.
         terrain = GroundTerrain(bounds) if 'terrain' in feature else None
         if terrain is None:
@@ -1216,9 +1471,31 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         # Whole buildings merge into 250 m cells by footprint centre: thousands of
         # per-building TSStatics dominated level load time.
         building_cells = defaultdict(Mesh)
+        dna_styles, roof_colours, facade_kinds, nes_kinds = {}, {}, {}, {}
+        mapped_canopies = []
         from akadem_maps.adapters.beamng.beamng_placement import audit_building
         for index_n, (bid, parts) in enumerate(building_items, 1):
             facade, roof = building_style(parts[0])
+            if parts[0].get('local_style'):
+                dna_styles[facade] = parts[0]['local_style']
+                UV[facade] = 1/6
+            end = None
+            if style_family != 'procedural':
+                kind = (panel_facade_kind(facade) if facade in PANEL_FACADES else
+                        texture_styles.dna_kind(dna_styles[facade], facade) if facade in dna_styles else None)
+                if style_family == 'synth':
+                    kind = 'synth'          # every facade, stock sets included (synth_materials)
+                    UV[facade] = 1/6
+                if style_family == 'nes':
+                    nes_kinds[facade] = texture_styles.nes_kind(kind, facade)
+                    kind = 'nes'            # every facade, stock sets included (nes_materials)
+                    UV[facade] = 1/6
+                if kind == 'loggia':
+                    UV[facade] = 1/texture_styles.LOGGIA_SHEET_M
+                if kind in ('panel', 'loggia', 'brick', 'synth', 'nes'):
+                    end = facade + '_end'
+                    UV[end] = 1/6
+                    facade_kinds[facade] = kind
             if str(parts[0].get('id')) in LANDMARKS:
                 counts['landmark_buildings'] += 1
             pts = [beam_point(p) for b in parts for p in b['points']]
@@ -1226,14 +1503,23 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                                    math.floor(sum(p[1] for p in pts) / len(pts) / SURFACE_CELL))]
             for b in parts:
                 audit_building(b, corridors.pavement, corridors.audit)
+                part_roof = roof
+                if b.get('roof_color'):
+                    # Observed OSM roof:colour: one shared material per colour, never per building.
+                    part_roof = 'kyiv_roof_c_' + b['roof_color'][1:]
+                    roof_colours[part_roof] = b['roof_color']
+                    UV[part_roof] = 1/3
                 try:
-                    part = building_mesh(b, facade, roof)
+                    part = building_mesh(b, facade, part_roof, end)
                 except ValueError as e:
                     errors.append({'building': b['id'], 'error': str(e)})
                     continue
                 for mat, faces in part.faces.items():
                     cell.faces[mat].extend(faces)
                     cell.uvs[mat].extend(part.uvs[mat])
+            if (parts[0].get('typical') or {}).get('kind') == 'fuel_canopy':
+                mapped_canopies.append((sum(p[0] for p in parts[0]['points'])/len(parts[0]['points']),
+                                        sum(p[2] for p in parts[0]['points'])/len(parts[0]['points'])))
             counts['buildings'] += 1
             counts['facade_' + facade.removeprefix('kyiv_fac_')] += 1
             if index_n % 500 == 0 or index_n == len(building_items):
@@ -1249,7 +1535,34 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         del building_parts, building_items, building_cells
         stage_event('dressing')
         materials = {**surface_materials(), **tree_materials(), **fixture_materials(level, level_id),
-                     **panel_facade_materials(level, level_id)}
+                     **panel_facade_materials(level, level_id, texture_style), **yard_materials(),
+                     **photo_ground_materials(level, level_id, texture_style)}
+        from akadem_maps.core.local_dna import facade_pixels, Field
+        for name, style in sorted(dna_styles.items()):
+            if style_family != 'photo':
+                path = fresh_png(level, level_id, name, '.color.png', 256, facade_pixels(style))
+            else:
+                colour = [int(str(style.get('color') or '#b5b2aa')[i:i+2], 16)/255 for i in (1, 3, 5)]
+                kind = texture_styles.dna_kind(style, name)
+                px, _metres = texture_styles.tile_size(kind)
+                # A loggia sheet depends on the colour only: facades of one colour share one file
+                # (Khreshchatyk DNA: 80 sheets of 9.7 MB, 30 distinct, ZIP 846 MB).
+                stem = 'kyiv_dna_loggia' if kind == 'loggia' else name
+                path = fresh_png(level, level_id, stem, '.color.png', px, texture_styles.tile_for(kind, colour, name))
+                if name in facade_kinds:
+                    materials[name+'_end'] = facade_material(name+'_end', fresh_png(
+                        level, level_id, name+'_end', '.color.png', texture_styles.TILE_PX,
+                        texture_styles.end_pixels(kind, colour, name)))
+            materials[name] = {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                               'Stages': [{'baseColorMap': path, 'roughnessFactor': .78}, {}, {}, {}],
+                               'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+        metal_roof = ROOFS['kyiv_roof_metal'][0]
+        for name, hexa in sorted(roof_colours.items()):
+            rgb = [int(hexa[i:i+2], 16)/255 for i in (1, 3, 5)]
+            materials[name] = {'name': name, 'mapTo': name, 'class': 'Material', 'version': 1.5,
+                               'Stages': [{**metal_roof, 'baseColorFactor': rgb + [1]}, {}, {}, {}],
+                               'groundType': 'ASPHALT', 'annotation': 'BUILDINGS', 'materialTag0': 'building'}
+        counts['roof_colour_materials'] = len(roof_colours)
         # Sign faces are Ukrainian (DSTU) artwork; other regions get no posted signs
         # rather than foreign-looking ones.
         ukrainian = config.get('region_profile', 'ukraine') == 'ukraine'
@@ -1260,6 +1573,12 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                       for _tid, tile in tiles for s in tile.get('signs', [])}
         signmats, plates = sign_materials(level, level_id, used_signs)
         materials.update(signmats)
+        if style_family == 'synth':
+            materials.update(synth_materials(level, level_id, materials, facade_kinds))
+            counts['synth_facades'] = sum(1 for k in facade_kinds.values() if k == 'synth')
+        if style_family == 'nes':
+            materials.update(nes_materials(level, level_id, materials, facade_kinds, nes_kinds))
+            counts['nes_facades'] = len(nes_kinds)
         write_json(level / 'art/kyiv/main.materials.json', materials)
         write_json(level / 'art/forest/managedItemData.json', forest_item_data())
 
@@ -1270,9 +1589,23 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
         objects += lamps
         counts['street_lamps'] = len(lamps)
         objects += fuel_canopies(level, level_id, index.get('pois', []),
-                                 lambda p: corridors.occupied(p, margin=0.6, roads_only=True), counts, corridors, optimization=optimization, metrics=metrics)
+                                 lambda p: corridors.occupied(p, margin=0.6, roads_only=True), counts, corridors, optimization=optimization, metrics=metrics,
+                                 mapped=mapped_canopies)
+        # Courtyards (core/yards.py): benches, bins, playground kits; never the parked cars.
+        yard_cells, yard_bushes, yard_counts = yard_props(tiles, SURFACE_CELL)
+        for (ix, iy), mesh in sorted(yard_cells.items()):
+            objects.append(write_static(level, level_id, stable_id('kyiv_yards', (ix, iy)), mesh,
+                                        ((ix + 0.5) * SURFACE_CELL, (iy + 0.5) * SURFACE_CELL, 0.0), category='props'))
+        counts.update(yard_counts)
 
-        instances, vegcounts = vegetation(tiles)
+        dna_report = index.get('local_visual_dna')
+        dna_field = None
+        if dna_report:
+            positions = {(a['lon'], a['lat']): a['position'] for a in dna_report['visual_anchors']}
+            dna_field = Field({'version': 1, 'profiles': dna_report['profiles'], 'anchors': dna_report['visual_anchors']},
+                              lambda lon, lat: positions[(lon, lat)], dna_report['seed'])
+        instances, vegcounts = vegetation(tiles, dna_field)
+        instances += yard_bushes
         before = len(instances)
         kept=[]
         for v in instances:
@@ -1405,6 +1738,7 @@ def export_map(mid, output, level_id=None, overrides=None, source_root=ROOT, lif
                 attribution += '\n' + file.read_text(encoding='utf8')
         (level / 'ATTRIBUTION.txt').write_text(attribution, encoding='utf8')
         report = {'format_version': VERSION, 'map': mid, 'level_id': level_id, 'counts': dict(counts), 'optimization': optimization,
+                  'texture_style': texture_style,
                   'source_files': sources, 'coordinate_transform': 'BeamNG(x,y,z) = World(x,-z,y+vertical_offset)',
                   'vertical_offset': lift,
                   'sumo_location': location, 'sumo_center_offset': index['offset'],

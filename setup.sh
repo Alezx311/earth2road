@@ -13,7 +13,8 @@ if ! { [[ -x .venv/bin/python ]] && .venv/bin/python -c "$pycheck" 2>/dev/null; 
   rm -rf .venv
   "$py" -m venv .venv
 fi
-.venv/bin/python -m pip install --cache-dir .cache/pip -c requirements.lock ".[generator,traffic]"
+# Editable: the CLI must run this checkout, not a copy frozen at setup time.
+.venv/bin/python -m pip install --cache-dir .cache/pip -c requirements.lock -e ".[generator,traffic]"
 source tools/godot.sh
 if [[ ! -x "$godot" ]]; then
   curl -fL --retry 2 "$godot_url" -o .tools/godot.zip
